@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google"; 
-import { Suspense } from "react"; 
+import { Plus_Jakarta_Sans } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
-import { AuthProvider } from "@/components/AuthProvider"; 
+
+// ✅ FIX: Pointed to the correct file in the /contexts folder
+import { AuthProvider } from "@/contexts/AuthContext";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
