@@ -1,5 +1,4 @@
 "use client"; // ✅ MUST be first line
-
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -10,7 +9,7 @@ import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, AlertCircle, ShieldCheck 
 // Firebase Imports
 import { auth, db } from "@/lib/firebase";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore"; // ✅ Added updateDoc
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -18,7 +17,7 @@ export default function AdminLogin() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
-  
+
   // Form States
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,87 +40,87 @@ export default function AdminLogin() {
     return () => clearInterval(timer);
   }, [slides.length]);
 
-  // ✅ FIXED: Admin-specific login logic with modular syntax
+  // ✅ FIXED: Admin-specific login logic + Session Cookie Minting
   const handleLogin = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoading(true);
-  setError("");
+    e.preventDefault();
+    setLoading(true);
+    setError("");
 
-  try {
-    console.log("🔐 Admin login attempt:", { email });
-
-    // 1. Authenticate with Firebase Auth
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    console.log("✅ Auth successful:", { uid: user.uid, email: user.email });
-
-    // 2. Get admin doc and verify status
-    const adminRef = doc(db, "admins", user.uid);
-    console.log("🔍 Reading admin doc:", adminRef.path);
-    
-    const adminDoc = await getDoc(adminRef);
-    console.log("📦 Admin doc result:", {
-      exists: adminDoc.exists(),
-      data: adminDoc.exists() ? {
-        isActive: adminDoc.data()?.isActive,
-        role: adminDoc.data()?.role,
-        lastLogin: adminDoc.data()?.lastLogin
-      } : null
-    });
-    
-    if (!adminDoc.exists()) {
-      await signOut(auth);
-      throw new Error("Access denied: Admin account not found");
-    }
-    
-    const adminData = adminDoc.data();
-    if (!adminData?.isActive) {
-      await signOut(auth);
-      throw new Error("Access denied: Admin account is not active");
-    }
-
-    // 3. Try to update lastLogin (with graceful fallback)
     try {
-      console.log("🔄 Attempting to update lastLogin...");
-      await updateDoc(adminRef, {
-        lastLogin: new Date(),
-        updatedAt: new Date()
-      });
-      console.log("✅ lastLogin updated successfully");
-    } catch (updateErr: any) {
-      // ⚠️ Graceful fallback: Don't block login if update fails
-      console.warn("⚠️ Could not update lastLogin (non-critical):", updateErr.code, updateErr.message);
-      // Continue with login anyway - this is not a security issue
-    }
+      console.log("🔐 Admin login attempt:", { email });
 
-    // 4. Redirect to admin dashboard
-    console.log("🚀 Redirecting to admin dashboard...");
-    router.push("/admin");
-    router.refresh();
-    
-  } catch (err: any) {
-    console.error("❌ Login failed:", {
-      code: err.code,
-      message: err.message,
-      name: err.name
-    });
-    
-    // User-friendly error messages
-    if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
-      setError("Invalid email or password");
-    } else if (err.code === "auth/too-many-requests") {
-      setError("Too many failed attempts. Please try again later");
-    } else if (err.message?.includes("Access denied")) {
-      setError(err.message);
-    } else if (err.code === "permission-denied") {
-      // This shouldn't happen with graceful fallback, but just in case:
-      setError("Permission error. Please contact support.");
-    } else {
-      setError("Login failed. Please try again");
+      // 1. Authenticate with Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      console.log("✅ Auth successful:", { uid: user.uid, email: user.email });
+
+      // 2. Get admin doc and verify status
+      const adminRef = doc(db, "admins", user.uid);
+      const adminDoc = await getDoc(adminRef);
+
+      if (!adminDoc.exists()) {
+        await signOut(auth);
+        throw new Error("Access denied: Admin account not found");
+      }
+
+      const adminData = adminDoc.data();
+      if (!adminData?.isActive) {
+        await signOut(auth);
+        throw new Error("Access denied: Admin account is not active");
+      }
+
+      // 3. Try to update lastLogin (with graceful fallback)
+      try {
+        await updateDoc(adminRef, {
+          lastLogin: new Date(),
+          updatedAt: new Date()
+        });
+      } catch (updateErr: any) {
+        console.warn("⚠️ Could not update lastLogin (non-critical):", updateErr.message);
+      }
+
+      // ✅ 4. CRITICAL FIX: Mint the session cookie for the Middleware
+      // Without this, the middleware will block /admin and redirect back to login
+      console.log("🍪 Minting session cookie...");
+      const idToken = await user.getIdToken();
+      const sessionResponse = await fetch('/api/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (!sessionResponse.ok) {
+        console.error("Failed to create session cookie");
+        // We log it but don't block login entirely, though middleware will likely block them next
+      }
+
+      // 5. Redirect to admin dashboard
+      console.log("🚀 Redirecting to admin dashboard...");
+      router.push("/admin");
+      router.refresh();
+
+    } catch (err: any) {
+      console.error("❌ Login failed:", {
+        code: err.code,
+        message: err.message,
+        name: err.name
+      });
+
+      // User-friendly error messages
+      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
+        setError("Invalid email or password");
+      } else if (err.code === "auth/too-many-requests") {
+        setError("Too many failed attempts. Please try again later");
+      } else if (err.message?.includes("Access denied")) {
+        setError(err.message);
+      } else if (err.code === "permission-denied") {
+        setError("Permission error. Please contact support.");
+      } else {
+        setError("Login failed. Please try again");
+      }
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
-  }
   };
 
   return (
@@ -129,21 +128,20 @@ export default function AdminLogin() {
       {/* LEFT SECTION: Image Carousel */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gray-900">
         {slides.map((slide, index) => (
-          <div 
-            key={slide.id} 
+          <div
+            key={slide.id}
             className={`absolute inset-0 transition-opacity duration-1000 ${index === currentSlide ? "opacity-100" : "opacity-0"}`}
           >
-            <Image 
-              src={slide.img} 
-              alt={slide.title} 
-              fill 
-              className="object-cover" 
-              priority={index === 0} 
+            <Image
+              src={slide.img}
+              alt={slide.title}
+              fill
+              className="object-cover"
+              priority={index === 0}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
           </div>
         ))}
-        
         {/* Carousel Content */}
         <div className="absolute bottom-20 left-16 right-16 z-20 text-white">
           <div className="flex items-center gap-3 mb-4">
@@ -160,16 +158,14 @@ export default function AdminLogin() {
           </p>
           <div className="flex gap-2 mt-8">
             {slides.map((_, i) => (
-              <div 
-                key={i} 
-                className={`h-1.5 rounded-full transition-all duration-500 ${
-                  i === currentSlide ? "w-8 bg-green-500" : "w-2 bg-white/30"
-                }`} 
+              <div
+                key={i}
+                className={`h-1.5 rounded-full transition-all duration-500 ${i === currentSlide ? "w-8 bg-green-500" : "w-2 bg-white/30"
+                  }`}
               />
             ))}
           </div>
         </div>
-        
         {/* Security Badge */}
         <div className="absolute top-6 left-6 z-20 flex items-center gap-2 px-3 py-1.5 bg-white/10 backdrop-blur rounded-full border border-white/20">
           <ShieldCheck size={14} className="text-green-400" />
@@ -207,13 +203,13 @@ export default function AdminLogin() {
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-green-600 transition-colors">
                   <Mail size={18} />
                 </div>
-                <input 
-                  type="email" 
-                  required 
-                  value={email} 
+                <input
+                  type="email"
+                  required
+                  value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@zebble.com" 
-                  className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-green-500/10 focus:border-green-600 transition-all font-medium text-sm" 
+                  placeholder="admin@zebble.com"
+                  className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-green-500/10 focus:border-green-600 transition-all font-medium text-sm"
                   disabled={loading}
                   autoComplete="username"
                 />
@@ -224,8 +220,8 @@ export default function AdminLogin() {
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
                 <label className="text-sm font-bold text-gray-700">Password</label>
-                <Link 
-                  href="/admin/forgot-password" 
+                <Link
+                  href="/admin/forgot-password"
                   className="text-xs font-bold text-green-600 hover:underline"
                 >
                   Forgot password?
@@ -235,19 +231,19 @@ export default function AdminLogin() {
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-green-600 transition-colors">
                   <Lock size={18} />
                 </div>
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  required 
-                  value={password} 
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••" 
-                  className="w-full pl-12 pr-12 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-green-500/10 focus:border-green-600 transition-all font-medium text-sm" 
+                  placeholder="••••••••"
+                  className="w-full pl-12 pr-12 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-green-500/10 focus:border-green-600 transition-all font-medium text-sm"
                   disabled={loading}
                   autoComplete="current-password"
                 />
-                <button 
-                  type="button" 
-                  onClick={() => setShowPassword(!showPassword)} 
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                   tabIndex={-1}
                 >
@@ -257,8 +253,8 @@ export default function AdminLogin() {
             </div>
 
             {/* Submit Button */}
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading || !email || !password}
               className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-green-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
@@ -277,7 +273,7 @@ export default function AdminLogin() {
               <ShieldCheck size={16} className="text-green-600 mt-0.5 shrink-0" />
               <div>
                 <p className="text-[10px] text-gray-500 font-medium leading-relaxed">
-                  🔐 All admin actions are logged and monitored • Session timeout: 1 hour • 
+                  🔐 All admin actions are logged and monitored • Session timeout: 1 hour •
                   <span className="block mt-1">2FA required for sensitive operations</span>
                 </p>
               </div>

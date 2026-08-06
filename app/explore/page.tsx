@@ -4,22 +4,25 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { 
-  Search, Filter, MapPin, Star, MessageCircle, 
+import {
+  Search, Filter, MapPin, Star, MessageCircle,
   LayoutGrid, SlidersHorizontal, Users,
   Smartphone, Shirt, Utensils, Sparkles, Bike, X,
   Home, Cpu, HeartPulse, Car
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, limit, where } from "firebase/firestore";
-import Header from "@/components/layout/Header"; 
-import FollowButton from "@/components/store/FollowButton";
+import Header from "@/components/layout/Header";
+// ✅ Import the new Explore-specific card
+import StoreCardExplore from "@/components/sections/StoreCardExplore";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
 export default function ExplorePage() {
-  const [stores, setStores] = useState([]);
+  const [stores, setStores] = useState<any[]>([]);
+  const [recommendedStores, setRecommendedStores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recommendedLoading, setRecommendedLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [locationSearch, setLocationSearch] = useState("");
@@ -27,21 +30,21 @@ export default function ExplorePage() {
   const [onlyVerified, setOnlyVerified] = useState(false);
 
   const categories = [
-    { name: "All", icon: <LayoutGrid size={16}/> },
-    { name: "Fashion", icon: <Shirt size={16}/> },
-    { name: "Electronics", icon: <Smartphone size={16}/> },
-    { name: "Food", icon: <Utensils size={16}/> },
-    { name: "Beauty", icon: <Sparkles size={16}/> },
-    { name: "Home", icon: <Home size={16}/> },
-    { name: "Tech", icon: <Cpu size={16}/> },
-    { name: "Health", icon: <HeartPulse size={16}/> },
-    { name: "Auto", icon: <Car size={16}/> },
-    { name: "Logistics", icon: <Bike size={16}/> },
+    { name: "All", icon: <LayoutGrid size={16} /> },
+    { name: "Fashion", icon: <Shirt size={16} /> },
+    { name: "Electronics", icon: <Smartphone size={16} /> },
+    { name: "Food", icon: <Utensils size={16} /> },
+    { name: "Beauty", icon: <Sparkles size={16} /> },
+    { name: "Home", icon: <Home size={16} /> },
+    { name: "Tech", icon: <Cpu size={16} /> },
+    { name: "Health", icon: <HeartPulse size={16} /> },
+    { name: "Auto", icon: <Car size={16} /> },
+    { name: "Logistics", icon: <Bike size={16} /> },
   ];
 
   const nigerianStates = ["Lagos", "Abuja", "Rivers", "Plateau", "Kano", "Oyo", "Enugu", "Delta", "Kaduna"];
 
-  const filteredStates = nigerianStates.filter(state => 
+  const filteredStates = nigerianStates.filter(state =>
     state.toLowerCase().includes(locationSearch.toLowerCase())
   );
 
@@ -53,16 +56,22 @@ export default function ExplorePage() {
         if (selectedCategory !== "All") {
           q = query(collection(db, "stores"), where("category", "==", selectedCategory), limit(12));
         }
-        const querySnapshot = await getDocs(q);
-        const storesData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        const [querySnapshot, recommendedSnapshot] = await Promise.all([
+          getDocs(q),
+          getDocs(query(collection(db, "stores"), limit(6)))
+        ]);
+        const storesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const recommendedData = recommendedSnapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter((store: any) => !["inactive", "banned"].includes(store.status))
+          .slice(0, 5);
         setStores(storesData);
+        setRecommendedStores(recommendedData);
       } catch (err) {
         console.error(err);
       } finally {
         setLoading(false);
+        setRecommendedLoading(false);
       }
     };
     fetchStores();
@@ -70,8 +79,8 @@ export default function ExplorePage() {
 
   return (
     <main className={`${jakarta.className} min-h-screen bg-[#FAFAFA]`}>
-      <Header/>
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <Header />
+      <div className="w-full px-6 py-8">
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight mb-2">Discover Stores</h1>
@@ -87,19 +96,40 @@ export default function ExplorePage() {
             <button
               key={cat.name}
               onClick={() => setSelectedCategory(cat.name)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all border ${
-                selectedCategory === cat.name ? "bg-[#00a63e] text-white border-[#00a63e] shadow-lg shadow-green-100" : "bg-white text-gray-500 border-gray-100 hover:border-gray-300"
-              }`}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all border ${selectedCategory === cat.name ? "bg-[#00a63e] text-white border-[#00a63e] shadow-lg shadow-green-100" : "bg-white text-gray-500 border-gray-100 hover:border-gray-300"
+                }`}
             >
               {cat.icon} {cat.name}
             </button>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-6">
-          {loading ? [1,2,3,4,5,6,7,8].map(i => <StoreSkeleton key={i} />) : stores.map((store) => (
-            <StoreCard key={store.id} store={store} />
-          ))}
+        <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 2xl:grid-cols-3">
+            {loading ? [1, 2, 3, 4, 5, 6].map(i => <StoreSkeleton key={i} />) : stores.map((store) => (
+              <StoreCardExplore key={store.id} store={store} />
+            ))}
+          </div>
+
+          <aside className="h-fit rounded-[28px] border border-gray-100 bg-white p-5 shadow-sm lg:sticky lg:top-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-green-600">Discover more</p>
+                <h2 className="mt-1 text-lg font-black text-gray-900">Recommended Stores</h2>
+              </div>
+              <Star size={18} className="fill-yellow-400 text-yellow-400" />
+            </div>
+
+            <div className="space-y-3">
+              {recommendedLoading ? (
+                [1, 2, 3, 4].map(i => <RecommendedStoreSkeleton key={i} />)
+              ) : recommendedStores.length > 0 ? (
+                recommendedStores.map(store => <RecommendedStore key={store.id} store={store} />)
+              ) : (
+                <p className="py-6 text-center text-sm text-gray-400">No recommendations yet.</p>
+              )}
+            </div>
+          </aside>
         </div>
       </div>
 
@@ -108,32 +138,32 @@ export default function ExplorePage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setIsFilterOpen(false)} />
           <div className="relative bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-black text-gray-900">Filter Search</h2>
-                <X className="cursor-pointer text-gray-400" onClick={() => setIsFilterOpen(false)} />
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-black text-gray-900">Filter Search</h2>
+              <X className="cursor-pointer text-gray-400" onClick={() => setIsFilterOpen(false)} />
+            </div>
+            <div className="mb-6">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Location / State</label>
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                <input type="text" placeholder="Type state name..." value={locationSearch} onChange={(e) => setLocationSearch(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl py-2 pl-9 pr-4 text-sm outline-none focus:border-green-600 transition-all" />
               </div>
-              <div className="mb-6">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Location / State</label>
-                <div className="relative mb-3">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-                  <input type="text" placeholder="Type state name..." value={locationSearch} onChange={(e) => setLocationSearch(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl py-2 pl-9 pr-4 text-sm outline-none focus:border-green-600 transition-all" />
-                </div>
-                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
-                   {["All Nigeria", ...filteredStates].map(state => (
-                     <button key={state} onClick={() => {setSelectedState(state); setIsFilterOpen(false);}} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${selectedState === state ? "bg-green-600 text-white" : "bg-gray-100 text-gray-500"}`}>
-                       {state}
-                     </button>
-                   ))}
-                </div>
+              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
+                {["All Nigeria", ...filteredStates].map(state => (
+                  <button key={state} onClick={() => { setSelectedState(state); setIsFilterOpen(false); }} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${selectedState === state ? "bg-green-600 text-white" : "bg-gray-100 text-gray-500"}`}>
+                    {state}
+                  </button>
+                ))}
               </div>
-              <div className="space-y-4">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Preferences</label>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                  <span className="text-sm font-bold text-gray-700">Verified Vendors Only</span>
-                  <input type="checkbox" checked={onlyVerified} onChange={(e) => setOnlyVerified(e.target.checked)} className="w-4 h-4 accent-green-600" />
-                </div>
+            </div>
+            <div className="space-y-4">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Preferences</label>
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <span className="text-sm font-bold text-gray-700">Verified Vendors Only</span>
+                <input type="checkbox" checked={onlyVerified} onChange={(e) => setOnlyVerified(e.target.checked)} className="w-4 h-4 accent-green-600" />
               </div>
-              <button onClick={() => setIsFilterOpen(false)} className="w-full mt-8 py-3 bg-[#00a63e] text-white rounded-2xl font-bold text-sm shadow-lg shadow-green-100">Apply Filters</button>
+            </div>
+            <button onClick={() => setIsFilterOpen(false)} className="w-full mt-8 py-3 bg-[#00a63e] text-white rounded-2xl font-bold text-sm shadow-lg shadow-green-100">Apply Filters</button>
           </div>
         </div>
       )}
@@ -145,90 +175,65 @@ export default function ExplorePage() {
   );
 }
 
-function StoreCard({ store }) {
-  const blueFilter = {
-    filter: 'invert(48%) sepia(79%) saturate(2476%) hue-rotate(190deg) brightness(100%) contrast(105%)'
-  };
-
-  // 1. Pull the productCount directly from the store document
-  // We use || 0 as a fallback in case the field doesn't exist yet
-  const displayItemCount = store.productCount || 0;  
-
+// Skeleton remains local to the page
+function StoreSkeleton() {
   return (
-    <div className="group bg-white rounded-[32px] border border-gray-100 overflow-hidden hover:shadow-2xl hover:shadow-gray-200/50 transition-all duration-500 flex flex-col">
-      <Link href={`/${store.username}`} className="relative h-32 w-full bg-gray-100">
-        {store.bannerUrl ? (
-          <Image src={store.bannerUrl} fill className="object-cover" alt="banner" />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-green-50 to-green-100" />
-        )}
-        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
-           <Star size={12} className="fill-yellow-400 text-yellow-400" />
-           <span className="text-[10px] font-extrabold text-gray-700">4.8</span>
+    <div className="bg-white rounded-[32px] border border-gray-100 h-[420px] animate-pulse p-4 flex flex-col">
+      <div className="h-36 bg-gray-100 w-full rounded-2xl" />
+      <div className="flex items-start gap-4 px-2 -mt-6 relative z-10">
+        <div className="w-16 h-16 bg-gray-200 rounded-full border-4 border-white" />
+        <div className="flex-1 pt-8 space-y-2">
+          <div className="h-4 bg-gray-200 w-3/4 rounded" />
+          <div className="h-3 bg-gray-100 w-1/2 rounded" />
         </div>
-      </Link>
-
-      <div className="px-5 pb-6 flex-1 flex flex-col items-center text-center">
-        <Link href={`/${store.username}`} className="relative w-20 h-20 rounded-2xl border-4 border-white overflow-hidden bg-white shadow-xl -mt-10 mb-3 group-hover:rotate-3 transition-transform duration-500">
-          <img 
-            src={store.logoUrl || `https://ui-avatars.com/api/?name=${store.storeName}&background=00a63e&color=fff`} 
-            className="w-full h-full object-cover"
-            alt="logo"
-          />
-        </Link>
-        
-        <div className="flex items-center gap-1.5 mb-0.5">
-           <h3 className="font-extrabold text-gray-900">{store.storeName}</h3>
-           <Image src="/icons/badge.svg" width={14} height={14} alt="verified" style={blueFilter} />
+      </div>
+      <div className="mt-6 space-y-3 flex-1 flex flex-col">
+        <div className="grid grid-cols-3 gap-2">
+          <div className="h-14 bg-gray-50 rounded-xl" />
+          <div className="h-14 bg-gray-50 rounded-xl" />
+          <div className="h-14 bg-gray-50 rounded-xl" />
         </div>
-        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-tight mb-4">@{store.username}</p>
-        
-        {/* STATS SECTION */}
-        <div className="grid grid-cols-3 w-full gap-2 border-y border-gray-50 py-3 mb-6">
-           <div className="flex flex-col items-center">
-             <span className="flex items-center gap-1 text-[#00a63e] font-bold text-xs"><Users size={12}/> {store.followerCount || 0}</span>
-             <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Followers</span>
-           </div>
-           
-           <div className="flex flex-col items-center border-x border-gray-50">
-             {/* 2. Display the Item Count here */}
-             <span className="flex items-center gap-1 text-gray-700 font-bold text-xs">
-               <LayoutGrid size={12}/> {displayItemCount}
-             </span>
-             <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Items</span>
-           </div>
-
-           <div className="flex flex-col items-center">
-             <span className="flex items-center gap-1 text-gray-700 font-bold text-xs truncate max-w-[60px]"><MapPin size={12}/> {store.state || "N/A"}</span>
-             <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Location</span>
-           </div>
-        </div>
-
-        <div className="w-full space-y-2">
-          <Link href={`/${store.username}`} className="w-full py-3 bg-[#00a63e] hover:bg-[#008c34] rounded-2xl text-[11px] font-extrabold text-white transition-all flex items-center justify-center gap-2 shadow-sm">
-            <MessageCircle size={16} /> View WhatsApp Shop
-          </Link>
-          
-          <div className="w-full follow-button-wrapper">
-             <FollowButton vendorId={store.id} />
-          </div>
+        <div className="mt-auto space-y-2">
+          <div className="h-11 bg-gray-100 rounded-2xl" />
+          <div className="h-10 bg-gray-50 rounded-xl" />
         </div>
       </div>
     </div>
   );
 }
 
-function StoreSkeleton() {
+function RecommendedStore({ store }: { store: any }) {
+  const storeName = store.storeName || store.name || "Unnamed Store";
+  const logo = store.logoUrl || store.logo;
+  const initials = storeName.slice(0, 2).toUpperCase();
+
   return (
-    <div className="bg-white rounded-[32px] border border-gray-100 h-[400px] animate-pulse">
-       <div className="h-32 bg-gray-100 w-full" />
-       <div className="flex flex-col items-center px-5">
-          <div className="w-20 h-20 bg-gray-200 rounded-2xl -mt-10 mb-4" />
-          <div className="h-4 bg-gray-200 w-32 rounded mb-2" />
-          <div className="h-3 bg-gray-100 w-20 rounded mb-6" />
-          <div className="w-full h-12 bg-gray-50 rounded-2xl mb-2" />
-          <div className="w-full h-10 bg-gray-50 rounded-xl" />
-       </div>
+    <Link href={store.username ? `/${store.username}` : "#"} className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3 transition hover:border-green-200 hover:bg-green-50/50">
+      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-green-100">
+        {logo ? (
+          <Image src={logo} alt={storeName} fill className="object-cover" sizes="48px" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-xs font-black text-green-700">{initials}</div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-extrabold text-gray-900">{storeName}</p>
+        <p className="mt-0.5 truncate text-[11px] font-medium text-gray-400">@{store.username || "store"}</p>
+        <p className="mt-1 truncate text-[10px] font-bold uppercase tracking-wide text-green-600">{store.category || "General Store"}</p>
+      </div>
+    </Link>
+  );
+}
+
+function RecommendedStoreSkeleton() {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3 animate-pulse">
+      <div className="h-12 w-12 shrink-0 rounded-xl bg-gray-100" />
+      <div className="flex-1 space-y-2">
+        <div className="h-3 w-3/4 rounded bg-gray-100" />
+        <div className="h-2 w-1/2 rounded bg-gray-100" />
+        <div className="h-2 w-2/3 rounded bg-gray-100" />
+      </div>
     </div>
   );
 }
