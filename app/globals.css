@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* 1. Tell Tailwind to scan Tremor components */
+@source "../node_modules/@tremor/react";
+
+:root {
+  --background: #ffffff;
+  --foreground: #111827;
+  /* Slightly softer than pure black, better for Jakarta Sans */
+
+  /* Zebble Brand Colors */
+  --color-zebble-green: #16a34a;
+  --color-zebble-blue: #2563eb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  /* 2. Map 'sans' to your branding font variable */
+  --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui;
+
+  /* 3. Add Zebble colors to the theme */
+  --color-brand: var(--color-zebble-green);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  /* This ensures Plus Jakarta Sans is used everywhere by default */
+  font-family: var(--font-plus-jakarta), sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Optional: Clean up the default dark mode if you want to stay light-themed for now */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #ffffff;
+    --foreground: #111827;
+  }
+}
