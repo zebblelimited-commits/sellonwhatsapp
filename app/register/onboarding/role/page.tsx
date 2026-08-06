@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { 
+import {
   Store, ShoppingBag, Loader2, AlertCircle, Globe
 } from "lucide-react";
 import { signInWithPopup } from "firebase/auth";
@@ -45,10 +45,10 @@ export default function RoleSelectionPage() {
         setError("Please choose a unique username for your store.");
         return;
       }
-      
+
       setIsSaving(true);
       setError("");
-      
+
       // Check username availability
       const taken = await checkUsername(username);
       if (taken) {
@@ -70,32 +70,44 @@ export default function RoleSelectionPage() {
         uid: user.uid,
         role,
         email: user.email,
+        displayName: user.displayName || "",
         firstName: user.displayName?.split(" ")[0] || "",
-        lastName: user.displayName?.split(" ")[1] || "",
+        lastName: user.displayName?.split(" ").slice(1).join(" ") || "",
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       };
 
-      // 2. Save to Firestore
+      // 2. ✅ FIX: Save to the CORRECT Firestore collections ("vendors" and "users")
+      // ✅ FIX: Added { merge: true } to prevent "update" rule violations if doc exists
       if (role === "vendor") {
         await Promise.all([
-          setDoc(doc(db, "stores", user.uid), { 
-            ...userData, 
-            storeName: storeName.trim(), 
-            username: username.toLowerCase().trim() 
-          }),
-          setDoc(doc(db, "usernames", username.toLowerCase().trim()), { 
+          // Write to 'vendors' (Matches AuthProvider & Backend)
+          setDoc(doc(db, "vendors", user.uid), userData, { merge: true }),
+
+          // Write to 'stores' (Needed for public storefronts & Analytics)
+          setDoc(doc(db, "stores", user.uid), {
+            ...userData,
+            storeName: storeName.trim(),
+            username: username.toLowerCase().trim(),
+            isVerified: false,
+            verificationTier: null
+          }, { merge: true }),
+
+          // Claim username
+          setDoc(doc(db, "usernames", username.toLowerCase().trim()), {
             uid: user.uid,
             claimedAt: serverTimestamp()
-          })
+          }, { merge: true })
         ]);
       } else {
-        await setDoc(doc(db, "buyers", user.uid), userData);
+        // Write to 'users' (Matches AuthProvider & BuyerProfile)
+        await setDoc(doc(db, "users", user.uid), userData, { merge: true });
       }
 
-      // 3. Set Custom Claims & Bake Cookie (Same robust logic as traditional signup)
+      // 3. Set Custom Claims & Bake Cookie
       await setUserRole(user.uid, role as 'vendor' | 'buyer');
       await user.getIdToken(true);
-      
+
       const newIdToken = await user.getIdToken();
       await fetch('/api/session', {
         method: 'POST',
@@ -105,11 +117,11 @@ export default function RoleSelectionPage() {
 
       // 4. Route to Dashboard
       router.push(role === "vendor" ? "/dashboard" : "/buyer/dashboard");
-      
-    } catch (err) {
+
+    } catch (err: any) {
       console.error("Google sign-in error:", err);
-      if ((err as any).code !== 'auth/popup-closed-by-user') {
-        setError("Google Sign-In failed. Please try again.");
+      if (err.code !== 'auth/popup-closed-by-user') {
+        setError(`Sign-In failed: ${err.message || "Please try again."}`);
       }
     } finally {
       setIsSaving(false);
@@ -154,11 +166,10 @@ export default function RoleSelectionPage() {
               <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={() => setRole("vendor")}
-                  className={`group p-5 border-2 rounded-2xl flex flex-col items-start gap-3 transition-all active:scale-[0.98] ${
-                    role === "vendor" 
-                      ? "border-green-600 bg-green-50/50 shadow-lg shadow-green-100" 
+                  className={`group p-5 border-2 rounded-2xl flex flex-col items-start gap-3 transition-all active:scale-[0.98] ${role === "vendor"
+                      ? "border-green-600 bg-green-50/50 shadow-lg shadow-green-100"
                       : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"
-                  }`}
+                    }`}
                 >
                   <div className={`p-2.5 rounded-xl transition-colors ${role === "vendor" ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-400 group-hover:bg-gray-200"}`}>
                     <Store size={22} />
@@ -168,14 +179,13 @@ export default function RoleSelectionPage() {
                     <div className="text-xs text-gray-500 mt-0.5">Create a store & grow</div>
                   </div>
                 </button>
-                
+
                 <button
                   onClick={() => setRole("buyer")}
-                  className={`group p-5 border-2 rounded-2xl flex flex-col items-start gap-3 transition-all active:scale-[0.98] ${
-                    role === "buyer" 
-                      ? "border-blue-600 bg-blue-50/50 shadow-lg shadow-blue-100" 
+                  className={`group p-5 border-2 rounded-2xl flex flex-col items-start gap-3 transition-all active:scale-[0.98] ${role === "buyer"
+                      ? "border-blue-600 bg-blue-50/50 shadow-lg shadow-blue-100"
                       : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"
-                  }`}
+                    }`}
                 >
                   <div className={`p-2.5 rounded-xl transition-colors ${role === "buyer" ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-400 group-hover:bg-gray-200"}`}>
                     <ShoppingBag size={22} />
@@ -193,22 +203,22 @@ export default function RoleSelectionPage() {
               <div className="space-y-4 animate-in slide-in-from-top-2 fade-in duration-300">
                 <div>
                   <label className="text-sm font-bold text-gray-700 mb-1.5 block">Store Name</label>
-                  <input 
-                    type="text" 
-                    value={storeName} 
+                  <input
+                    type="text"
+                    value={storeName}
                     onChange={(e) => setStoreName(e.target.value)}
-                    placeholder="e.g. Jane's Fashion" 
-                    className="form-input-compact" 
+                    placeholder="e.g. Jane's Fashion"
+                    className="form-input-compact"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-bold text-gray-700 mb-1.5 block">Store Username</label>
-                  <input 
-                    type="text" 
-                    value={username} 
+                  <input
+                    type="text"
+                    value={username}
                     onChange={handleUsernameChange}
-                    placeholder="e.g. janesfashion" 
-                    className="form-input-compact" 
+                    placeholder="e.g. janesfashion"
+                    className="form-input-compact"
                   />
                   <div className={`mt-2 p-2.5 rounded-xl border border-dashed flex items-center gap-2 ${username ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100 opacity-60'}`}>
                     <Globe size={12} className={username ? 'text-green-600' : 'text-gray-400'} />
@@ -247,7 +257,7 @@ export default function RoleSelectionPage() {
                 </>
               )}
             </button>
-            
+
             <p className="text-center text-xs text-gray-400 mt-4">
               By continuing, you agree to our Terms of Service and Privacy Policy.
             </p>

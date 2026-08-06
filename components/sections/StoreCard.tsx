@@ -3,7 +3,7 @@
 
 import Image from "next/image";
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { ShieldCheck, Crown } from "lucide-react"; // ✅ Added Crown for Pro Seller badge
+import { ShieldCheck, Crown } from "lucide-react";
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -19,19 +19,19 @@ interface StoreData {
   price: string;
   logo: string;
   coverImage: string;
-  
+
   // ✅ Verification (Verified Business badge) - Manual admin approval
   isVerified?: boolean;
   verifiedAt?: any; // Firestore timestamp
   verificationTier?: "business" | null; // "business" for manual verification
-  
+
   // ✅ Subscription (Pro Seller badge) - Active Pro subscription
   subscription?: {
     planId?: "pro_lite" | "pro_max";
     status?: "active" | "canceled" | "expired";
     currentPeriodEnd?: any; // Firestore timestamp
   };
-  
+
   rating?: number;
   totalOrders?: number;
   [key: string]: any; // Allow extra fields
@@ -50,11 +50,11 @@ export default function StoreCard({ store, onClick }: StoreCardProps) {
   const showProSellerBadge = store.subscription?.status === "active";
 
   return (
-    <div 
+    <div
       onClick={onClick}
       className={`${jakarta.className} bg-white border border-gray-100 rounded-[32px] shadow-sm overflow-hidden relative w-full max-w-[450px] p-4 cursor-pointer hover:shadow-md transition-all active:scale-[0.99]`}
     >
-      
+
       {/* 1. COVER IMAGE AREA */}
       <div className="relative h-36 w-full rounded-2xl overflow-hidden">
         <Image
@@ -63,12 +63,12 @@ export default function StoreCard({ store, onClick }: StoreCardProps) {
           fill
           className="object-cover brightness-95"
         />
-        
+
         {/* ✅ Badges Container - Top Right */}
         <div className="absolute top-3 right-3 flex items-center gap-1.5">
           {/* Verified Business Badge (Green) */}
           {showVerifiedBusinessBadge && (
-            <div 
+            <div
               className="bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm border border-green-100"
               title="Verified Business • Identity & documents confirmed by Zebble"
             >
@@ -76,10 +76,10 @@ export default function StoreCard({ store, onClick }: StoreCardProps) {
               <span className="text-[10px] font-bold text-gray-800 tracking-tight">Verified</span>
             </div>
           )}
-          
+
           {/* Pro Seller Badge (Amber) */}
           {showProSellerBadge && (
-            <div 
+            <div
               className="bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm border border-amber-100"
               title="Pro Seller • Premium subscription • Advanced features"
             >
@@ -112,21 +112,23 @@ export default function StoreCard({ store, onClick }: StoreCardProps) {
             <h3 className="font-bold text-lg text-gray-900 tracking-tight leading-none truncate">
               {store.name}
             </h3>
-            
-            {/* ✅ Badges in Header - Order: Verified Business first, then Pro Seller */}
+
+            {/* ✅ FIXED: Wrapped icons in <span> to support the 'title' tooltip */}
             {showVerifiedBusinessBadge && (
-              <ShieldCheck 
-                size={16} 
-                className="text-[#00a63e] shrink-0" 
-                title="Verified Business • Identity & documents confirmed by Zebble" 
-              />
+              <span title="Verified Business • Identity & documents confirmed by Zebble">
+                <ShieldCheck
+                  size={16}
+                  className="text-[#00a63e] shrink-0"
+                />
+              </span>
             )}
             {showProSellerBadge && (
-              <Crown 
-                size={16} 
-                className="text-[#f59e0b] fill-[#f59e0b]/10 shrink-0" 
-                title="Pro Seller • Premium subscription • Advanced features" 
-              />
+              <span title="Pro Seller • Premium subscription • Advanced features">
+                <Crown
+                  size={16}
+                  className="text-[#f59e0b] fill-[#f59e0b]/10 shrink-0"
+                />
+              </span>
             )}
           </div>
           <p className="text-xs text-gray-400 font-medium">@{store.username}</p>
@@ -171,7 +173,7 @@ export default function StoreCard({ store, onClick }: StoreCardProps) {
           <p className="text-[11px] text-gray-500 leading-tight">
             <span className="font-bold text-gray-800">{store.totalOrders?.toLocaleString() || "1,245"}+</span> customers trusted this store
           </p>
-          
+
           {/* ✅ Badges in Footer - Order: Verified Business first, then Pro Seller */}
           <div className="ml-auto flex items-center gap-2">
             {showVerifiedBusinessBadge && (

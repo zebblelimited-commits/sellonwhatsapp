@@ -1,4 +1,5 @@
 "use client";
+
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
@@ -25,62 +26,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
-      
+
       if (firebaseUser) {
-        // ✅ FIX 1: Wrap Firestore calls in try/catch so the app doesn't crash if permissions fail
         try {
           let userRole: UserRole = null;
-          const vendorDoc = await getDoc(doc(db, "stores", firebaseUser.uid));
+
+          console.log("🔍 AuthProvider: Checking vendors collection...");
+          const vendorDoc = await getDoc(doc(db, "vendors", firebaseUser.uid));
           if (vendorDoc.exists()) {
             userRole = "vendor";
+            console.log("✅ AuthProvider: User is a VENDOR");
           } else {
-            const buyerDoc = await getDoc(doc(db, "buyers", firebaseUser.uid));
-            if (buyerDoc.exists()) userRole = "buyer";
+            console.log("🔍 AuthProvider: Checking users collection...");
+            const buyerDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+            if (buyerDoc.exists()) {
+              userRole = "buyer";
+              console.log("✅ AuthProvider: User is a BUYER");
+            } else {
+              console.warn("⚠️ AuthProvider: No document found in 'vendors' or 'users'");
+            }
           }
           setRole(userRole);
 
-          // 2. Centralized Routing Logic (The Safety Net)
           const currentPath = window.location.pathname;
-          const rolePath = '/register/onboarding/role'; 
-          
-          // ✅ FIX 2: Define public routes where we shouldn't force onboarding
-          const publicRoutes = ['/', '/explore', '/register', '/login', '/pricing', '/boost-store'];
-          const isPublicRoute = publicRoutes.includes(currentPath) || 
-                                currentPath.startsWith('/pricing') || 
-                                currentPath.startsWith('/boost-store');
-          
-          // ✅ FIX 3: Check if it's a dynamic product/store page (e.g., /username/productId)
-          const pathSegments = currentPath.split('/').filter(Boolean);
-          const isProductPage = pathSegments.length === 2 && 
-                                !currentPath.startsWith('/admin') && 
-                                !currentPath.startsWith('/dashboard') && 
-                                !currentPath.startsWith('/buyer') && 
-                                !currentPath.startsWith('/register');
+          const rolePath = '/register/onboarding/role';
 
-          // ✅ FIX 4: Wrap routing in setTimeout to prevent Next.js initialization crash
+          const publicRoutes = ['/', '/explore', '/register', '/login', '/pricing', '/boost-store', '/search'];
+          const isPublicRoute = publicRoutes.includes(currentPath) ||
+            currentPath.startsWith('/pricing') ||
+            currentPath.startsWith('/boost-store') ||
+            currentPath.startsWith('/search') ||
+            currentPath.startsWith('/stores/');
+
+          const pathSegments = currentPath.split('/').filter(Boolean);
+          const isProductPage = pathSegments.length === 2 &&
+            !currentPath.startsWith('/admin') &&
+            !currentPath.startsWith('/dashboard') &&
+            !currentPath.startsWith('/buyer') &&
+            !currentPath.startsWith('/register');
+
           if (!userRole && !isPublicRoute && !isProductPage && currentPath !== rolePath) {
-             setTimeout(() => router.replace(rolePath), 0); 
+            console.log("🔄 AuthProvider: Redirecting to onboarding...");
+            setTimeout(() => router.replace(rolePath), 0);
           }
-          else if (userRole === 'buyer' && currentPath.startsWith('/dashboard')) {
-             setTimeout(() => router.replace('/buyer/dashboard'), 0);
+          else if (userRole === 'buyer' && (currentPath.startsWith('/dashboard') || currentPath.startsWith('/admin'))) {
+            setTimeout(() => router.replace('/buyer/dashboard'), 0);
           }
-          else if (userRole === 'vendor' && currentPath.startsWith('/buyer/dashboard')) {
-             setTimeout(() => router.replace('/dashboard'), 0);
+          else if (userRole === 'vendor' && (currentPath.startsWith('/buyer') || currentPath.startsWith('/admin'))) {
+            setTimeout(() => router.replace('/dashboard'), 0);
           }
+
         } catch (error) {
-          console.error("AuthProvider: Error fetching user role:", error);
-          // If Firestore throws a permission error, we catch it and continue.
+          console.error("❌ AuthProvider: Error fetching user role:", error);
+        } finally {
+          // ✅ CRITICAL: This GUARANTEES the spinner turns off, no matter what happens above
+          console.log("🏁 AuthProvider: Setting loading to FALSE");
+          setLoading(false);
         }
       } else {
         setRole(null);
         const currentPath = window.location.pathname;
-        if (currentPath.startsWith('/dashboard') || currentPath.startsWith('/buyer/dashboard') || currentPath.startsWith('/admin')) {
-           setTimeout(() => router.replace('/login'), 0);
+        if (currentPath.startsWith('/dashboard') || currentPath.startsWith('/buyer') || currentPath.startsWith('/admin')) {
+          setTimeout(() => router.replace('/login'), 0);
         }
+        setLoading(false);
       }
-      
-      // ✅ CRITICAL FIX: ALWAYS set loading to false, no matter what happens above!
-      setLoading(false);
     });
 
     return () => unsubscribe();
