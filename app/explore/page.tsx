@@ -105,7 +105,7 @@ export default function ExplorePage() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
             {loading ? [1, 2, 3, 4, 5, 6].map(i => <StoreSkeleton key={i} />) : stores.map((store) => (
               <StoreCardExplore key={store.id} store={store} />
             ))}

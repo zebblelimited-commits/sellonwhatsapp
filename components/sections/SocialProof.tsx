@@ -31,7 +31,7 @@ const categories = [
   { name: "Services", icon: <Briefcase className="text-green-500 w-4 h-4" /> },
 ];
 
-export default function trendingStores {
+export default function SocialProof() {
   return (
     <section className={`${font.className} px-6 py-10 max-w-7xl mx-auto space-y-12`}>
       

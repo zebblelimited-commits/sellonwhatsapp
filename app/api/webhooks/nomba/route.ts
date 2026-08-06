@@ -139,14 +139,19 @@ export async function POST(request: NextRequest) {
       
       if (isPayout) {
         // ✅ HANDLE PAYOUT COMPLETION
-        await docSnap.ref.update({
-          status: "completed",
-          completedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        const successResult = await adminDb.runTransaction(async (transaction) => {
+          const payoutSnap = await transaction.get(docSnap.ref);
+          if (!payoutSnap.exists || payoutSnap.data()?.status === "completed") return { transitioned: false };
+          transaction.update(docSnap.ref, {
+            status: "completed",
+            completedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          return { transitioned: true };
         });
         console.log(`✅ [WEBHOOK SUCCESS] Payout ${orderRef} marked as completed.`);
 
-        if (targetUserId) {
+        if (targetUserId && successResult.transitioned) {
           const netAmount = localData?.netAmount || 0;
           const notifConfig = {
             type: "payment",
@@ -310,22 +315,42 @@ export async function POST(request: NextRequest) {
       
       if (isPayout) {
         // ✅ HANDLE PAYOUT FAILURE & AUTOMATIC REFUND
-        await docSnap.ref.update({
-          status: "failed",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        const failureResult = await adminDb.runTransaction(async (transaction) => {
+          const payoutSnap = await transaction.get(docSnap.ref);
+          if (!payoutSnap.exists) return { refunded: false, alreadyFinal: true };
+
+          const payoutData = payoutSnap.data() || {};
+          if (["failed", "rejected", "completed"].includes(payoutData.status)) {
+            return { refunded: false, alreadyFinal: true };
+          }
+
+          const storeRef = targetUserId ? adminDb.collection("stores").doc(targetUserId) : null;
+          const storeSnap = storeRef ? await transaction.get(storeRef) : null;
+          if (storeRef && !storeSnap?.exists) throw new Error("Store not found while refunding failed payout");
+
+          if (storeRef && storeSnap) {
+            const currentAvailable = Number(storeSnap.data()?.availableBalance ?? 0);
+            const grossAmount = Number(payoutData.grossAmount ?? 0);
+            transaction.update(storeRef, {
+              availableBalance: (Number.isFinite(currentAvailable) ? currentAvailable : 0) + (Number.isFinite(grossAmount) ? grossAmount : 0),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+          }
+
+          transaction.update(docSnap.ref, {
+            status: "failed",
+            refundedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          return { refunded: true, alreadyFinal: false };
         });
         console.log(`❌ [WEBHOOK FAILED] Payout ${orderRef} failed.`);
 
-        // ✅ REFUND: If the bank rejects it after we deducted the balance, give it back to the store
-        if (targetUserId && localData?.grossAmount) {
-          await adminDb.collection("stores").doc(targetUserId).update({
-            availableBalance: admin.firestore.FieldValue.increment(localData.grossAmount),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-          console.log(`✅ [REFUND] Returned ₦${localData.grossAmount} to store ${targetUserId} after failed payout.`);
+        if (failureResult.refunded) {
+          console.log(`✅ [REFUND] Returned ₦${localData?.grossAmount || 0} to store ${targetUserId} after failed payout.`);
         }
 
-        if (targetUserId) {
+        if (targetUserId && failureResult.refunded) {
           const failConfig = {
             type: "payment",
             priority: "urgent",

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { auth } from "@/lib/firebase";
 import {
@@ -7,6 +7,23 @@ import {
   Clock, CheckCircle2, XCircle, Copy, ChevronRight, Crown,
   Wallet, Lock, CreditCard, Building2, AlertCircle
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+interface BankDetails {
+  bankCode?: string;
+  bankName?: string;
+  accountNumber?: string;
+  accountName?: string;
+}
+
+interface PayoutRecord {
+  id: string;
+  status?: string;
+  requestedAt?: { toDate?: () => Date } | string | number;
+  netAmount?: number;
+  grossAmount?: number;
+  amount?: number;
+}
 
 interface WithdrawTabProps {
   stats: {
@@ -16,32 +33,42 @@ interface WithdrawTabProps {
     isPartner?: boolean;
     partnerExpiry?: string;
   };
-  bankDetails?: any; // 🌟 Added to receive bank account info
-  onWithdrawComplete?: () => void;
-  payoutHistory?: any[];
+  bankDetails?: BankDetails;
+  payoutHistory?: PayoutRecord[];
 }
 
-export default function WithdrawTab({ stats, bankDetails, onWithdrawComplete, payoutHistory = [] }: WithdrawTabProps) {
+export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: WithdrawTabProps) {
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [copiedRef, setCopiedRef] = useState<string | null>(null);
+  const withdrawalControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    withdrawalControllerRef.current?.abort();
+  }, []);
 
   // ✅ DYNAMIC FEE CALCULATION
-  const isPartnerActive = stats?.isPartner && new Date(stats?.partnerExpiry) > new Date();
+  const isPartnerActive = Boolean(stats?.isPartner && stats?.partnerExpiry && new Date(stats.partnerExpiry) > new Date());
   const SOWA_FEE_PERCENT = isPartnerActive ? 0.015 : 0.03; 
   const FEE_DISPLAY = isPartnerActive ? '1.5%' : '3%';
   
-  const rawAvailable = stats?.availableBalance || 0;
+  const rawAvailableValue = Number(stats?.availableBalance ?? 0);
+  const rawAvailable = Number.isFinite(rawAvailableValue) ? Math.max(0, rawAvailableValue) : 0;
   const availableSowaFee = rawAvailable * SOWA_FEE_PERCENT;
   const netAvailable = rawAvailable - availableSowaFee;
-  const escrowBalance = stats?.escrowBalance || 0; // 🌟 Used for the new Escrow card
+  const rawEscrow = Number(stats?.escrowBalance ?? 0);
+  const escrowBalance = Number.isFinite(rawEscrow) ? Math.max(0, rawEscrow) : 0;
 
   useEffect(() => {
     if (netAvailable > 0 && !withdrawAmount) {
+      // This effect fills the initial amount after the canonical ledger loads.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setWithdrawAmount(netAvailable.toString());
     }
-  }, [netAvailable]);
+  }, [netAvailable, withdrawAmount]);
 
   useEffect(() => {
     if (notification) {
@@ -54,11 +81,16 @@ export default function WithdrawTab({ stats, bankDetails, onWithdrawComplete, pa
     new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(amount);
 
   const handleWithdraw = async () => {
+    if (isWithdrawing || withdrawalControllerRef.current) return;
+
     const amount = parseFloat(withdrawAmount) || 0;
     if (amount <= 0 || amount > netAvailable) {
       setNotification({ type: 'error', message: 'Invalid amount. Please enter a valid value up to your available balance.' });
       return;
     }
+    const controller = new AbortController();
+    withdrawalControllerRef.current = controller;
+    const requestTimeout = window.setTimeout(() => controller.abort(), 35000);
     setIsWithdrawing(true);
     try {
       const user = auth.currentUser;
@@ -70,18 +102,35 @@ export default function WithdrawTab({ stats, bankDetails, onWithdrawComplete, pa
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify({ amount: amount })
+        body: JSON.stringify({ amount }),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Withdrawal request failed');
-      setNotification({ type: 'success', message: `✅ Successfully requested withdrawal of ${formatCurrency(amount)}` });
-      setWithdrawAmount("");
-      if (onWithdrawComplete) onWithdrawComplete();
-    } catch (error: any) {
+      if (mountedRef.current) {
+        setNotification({
+          type: 'success',
+          message: data.pending
+            ? `⏳ ${data.message}`
+            : `✅ Successfully requested withdrawal of ${formatCurrency(amount)}`,
+        });
+        setWithdrawAmount("");
+      }
+    } catch (error: unknown) {
+      const isAbortError = error instanceof DOMException
+        ? error.name === "AbortError"
+        : error instanceof Error && error.name === "AbortError";
+      if (isAbortError) return;
       console.error("Withdrawal failed:", error);
-      setNotification({ type: 'error', message: `❌ ${error.message || 'Withdrawal failed. Please try again.'}` });
+      if (mountedRef.current) {
+        setNotification({ type: 'error', message: `❌ ${error instanceof Error ? error.message : 'Withdrawal failed. Please try again.'}` });
+      }
     } finally {
-      setIsWithdrawing(false);
+      window.clearTimeout(requestTimeout);
+      if (withdrawalControllerRef.current === controller) {
+        withdrawalControllerRef.current = null;
+        if (mountedRef.current) setIsWithdrawing(false);
+      }
     }
   };
 
@@ -95,7 +144,7 @@ export default function WithdrawTab({ stats, bankDetails, onWithdrawComplete, pa
 
   const history = payoutHistory; 
   const getStatusBadge = (status: string) => {
-    const config: Record<string, { label: string, icon: any, bg: string, text: string }> = {
+    const config: Record<string, { label: string, icon: LucideIcon, bg: string, text: string }> = {
       completed: { label: "Completed", icon: CheckCircle2, bg: "bg-green-100", text: "text-green-700" },
       pending: { label: "Processing", icon: Clock, bg: "bg-yellow-100", text: "text-yellow-700" },
       failed: { label: "Failed", icon: XCircle, bg: "bg-red-100", text: "text-red-700" }
@@ -153,6 +202,7 @@ export default function WithdrawTab({ stats, bankDetails, onWithdrawComplete, pa
                 <button
                   key={p}
                   onClick={() => handleQuickPercent(p)}
+                  disabled={isWithdrawing}
                   className="py-2 rounded-lg text-sm font-black bg-white/20 hover:bg-white/30 text-white border border-white/30 transition-all"
                 >
                   {p}%
@@ -167,12 +217,14 @@ export default function WithdrawTab({ stats, bankDetails, onWithdrawComplete, pa
                 type="number"
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(e.target.value)}
+                disabled={isWithdrawing}
                 max={netAvailable}
                 className="w-full bg-white/20 backdrop-blur-sm border-2 border-white/30 rounded-xl pl-10 pr-16 py-3 text-xl font-black text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/40 transition-all"
                 placeholder="0"
               />
               <button 
                 onClick={() => setWithdrawAmount(netAvailable.toString())}
+                disabled={isWithdrawing}
                 className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-white/20 hover:bg-white/30 rounded-md text-[9px] font-bold text-white transition-colors"
               >
                 MAX
@@ -304,10 +356,11 @@ export default function WithdrawTab({ stats, bankDetails, onWithdrawComplete, pa
             </thead>
             <tbody className="divide-y divide-gray-100">
               {history.map((item) => {
-                const payoutDate = item.requestedAt?.toDate 
-                  ? item.requestedAt.toDate() 
-                  : item.requestedAt 
-                    ? new Date(item.requestedAt) 
+                const requestedAt = item.requestedAt;
+                const payoutDate = requestedAt && typeof requestedAt === "object" && typeof requestedAt.toDate === "function"
+                  ? requestedAt.toDate()
+                  : typeof requestedAt === "string" || typeof requestedAt === "number"
+                    ? new Date(requestedAt)
                     : new Date();
                 const displayAmount = item.netAmount ?? item.grossAmount ?? item.amount ?? 0;
                 const shortRef = item.id ? `PAY-${item.id.slice(-6).toUpperCase()}` : 'N/A';
@@ -324,7 +377,7 @@ export default function WithdrawTab({ stats, bankDetails, onWithdrawComplete, pa
                         ? formatCurrency(displayAmount) 
                         : '—'}
                     </td>
-                    <td className="px-5 py-4">{getStatusBadge(item.status)}</td>
+                    <td className="px-5 py-4">{getStatusBadge(item.status || "pending")}</td>
                     <td className="px-5 py-4 text-right">
                       <button 
                         onClick={() => copyToClipboard(item.id, item.id)}

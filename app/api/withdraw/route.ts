@@ -1,139 +1,253 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, adminAuth } from "@/lib/firebase-admin";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
+import type { DocumentReference } from "firebase-admin/firestore";
 
-// Helper to get Nomba Token
+const jsonError = (message: string, status = 500) => NextResponse.json({ error: message }, { status });
+
+class WithdrawalError extends Error {
+  status: number;
+  safeToRefund: boolean;
+
+  constructor(message: string, status = 500, safeToRefund = true) {
+    super(message);
+    this.name = "WithdrawalError";
+    this.status = status;
+    this.safeToRefund = safeToRefund;
+  }
+}
+
+function isConnectFailure(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const cause = (error as Error & { cause?: { code?: string } }).cause;
+  return ["UND_ERR_CONNECT_TIMEOUT", "ECONNREFUSED", "ENETUNREACH", "EAI_AGAIN"].includes(cause?.code || "");
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal, cache: "no-store" });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function getNombaToken() {
-  const response = await fetch(`${process.env.NOMBA_AUTH_URL}/v1/auth/token/issue`, {
+  const response = await fetchWithTimeout(`${process.env.NOMBA_AUTH_URL}/v1/auth/token/issue`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", accountId: process.env.NOMBA_ACCOUNT_ID! },
+    headers: { "Content-Type": "application/json", accountId: process.env.NOMBA_ACCOUNT_ID || "" },
     body: JSON.stringify({
       grant_type: "client_credentials",
       client_id: process.env.NOMBA_CLIENT_ID,
       client_secret: process.env.NOMBA_CLIENT_SECRET,
     }),
-    cache: "no-store",
   });
   const result = await response.json();
-  if (!response.ok) throw new Error("Failed to authenticate with Nomba");
-  return result?.data?.access_token;
+  if (!response.ok || !result?.data?.access_token) throw new WithdrawalError("Failed to authenticate with Nomba");
+  return result.data.access_token as string;
+}
+
+async function refundReservation(storeId: string, payoutRef: DocumentReference, reason: string) {
+  await adminDb.runTransaction(async (transaction) => {
+    const payoutSnap = await transaction.get(payoutRef);
+    if (!payoutSnap.exists || payoutSnap.data()?.status !== "pending") return;
+
+    const storeRef = adminDb.collection("stores").doc(storeId);
+    const storeSnap = await transaction.get(storeRef);
+    if (!storeSnap.exists) throw new Error("Store not found while refunding withdrawal reservation");
+
+    const payout = payoutSnap.data() || {};
+    const currentAvailable = Number(storeSnap.data()?.availableBalance ?? 0);
+    const grossAmount = Number(payout.grossAmount ?? 0);
+    transaction.update(storeRef, {
+      availableBalance: (Number.isFinite(currentAvailable) ? currentAvailable : 0) + (Number.isFinite(grossAmount) ? grossAmount : 0),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    transaction.update(payoutRef, {
+      status: "failed",
+      failureReason: reason,
+      refundedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
 }
 
 export async function POST(request: NextRequest) {
+  let storeId = "";
+  let payoutRef: DocumentReference | null = null;
+  let transferAttempted = false;
+
   try {
-    // 1. Verify User
     const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    
-    const token = authHeader.split(" ")[1];
+    if (!authHeader?.startsWith("Bearer ")) return jsonError("Unauthorized", 401);
+
+    const token = authHeader.slice("Bearer ".length).trim();
     const decoded = await adminAuth.verifyIdToken(token);
-    const storeId = decoded.uid;
+    storeId = decoded.uid;
 
-    // 2. Parse Request & Fetch Store Data
-    const { amount } = await request.json();
-    if (!amount || amount <= 0) return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
-
-    const storeDoc = await adminDb.collection("stores").doc(storeId).get();
-    if (!storeDoc.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
-    
-    const storeData = storeDoc.data();
-    const payoutSettings = storeData?.payoutSettings;
-
-    if (!payoutSettings?.bankCode || !payoutSettings?.accountNumber) {
-      return NextResponse.json({ error: "Please link a bank account in Settings first." }, { status: 400 });
+    const body = await request.json();
+    const requestedAmount = Number(body?.amount);
+    if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
+      return jsonError("Invalid amount", 400);
     }
 
-    // ✅ 3. Check Balances (Fallback to alternative field names just in case)
-    const availableBalance = Number(
-      storeData?.availableBalance || 
-      storeData?.balance || 
-      storeData?.walletBalance || 
-      0
-    );
-    
-    // 🔍 DEBUG LOG: See exactly what financial fields exist in the database
-    console.log(`[WITHDRAW] User ${storeId} requesting ₦${amount}.`);
-    console.log(`[WITHDRAW] Firestore Financial Fields:`, {
-      availableBalance: storeData?.availableBalance,
-      balance: storeData?.balance,
-      escrowBalance: storeData?.escrowBalance,
-      totalSales: storeData?.totalSales
+    const transferRef = `PAYOUT_${storeId}_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    payoutRef = adminDb.collection("payouts").doc(transferRef);
+    const storeRef = adminDb.collection("stores").doc(storeId);
+
+    // Reserve the gross amount and create the payout record atomically.
+    // A second click cannot pass this check after the first request reserves funds.
+    const reservation = await adminDb.runTransaction(async (transaction) => {
+      const storeSnap = await transaction.get(storeRef);
+      if (!storeSnap.exists) throw new WithdrawalError("Store not found", 404);
+
+      const storeData = storeSnap.data() || {};
+      const payoutSettings = storeData.payoutSettings;
+      if (!payoutSettings?.bankCode || !payoutSettings?.accountNumber) {
+        throw new WithdrawalError("Please link a bank account in Settings first.", 400);
+      }
+
+      const rawAvailable = Number(storeData.availableBalance ?? 0);
+      const availableBalance = Number.isFinite(rawAvailable) ? rawAvailable : 0;
+      const rawEscrow = Number(storeData.escrowBalance ?? 0);
+      const escrowBalance = Number.isFinite(rawEscrow) ? rawEscrow : 0;
+
+      console.log(`[WITHDRAW] User ${storeId} requesting ₦${requestedAmount}.`);
+      console.log(`[WITHDRAW] Firestore Financial Fields:`, {
+        availableBalance: storeData.availableBalance,
+        escrowBalance: storeData.escrowBalance,
+        totalSales: storeData.totalSales,
+      });
+      console.log(`[WITHDRAW] Final Available Balance used by API: ₦${availableBalance}`);
+
+      if (requestedAmount > availableBalance) {
+        const errorMessage = availableBalance <= 0
+          ? "You have no available funds to withdraw yet. Your funds are currently locked in escrow until orders are completed."
+          : `Insufficient balance. Your actual available balance is ₦${availableBalance.toLocaleString()}.`;
+        throw new WithdrawalError(errorMessage, 400);
+      }
+
+      const isPartnerActive = Boolean(storeData.isPartner && storeData.partnerExpiry && new Date(storeData.partnerExpiry).getTime() > Date.now());
+      const feePercent = isPartnerActive ? 0.015 : 0.03;
+      const platformFee = requestedAmount * feePercent;
+      const netPayout = requestedAmount - platformFee;
+
+      transaction.update(storeRef, {
+        availableBalance: availableBalance - requestedAmount,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      transaction.set(payoutRef!, {
+        id: transferRef,
+        storeId,
+        vendorId: storeId,
+        grossAmount: requestedAmount,
+        platformFee,
+        netAmount: netPayout,
+        bankName: payoutSettings.bankName || "",
+        accountNumber: payoutSettings.accountNumber,
+        bankCode: payoutSettings.bankCode,
+        accountName: payoutSettings.accountName || "",
+        status: "pending",
+        requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+        balanceReservedAt: admin.firestore.FieldValue.serverTimestamp(),
+        escrowBalanceAtRequest: escrowBalance,
+      });
+
+      return { payoutSettings, platformFee, netPayout };
     });
-    console.log(`[WITHDRAW] Final Available Balance used by API: ₦${availableBalance}`);
 
-    if (amount > availableBalance) {
-      const errorMsg = availableBalance === 0 
-        ? "You have no available funds to withdraw yet. Your funds are currently locked in escrow until orders are marked as Completed/Delivered." 
-        : `Insufficient balance. Your actual available balance is ₦${availableBalance.toLocaleString()}.`;
-        
-      return NextResponse.json({ error: errorMsg }, { status: 400 });
+    let nombaToken: string;
+    try {
+      nombaToken = await getNombaToken();
+    } catch {
+      throw new WithdrawalError("The payout provider is temporarily unavailable. Please try again shortly.", 503, true);
     }
 
-    const isPartnerActive = storeData?.isPartner && new Date(storeData?.partnerExpiry) > new Date();
-    const feePercent = isPartnerActive ? 0.015 : 0.03;
-    const platformFee = amount * feePercent;
-    const netPayout = amount - platformFee;
-
-    // 4. Initiate Nomba Transfer
-    const nombaToken = await getNombaToken();
-    const transferRef = `PAYOUT_${storeId}_${Date.now()}`;
-
-    const transferResponse = await fetch(`${process.env.NOMBA_SANDBOX_URL}/v1/transfers`, {
+    transferAttempted = true;
+    const transferResponse = await fetchWithTimeout(`${process.env.NOMBA_SANDBOX_URL}/v1/transfers`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${nombaToken}`,
-        accountId: process.env.NOMBA_ACCOUNT_ID!,
+        accountId: process.env.NOMBA_ACCOUNT_ID || "",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        amount: netPayout.toFixed(2), 
+        amount: reservation.netPayout.toFixed(2),
         reference: transferRef,
         narration: "Zebble Store Payout",
-        bankCode: payoutSettings.bankCode,
-        accountNumber: payoutSettings.accountNumber,
-        accountName: payoutSettings.accountName,
-        currency: "NGN"
+        bankCode: reservation.payoutSettings.bankCode,
+        accountNumber: reservation.payoutSettings.accountNumber,
+        accountName: reservation.payoutSettings.accountName,
+        currency: "NGN",
       }),
-    });
+    }, 15000);
 
     const transferResult = await transferResponse.json();
     if (!transferResponse.ok) {
-      console.error("Nomba Transfer Error:", transferResult);
-      throw new Error(transferResult?.description || "Gateway rejected transfer");
+      throw new WithdrawalError(transferResult?.description || "Gateway rejected transfer", 400, true);
     }
 
-    // 5. Update Firestore (Deduct balance & log transaction)
-    const batch = adminDb.batch();
-    
-    batch.update(adminDb.collection("stores").doc(storeId), {
-      availableBalance: admin.firestore.FieldValue.increment(-amount),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    batch.set(adminDb.collection("payouts").doc(transferRef), {
-      id: transferRef,
-      storeId: storeId,
-      vendorId: storeId,
-      grossAmount: amount,
-      platformFee: platformFee,
-      netAmount: netPayout,
-      bankName: payoutSettings.bankName,
-      accountNumber: payoutSettings.accountNumber,
+    await payoutRef.update({
       nombaReference: transferResult?.data?.reference || transferRef,
-      status: "pending",
-      requestedAt: admin.firestore.FieldValue.serverTimestamp()
+      gatewaySubmittedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    await batch.commit();
-
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       message: "Withdrawal initiated successfully",
-      reference: transferRef 
+      reference: transferRef,
     });
-
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Withdrawal API Error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+
+    const safeTransportFailure = transferAttempted && isConnectFailure(error);
+    let reservationRefunded = false;
+    let reservationRefundError: unknown = null;
+
+    if (payoutRef && (!transferAttempted || (error instanceof WithdrawalError && error.safeToRefund) || safeTransportFailure)) {
+      try {
+        await refundReservation(
+          storeId,
+          payoutRef,
+          safeTransportFailure ? "Nomba connection timed out before the transfer was submitted" : "Gateway rejected the transfer"
+        );
+        reservationRefunded = true;
+      } catch (refundError) {
+        reservationRefundError = refundError;
+        console.error("Withdrawal reservation refund failed:", refundError);
+      }
+    } else if (payoutRef && transferAttempted) {
+      // The network failed after the gateway request started. Do not refund blindly;
+      // the gateway may have accepted the transfer and will resolve it by webhook.
+      try {
+        await payoutRef.update({
+          status: "processing",
+          gatewayError: error instanceof Error ? error.message : "Gateway response unavailable",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return NextResponse.json({
+          success: true,
+          pending: true,
+          reference: payoutRef.id,
+          message: "The transfer is being verified with the payout provider. Please check your payout history shortly.",
+        }, { status: 202 });
+      } catch (updateError) {
+        console.error("Could not mark payout processing:", updateError);
+      }
+    }
+
+    if (reservationRefundError) {
+      return jsonError("Withdrawal failed and the reserved balance could not be released automatically. Please contact support.", 500);
+    }
+
+    if (safeTransportFailure && reservationRefunded) {
+      return jsonError("The payout provider is temporarily unreachable. Your funds remain available; please try again shortly.", 503);
+    }
+
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    const status = error instanceof WithdrawalError ? error.status : 500;
+    return jsonError(message, status);
   }
 }

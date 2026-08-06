@@ -61,13 +61,17 @@ export default function OrderDetailsPage() {
 
         setProcessing(true);
         try {
-            const orderRef = doc(db, "orders", id as string);
-            await updateDoc(orderRef, {
-                status: "completed", // ✅ Changed to lowercase to match OrderStatus.tsx
-                completedAt: serverTimestamp(),
-                buyerConfirmed: true,
-                updatedAt: serverTimestamp()
+            const idToken = await user.getIdToken();
+            const response = await fetch("/api/orders/complete", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({ orderId: id as string }),
             });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "Failed to complete order");
 
             setShowConfirmModal(false);
             setShowSuccessModal(true);

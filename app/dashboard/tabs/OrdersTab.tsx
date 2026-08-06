@@ -4,6 +4,7 @@ import { db, auth } from "@/lib/firebase";
 import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp, addDoc, getDocs } from "firebase/firestore";
 import { Package, Truck, CheckCircle, Clock, Info, X, MapPin, Flag, AlertTriangle, MessageSquare, Search } from "lucide-react";
 import Image from "next/image";
+import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 
 export default function OrdersTab({ disputes = [], onDisputeAction }) {
     const [orders, setOrders] = useState([]);
@@ -23,6 +24,10 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
         description: "",
         evidence: [] 
     });
+    const [responseModal, setResponseModal] = useState<any>(null);
+    const [responseText, setResponseText] = useState("");
+    const [responseLoading, setResponseLoading] = useState(false);
+    const [responseError, setResponseError] = useState("");
 
     useEffect(() => {
         const user = auth.currentUser;
@@ -136,28 +141,45 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
         }
     };
 
+    const openResponseModal = (dispute) => {
+        setResponseModal(dispute);
+        setResponseText("");
+        setResponseError("");
+    };
+
+    const closeResponseModal = () => {
+        setResponseModal(null);
+        setResponseText("");
+        setResponseError("");
+    };
+
     // Respond to existing dispute
-    const handleRespondToDispute = async (dispute, response) => {
-        if (!auth.currentUser || !response) return; // ✅ Prevents empty responses if prompt is cancelled
+    const handleRespondToDispute = async () => {
+        if (!auth.currentUser || !responseModal || !responseText.trim()) return;
+        setResponseLoading(true);
+        setResponseError("");
+
         try {
-            await addDoc(collection(db, "disputes", dispute.id, "messages"), {
-                senderId: auth.currentUser.uid,
-                role: "vendor",
-                content: response,
-                createdAt: serverTimestamp(),
-                attachments: []
+            const idToken = await auth.currentUser.getIdToken();
+            const result = await fetch(`/api/disputes/${encodeURIComponent(responseModal.id)}/actions`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({ action: "respond", content: responseText.trim() }),
             });
+            const data = await result.json();
 
-            await updateDoc(doc(db, "disputes", dispute.id), {
-                vendorResponded: true,
-                lastVendorResponse: serverTimestamp(),
-                status: "under_review",
-                updatedAt: serverTimestamp()
-            });
+            if (!result.ok) throw new Error(data.error || "Failed to submit response");
 
-            onDisputeAction?.("dispute_responded", dispute);
-        } catch (error) {
+            onDisputeAction?.("dispute_responded", responseModal);
+            closeResponseModal();
+        } catch (error: any) {
             console.error("Error responding to dispute:", error);
+            setResponseError(error.message || "Failed to submit response. Please try again.");
+        } finally {
+            setResponseLoading(false);
         }
     };
 
@@ -396,7 +418,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
                                     <div className="mb-3 p-2 bg-red-50 rounded-lg border border-red-100 flex items-center justify-between gap-2">
                                         <p className="text-[10px] font-bold text-red-700 line-clamp-1">Issue: {dispute.description}</p>
                                         <button 
-                                            onClick={() => handleRespondToDispute(dispute, prompt("Your response:"))}
+                                            onClick={() => openResponseModal(dispute)}
                                             className="shrink-0 text-[9px] font-bold text-white bg-red-600 px-2 py-1 rounded-lg hover:bg-red-700"
                                         >
                                             Respond
@@ -456,7 +478,18 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
                     })
                 )}
             </div>
+
+            <DisputeResponseModal
+                open={Boolean(responseModal)}
+                orderId={responseModal?.orderId}
+                title="Respond to buyer dispute"
+                value={responseText}
+                loading={responseLoading}
+                error={responseError}
+                onChange={setResponseText}
+                onClose={closeResponseModal}
+                onSubmit={handleRespondToDispute}
+            />
         </div>
     );
 }
-

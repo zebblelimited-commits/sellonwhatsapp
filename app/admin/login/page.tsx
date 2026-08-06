@@ -90,8 +90,13 @@ export default function AdminLogin() {
       });
 
       if (!sessionResponse.ok) {
-        console.error("Failed to create session cookie");
-        // We log it but don't block login entirely, though middleware will likely block them next
+        const sessionError = await sessionResponse.json().catch(() => ({}));
+        throw new Error(sessionError.error || "Failed to create admin session");
+      }
+      const sessionData = await sessionResponse.json();
+      if (sessionData.role !== "admin") {
+        await signOut(auth);
+        throw new Error("Access denied: Admin role could not be verified");
       }
 
       // 5. Redirect to admin dashboard

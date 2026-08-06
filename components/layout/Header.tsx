@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation"; // ✅ Removed useSearchParams
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Search, LayoutDashboard, LogOut, ExternalLink, Store, Package } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, query as firestoreQuery, where, getDocs, limit } from "firebase/firestore";
+import { onAuthStateChanged, signOut, User } from "firebase/auth";
+import { collection, query as firestoreQuery, where, getDocs, getDoc, doc, limit } from "firebase/firestore";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
@@ -16,9 +16,10 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   
   // ✅ FIX 1: Removed useSearchParams() to prevent Next.js Suspense boundary errors
   const [query, setQuery] = useState("");
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
   const [vendorUsername, setVendorUsername] = useState("");
   const [isBuyer, setIsBuyer] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Initialize query from URL safely on mount
   useEffect(() => {
@@ -38,23 +39,38 @@ export default function Header({ isStorePage = false, storeName = "" }) {
       setUser(currentUser);
       if (currentUser) {
         try {
-          const q = firestoreQuery(collection(db, "stores"), where("authorId", "==", currentUser.uid));
-          const snap = await getDocs(q);
-          if (!snap.empty) {
-            setVendorUsername(snap.docs[0].data().username);
-            setIsBuyer(false); // ✅ User has a store = vendor
-          } else {
+          const [adminSnap, storeSnap, vendorSnap, buyerSnap, userSnap] = await Promise.all([
+            getDoc(doc(db, "admins", currentUser.uid)).catch(() => null),
+            getDoc(doc(db, "stores", currentUser.uid)),
+            getDoc(doc(db, "vendors", currentUser.uid)).catch(() => null),
+            getDoc(doc(db, "buyers", currentUser.uid)).catch(() => null),
+            getDoc(doc(db, "users", currentUser.uid)).catch(() => null),
+          ]);
+
+          if (adminSnap?.exists() && adminSnap.data()?.isActive === true) {
+            setIsAdmin(true);
+            setIsBuyer(false);
             setVendorUsername("");
-            setIsBuyer(true); // ✅ User has no store = buyer
+          } else if (storeSnap.exists() || vendorSnap?.exists()) {
+            const storeData = storeSnap.exists() ? storeSnap.data() : vendorSnap?.data();
+            setIsAdmin(false);
+            setIsBuyer(false); // ✅ User has a store = vendor
+            setVendorUsername(storeData?.username || "");
+          } else {
+            setIsAdmin(false);
+            setVendorUsername("");
+            setIsBuyer(Boolean(buyerSnap?.exists() || userSnap?.exists()));
           }
         } catch (error) {
           console.error("Header: Error checking vendor status:", error);
           setVendorUsername("");
-          setIsBuyer(true); // Fallback to buyer if query fails due to permissions
+          setIsBuyer(false);
+          setIsAdmin(false);
         }
       } else {
         setVendorUsername("");
         setIsBuyer(false);
+        setIsAdmin(false);
       }
     });
     return () => unsubscribe();
@@ -123,12 +139,16 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
-    window.location.href = "/";
+    try {
+      await signOut(auth);
+    } finally {
+      await fetch('/api/session', { method: 'DELETE' }).catch(() => undefined);
+      window.location.href = "/";
+    }
   };
 
   // ✅ Determine correct dashboard URL based on user role
-  const dashboardUrl = isBuyer ? "/buyer/dashboard" : "/dashboard";
+  const dashboardUrl = isAdmin ? "/admin" : isBuyer ? "/buyer/dashboard" : "/dashboard";
 
   return (
     <header className={`${font.className} flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 md:px-6 py-4 border-b border-gray-200 bg-white sticky top-0 z-50`}>

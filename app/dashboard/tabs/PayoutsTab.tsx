@@ -1,12 +1,22 @@
 "use client";
 import { useState } from "react";
 import { Info, CheckCircle2, Clock, XCircle, Copy } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-interface WithdrawTabProps {
-  payoutHistory?: any[];
+interface PayoutRecord {
+  id: string;
+  status?: string;
+  requestedAt?: { toDate?: () => Date } | string | number;
+  netAmount?: number;
+  grossAmount?: number;
+  amount?: number;
 }
 
-export default function WithdrawTab({ payoutHistory = [] }: WithdrawTabProps) {
+interface PayoutsTabProps {
+  payoutHistory?: PayoutRecord[];
+}
+
+export default function PayoutsTab({ payoutHistory = [] }: PayoutsTabProps) {
   const [copiedRef, setCopiedRef] = useState<string | null>(null);
 
   const formatCurrency = (amount: number) => 
@@ -20,7 +30,7 @@ export default function WithdrawTab({ payoutHistory = [] }: WithdrawTabProps) {
 
   const history = payoutHistory; 
   const getStatusBadge = (status: string) => {
-    const config: Record<string, { label: string, icon: any, bg: string, text: string }> = {
+    const config: Record<string, { label: string, icon: LucideIcon, bg: string, text: string }> = {
       completed: { label: "Completed", icon: CheckCircle2, bg: "bg-green-100", text: "text-green-700" },
       pending: { label: "Processing", icon: Clock, bg: "bg-yellow-100", text: "text-yellow-700" },
       failed: { label: "Failed", icon: XCircle, bg: "bg-red-100", text: "text-red-700" }
@@ -59,10 +69,11 @@ export default function WithdrawTab({ payoutHistory = [] }: WithdrawTabProps) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {history.map((item) => {
-                const payoutDate = item.requestedAt?.toDate 
-                  ? item.requestedAt.toDate() 
-                  : item.requestedAt 
-                    ? new Date(item.requestedAt) 
+                const requestedAt = item.requestedAt;
+                const payoutDate = requestedAt && typeof requestedAt === "object" && typeof requestedAt.toDate === "function"
+                  ? requestedAt.toDate()
+                  : typeof requestedAt === "string" || typeof requestedAt === "number"
+                    ? new Date(requestedAt)
                     : new Date();
                 const displayAmount = item.netAmount ?? item.grossAmount ?? item.amount ?? 0;
                 const shortRef = item.id ? `PAY-${item.id.slice(-6).toUpperCase()}` : 'N/A';
@@ -80,7 +91,7 @@ export default function WithdrawTab({ payoutHistory = [] }: WithdrawTabProps) {
                         ? formatCurrency(displayAmount) 
                         : '—'}
                     </td>
-                    <td className="px-5 py-4">{getStatusBadge(item.status)}</td>
+                    <td className="px-5 py-4">{getStatusBadge(item.status || "pending")}</td>
                     <td className="px-5 py-4 text-right">
                       <button 
                         onClick={() => copyToClipboard(item.id, item.id)}

@@ -55,36 +55,58 @@ export default function LoginPage() {
   }, []);
 
   // Helper to bake the session cookie for Middleware
-  const bakeSessionCookie = async () => {
+  const bakeSessionCookie = async (): Promise<{ role?: string }> => {
     const idToken = await auth.currentUser?.getIdToken();
-    if (idToken) {
-      await fetch('/api/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      });
-    }
+    if (!idToken) throw new Error("Unable to create a login session");
+
+    const response = await fetch('/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Unable to create a login session");
+    return data;
   };
 
-  // Helper to route users based on role
-  const routeUserByRole = async (uid: string) => {
-    // Check Vendor Collection
-    const vendorDoc = await getDoc(doc(db, "stores", uid));
-    if (vendorDoc.exists()) {
-      router.push("/dashboard");
+  // Route using the server-resolved role. The Firestore fallback keeps old
+  // accounts working while they are migrated to the canonical collections.
+  const routeUserByRole = async (uid: string, resolvedRole?: string) => {
+    if (resolvedRole === "admin") {
+      router.replace("/admin");
+      return;
+    }
+    if (resolvedRole === "vendor") {
+      router.replace("/dashboard");
+      return;
+    }
+    if (resolvedRole === "buyer") {
+      router.replace("/buyer/dashboard");
       return;
     }
 
-    // Check Buyer Collection
-    const buyerDoc = await getDoc(doc(db, "buyers", uid));
-    if (buyerDoc.exists()) {
-      router.push("/buyer/dashboard"); // Updated to Buyer Dashboard
+    const [adminDoc, storeDoc, vendorDoc, buyerDoc, userDoc] = await Promise.all([
+      getDoc(doc(db, "admins", uid)).catch(() => null),
+      getDoc(doc(db, "stores", uid)),
+      getDoc(doc(db, "vendors", uid)).catch(() => null),
+      getDoc(doc(db, "buyers", uid)),
+      getDoc(doc(db, "users", uid)).catch(() => null),
+    ]);
+
+    if (adminDoc?.exists() && adminDoc.data()?.isActive === true) {
+      router.replace("/admin");
+      return;
+    }
+    if (storeDoc.exists() || vendorDoc?.exists()) {
+      router.replace("/dashboard");
+      return;
+    }
+    if (buyerDoc.exists() || userDoc?.exists()) {
+      router.replace("/buyer/dashboard");
       return;
     }
 
-    // EDGE CASE: Fallback if role is missing (e.g., New Google User)
-    // Send them to the Role Selection page!
-    router.push("/register/onboarding/role"); 
+    router.replace("/register/onboarding/role");
   };
 
   // Email/Password Login
@@ -97,10 +119,10 @@ export default function LoginPage() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       
       // 1. Bake the session cookie for Middleware
-      await bakeSessionCookie();
-      
+      const session = await bakeSessionCookie();
+
       // 2. Route based on role
-      await routeUserByRole(userCredential.user.uid);
+      await routeUserByRole(userCredential.user.uid, session.role);
     } catch (err: any) {
       console.error("Login error details:", err.code, err.message);
       
@@ -151,10 +173,10 @@ export default function LoginPage() {
       const userCredential = await signInWithPopup(auth, provider);
       
       // 1. Bake the session cookie for Middleware
-      await bakeSessionCookie();
-      
+      const session = await bakeSessionCookie();
+
       // 2. Route based on role (handles new Google users automatically)
-      await routeUserByRole(userCredential.user.uid);
+      await routeUserByRole(userCredential.user.uid, session.role);
     } catch (err: any) {
       console.error("Google login error:", err.code, err.message);
       // Ignore error if user simply closed the popup

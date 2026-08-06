@@ -125,7 +125,8 @@ useEffect(() => {
     if (!window.confirm("Are you sure you want to sign out?")) return;
     try {
       await signOut(auth);
-      router.push("/login");
+      await fetch('/api/session', { method: 'DELETE' }).catch(() => undefined);
+      router.replace("/login");
     } catch (err) {
       console.error("Sign out failed:", err);
     }

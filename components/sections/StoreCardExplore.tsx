@@ -1,180 +1,133 @@
 "use client";
 
-import { useState } from "react"; // ✅ Added useState
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { ShieldCheck, Crown, Users, LayoutGrid, MapPin, MessageCircle } from "lucide-react";
+import { Crown, LayoutGrid, MapPin, MessageCircle, ShieldCheck, Star, Users } from "lucide-react";
 import FollowButton from "@/components/store/FollowButton";
 
 const jakarta = Plus_Jakarta_Sans({
-    subsets: ["latin"],
-    weight: ["300", "400", "500", "600", "700"],
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
 });
 
-interface StoreExploreData {
-    id: string;
-    storeName: string;
-    username: string;
-    category?: string;
-    bannerUrl?: string;
-    coverImage?: string;
-    logoUrl?: string;
-    logo?: string;
-    state?: string;
-    productCount?: number;
-    followerCount?: number;
-    isVerified?: boolean;
-    verificationTier?: "business" | null;
-    subscription?: {
-        status?: "active" | "canceled" | "expired";
-    };
-    [key: string]: any;
-}
-
 interface StoreCardExploreProps {
-    store: StoreExploreData;
+  store: any;
 }
 
 export default function StoreCardExplore({ store }: StoreCardExploreProps) {
-    if (!store) return null;
+  const [localFollowerCount, setLocalFollowerCount] = useState(store?.followerCount || 0);
 
-    // ✅ FIX: Add local state to track follower count dynamically
-    const [localFollowerCount, setLocalFollowerCount] = useState(store.followerCount || 0);
+  if (!store) return null;
 
-    const showVerifiedBusinessBadge = store.isVerified && store.verificationTier === "business";
-    const showProSellerBadge = store.subscription?.status === "active";
+  const storeName = store.storeName || store.name || "Unnamed Store";
+  const username = store.username || store.id;
+  const coverImage = store.bannerUrl || store.coverImage || "/images/placeholder-cover.jpg";
+  const logoImage = store.logoUrl || store.logo;
+  const showVerified = Boolean(store.isVerified && store.verificationTier === "business");
+  const showPro = store.subscription?.status === "active";
+  const startingPrice = store.price || store.startingPrice || "₦0";
+  const totalOrders = store.totalOrders || 0;
+  const rating = store.rating || "—";
+  const whatsappUrl = store.whatsappUrl || store.whatsappLink || `/${username}`;
+  const initials = storeName.slice(0, 2).toUpperCase();
 
-    // Fallbacks for images
-    const coverImg = store.bannerUrl || store.coverImage || "/images/placeholder-cover.jpg";
-    const logoImg = store.logoUrl || store.logo || `https://ui-avatars.com/api/?name=${store.storeName}&background=00a63e&color=fff`;
-
-    return (
-        <div className={`${jakarta.className} bg-white border border-gray-100 rounded-[32px] shadow-sm overflow-hidden relative w-full p-4 cursor-pointer hover:shadow-lg hover:shadow-gray-200/50 transition-all duration-300 active:scale-[0.99] flex flex-col`}>
-
-            {/* 1. COVER IMAGE AREA */}
-            <Link href={`/${store.username}`} className="relative h-36 w-full rounded-2xl overflow-hidden block">
-                <Image
-                    src={coverImg}
-                    alt={store.storeName}
-                    fill
-                    className="object-cover brightness-95"
-                />
-
-                {/* Badges Container - Top Right */}
-                <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                    {showVerifiedBusinessBadge && (
-                        <div className="bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm border border-green-100" title="Verified Business">
-                            <ShieldCheck size={12} className="text-[#00a63e]" />
-                            <span className="text-[10px] font-bold text-gray-800 tracking-tight">Verified</span>
-                        </div>
-                    )}
-                    {showProSellerBadge && (
-                        <div className="bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm border border-amber-100" title="Pro Seller">
-                            <Crown size={12} className="text-[#f59e0b] fill-[#f59e0b]/10" />
-                            <span className="text-[10px] font-bold text-gray-800 tracking-tight">Pro</span>
-                        </div>
-                    )}
-                </div>
-            </Link>
-
-            {/* 2. HEADER SECTION (Logo + Text side-by-side) */}
-            <div className="flex items-start gap-4 px-2 -mt-6 relative z-10">
-                <Link href={`/${store.username}`} className="relative shrink-0">
-                    <div className="p-0.5 bg-white rounded-full shadow-sm">
-                        <div className="relative w-16 h-16 rounded-full overflow-hidden border-[1px] border-gray-100 bg-gray-50">
-                            <Image
-                                src={logoImg}
-                                alt={`${store.storeName} logo`}
-                                width={64}
-                                height={64}
-                                className="object-cover"
-                            />
-                        </div>
-                    </div>
-                </Link>
-
-                {/* STORE INFO */}
-                <div className="pt-8 flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                        <Link href={`/${store.username}`}>
-                            <h3 className="font-bold text-lg text-gray-900 tracking-tight leading-none truncate hover:text-[#00a63e] transition-colors">
-                                {store.storeName}
-                            </h3>
-                        </Link>
-
-                        {showVerifiedBusinessBadge && (
-                            <span title="Verified Business">
-                                <ShieldCheck size={16} className="text-[#00a63e] shrink-0" />
-                            </span>
-                        )}
-                        {showProSellerBadge && (
-                            <span title="Pro Seller">
-                                <Crown size={16} className="text-[#f59e0b] fill-[#f59e0b]/10 shrink-0" />
-                            </span>
-                        )}
-                    </div>
-                    <p className="text-xs text-gray-400 font-medium">@{store.username}</p>
-                    <p className="text-[10px] text-[#00a63e] font-bold mt-0.5 uppercase tracking-wider">
-                        {store.category || "General Store"}
-                    </p>
-                </div>
-            </div>
-
-            {/* 3. STATS & ACTIONS (Explore Specific) */}
-            <div className="px-2 mt-4 flex-1 flex flex-col">
-                <hr className="mb-4 border-gray-100" />
-
-                {/* Stats Grid */}
-                <div className="grid grid-cols-3 w-full gap-2 mb-4">
-                    <div className="flex flex-col items-center bg-gray-50 rounded-xl py-2.5">
-                        <span className="flex items-center gap-1 text-[#00a63e] font-bold text-xs">
-                            <Users size={12} /> {localFollowerCount} {/* ✅ Uses local state */}
-                        </span>
-                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter mt-0.5">Followers</span>
-                    </div>
-
-                    <div className="flex flex-col items-center bg-gray-50 rounded-xl py-2.5">
-                        <span className="flex items-center gap-1 text-gray-700 font-bold text-xs">
-                            <LayoutGrid size={12} /> {store.productCount || 0}
-                        </span>
-                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter mt-0.5">Items</span>
-                    </div>
-
-                    <div className="flex flex-col items-center bg-gray-50 rounded-xl py-2.5">
-                        <span className="flex items-center gap-1 text-gray-700 font-bold text-xs truncate max-w-[70px]">
-                            <MapPin size={12} /> {store.state || "N/A"}
-                        </span>
-                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter mt-0.5">Location</span>
-                    </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="space-y-2 mt-auto">
-                    <Link
-                        href={`/${store.username}`}
-                        className="w-full py-3 bg-[#00a63e] hover:bg-[#008c34] rounded-2xl text-[11px] font-extrabold text-white transition-all flex items-center justify-center gap-2 shadow-sm"
-                    >
-                        <MessageCircle size={16} /> View WhatsApp Shop
-                    </Link>
-
-                    <div className="w-full follow-button-wrapper">
-                        {/* ✅ FIX: Pass required props to FollowButton */}
-                        <FollowButton
-                            vendorId={store.id}
-                            currentCount={localFollowerCount}
-                            onFollowChange={(val: any) => {
-                                // Safely handles both (newCount: number) and (isFollowing: boolean) signatures
-                                if (typeof val === 'number') {
-                                    setLocalFollowerCount(val);
-                                } else if (typeof val === 'boolean') {
-                                    setLocalFollowerCount(prev => val ? prev + 1 : prev - 1);
-                                }
-                            }}
-                        />
-                    </div>
-                </div>
-            </div>
+  return (
+    <article className={`${jakarta.className} w-full rounded-[24px] border border-gray-100 bg-white p-3 shadow-sm transition-all hover:shadow-md group`}>
+      {/* Compact NewStores-style banner */}
+      <Link href={`/${username}`} className="relative block h-24 w-full overflow-hidden rounded-xl">
+        <Image
+          src={coverImage}
+          alt={storeName}
+          fill
+          className="object-cover transition-transform duration-500 group-hover:scale-105"
+          sizes="(min-width: 1536px) 18vw, (min-width: 640px) 45vw, 100vw"
+        />
+        <div className="absolute right-2 top-2 flex items-center gap-1">
+          {showVerified && (
+            <span className="rounded-full bg-white/90 p-1.5 text-green-700 shadow-sm" title="Verified Business">
+              <ShieldCheck size={12} />
+            </span>
+          )}
+          {showPro && (
+            <span className="rounded-full bg-white/90 p-1.5 text-amber-500 shadow-sm" title="Pro Seller">
+              <Crown size={12} />
+            </span>
+          )}
         </div>
-    );
+      </Link>
+
+      {/* Overlapping logo and store identity */}
+      <div className="relative z-10 -mt-5 flex items-start gap-2 px-1">
+        <Link href={`/${username}`} className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border-2 border-white bg-green-100 shadow-sm">
+          {logoImage ? (
+            <Image src={logoImage} alt={`${storeName} logo`} fill className="object-cover" sizes="48px" />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center text-xs font-black text-green-700">{initials}</span>
+          )}
+        </Link>
+        <div className="min-w-0 flex-1 pt-6">
+          <div className="flex items-center gap-1">
+            <Link href={`/${username}`} className="min-w-0">
+              <h3 className="truncate text-sm font-bold leading-tight text-gray-900 hover:text-green-600">{storeName}</h3>
+            </Link>
+            {showVerified && <ShieldCheck size={13} className="shrink-0 text-green-600" title="Verified Business" />}
+            {showPro && <Crown size={13} className="shrink-0 fill-amber-100 text-amber-500" title="Pro Seller" />}
+          </div>
+          <p className="truncate text-[10px] font-medium text-gray-400">@{username}</p>
+          <p className="truncate text-[9px] font-bold uppercase tracking-wide text-green-600">{store.category || "General Store"}</p>
+        </div>
+      </div>
+
+      <div className="mt-3 border-t border-gray-100 pt-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[8px] font-bold uppercase tracking-wider text-gray-400">Starting from</p>
+            <span className="text-sm font-bold text-gray-900">{startingPrice}</span>
+          </div>
+          <div className="flex items-center gap-1 text-[10px] font-bold text-gray-600">
+            <Star size={12} className="fill-yellow-400 text-yellow-400" /> {rating}
+          </div>
+        </div>
+
+        {/* Existing StoreCard trust and store metadata */}
+        <div className="mt-2 grid grid-cols-3 gap-1 text-center">
+          <div className="rounded-lg bg-gray-50 px-1 py-1.5">
+            <p className="flex items-center justify-center gap-0.5 text-[9px] font-bold text-green-600"><Users size={10} /> {localFollowerCount}</p>
+            <p className="text-[7px] font-bold uppercase tracking-tight text-gray-400">Followers</p>
+          </div>
+          <div className="rounded-lg bg-gray-50 px-1 py-1.5">
+            <p className="flex items-center justify-center gap-0.5 text-[9px] font-bold text-gray-700"><LayoutGrid size={10} /> {store.productCount || 0}</p>
+            <p className="text-[7px] font-bold uppercase tracking-tight text-gray-400">Items</p>
+          </div>
+          <div className="rounded-lg bg-gray-50 px-1 py-1.5">
+            <p className="flex items-center justify-center gap-0.5 truncate text-[9px] font-bold text-gray-700"><MapPin size={10} /> {store.state || "N/A"}</p>
+            <p className="text-[7px] font-bold uppercase tracking-tight text-gray-400">Location</p>
+          </div>
+        </div>
+
+        <p className="mt-2 truncate text-[9px] text-gray-500">
+          <span className="font-bold text-gray-800">{Number(totalOrders).toLocaleString()}+</span> customers trusted this store
+        </p>
+
+        <div className="mt-3 flex gap-1.5">
+          <Link href={whatsappUrl} className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-green-600 py-2 text-[9px] font-bold text-white transition hover:bg-green-700">
+            <MessageCircle size={12} /> WhatsApp
+          </Link>
+          <Link href={`/${username}`} className="flex flex-1 items-center justify-center rounded-lg border border-gray-200 py-2 text-[9px] font-bold text-gray-700 transition hover:bg-gray-50">
+            Visit Store
+          </Link>
+        </div>
+
+        <div className="mt-1.5">
+          <FollowButton
+            vendorId={store.id}
+            currentCount={localFollowerCount}
+            onFollowChange={(nextCount) => setLocalFollowerCount(nextCount)}
+          />
+        </div>
+      </div>
+    </article>
+  );
 }

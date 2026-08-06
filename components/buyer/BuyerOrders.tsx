@@ -79,17 +79,21 @@ export function BuyerOrders({ disputes = [], onDisputeAction }) {
     };
 
     const handleConfirmFinal = async () => {
-        if (!selectedOrderId) return;
+        if (!selectedOrderId || !auth.currentUser) return;
         setIsUpdating(true);
 
         try {
-            const orderRef = doc(db, "orders", selectedOrderId);
-            await updateDoc(orderRef, {
-                status: "COMPLETED",
-                completedAt: serverTimestamp(),
-                buyerConfirmed: true,
-                updatedAt: serverTimestamp()
+            const idToken = await auth.currentUser.getIdToken();
+            const response = await fetch("/api/orders/complete", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({ orderId: selectedOrderId }),
             });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "Failed to complete order");
             setIsConfirmModalOpen(false);
         } catch (error) {
             console.error("Update Error:", error);

@@ -4,6 +4,7 @@ import {
   Flag, Clock, CheckCircle2, AlertTriangle, MessageSquare, 
   Upload, Eye, ChevronRight, Loader2, ShieldAlert
 } from "lucide-react";
+import DisputeThread from "@/components/disputes/DisputeThread";
 
 export function BuyerDisputesTab({ disputes = [], buyerId, onAction }) {
   const [filter, setFilter] = useState("all");
@@ -241,14 +242,6 @@ export function BuyerDisputesTab({ disputes = [], buyerId, onAction }) {
                       <Eye size={14} /> View Order
                     </button>
                     
-                    {!isResolved && vendorResponded && (
-                      <button 
-                        onClick={() => onAction?.("view_messages", dispute)}
-                        className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-xl hover:bg-green-700 flex items-center gap-1"
-                      >
-                        <MessageSquare size={14} /> Respond
-                      </button>
-                    )}
                     
                     {!isResolved && evidence.length === 0 && (
                       <button 
@@ -292,6 +285,14 @@ export function BuyerDisputesTab({ disputes = [], buyerId, onAction }) {
                   <p className="text-[10px] text-green-700 mt-1">{resolution}</p>
                 </div>
               )}
+
+              <DisputeThread
+                key={disputeId}
+                disputeId={disputeId}
+                currentRole="buyer"
+                currentStatus={status}
+                currentResolution={resolution || ""}
+              />
             </div>
           );
         })}

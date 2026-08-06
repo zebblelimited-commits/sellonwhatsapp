@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function LegacyAdminUserDetailsPage() {
+export default function AdminUserDetailsPage() {
   redirect("/admin?tab=users");
 }

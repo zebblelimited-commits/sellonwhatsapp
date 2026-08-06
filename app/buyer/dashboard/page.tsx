@@ -26,6 +26,7 @@ import { BuyerSettings as SettingsTab } from "@/components/buyer/BuyerSettings";
 import { ExploreTab } from "@/components/buyer/ExploreTab";
 import { BuyerDisputesTab } from "@/components/buyer/BuyerDisputesTab";
 import { BuyerNotification } from "@/components/buyer/BuyerNotification";
+import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 // ⚠️ We will create this file in the next step once you supply your profile code!
 import { BuyerProfile as ProfileTab } from "@/components/buyer/BuyerProfile";
 
@@ -41,12 +42,25 @@ export default function BuyerDashboard() {
   const [notificationStats, setNotificationStats] = useState({ unread: 0, total: 0 });
   const [buyerDisputes, setBuyerDisputes] = useState<any[]>([]);
   const [buyerDisputeStats, setBuyerDisputeStats] = useState({ open: 0, total: 0 });
+  const [disputeResponseModal, setDisputeResponseModal] = useState<{ dispute: any } | null>(null);
+  const [disputeResponse, setDisputeResponse] = useState("");
+  const [disputeResponseLoading, setDisputeResponseLoading] = useState(false);
+  const [disputeResponseError, setDisputeResponseError] = useState("");
   const [dashboardStats, setDashboardStats] = useState({
     totalOrders: 0,
     pendingDeliveries: 0,
     totalSpent: 0,
     favoriteStores: 0
   });
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } finally {
+      await fetch('/api/session', { method: 'DELETE' }).catch(() => undefined);
+      router.replace('/login');
+    }
+  };
 
   useEffect(() => {
     let unsubscribeDisputes = () => { };
@@ -56,8 +70,27 @@ export default function BuyerDashboard() {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
-          const docRef = doc(db, "buyers", user.uid);
-          const docSnap = await getDoc(docRef);
+          const [adminSnap, storeSnap, vendorSnap, buyerSnap, userSnap] = await Promise.all([
+            getDoc(doc(db, "admins", user.uid)).catch(() => null),
+            getDoc(doc(db, "stores", user.uid)).catch(() => null),
+            getDoc(doc(db, "vendors", user.uid)).catch(() => null),
+            getDoc(doc(db, "buyers", user.uid)),
+            getDoc(doc(db, "users", user.uid)).catch(() => null),
+          ]);
+
+          if (!buyerSnap.exists() && !userSnap?.exists()) {
+            setLoading(false);
+            if (adminSnap?.exists() && adminSnap.data()?.isActive === true) {
+              router.replace("/admin");
+            } else if (storeSnap?.exists() || vendorSnap?.exists()) {
+              router.replace("/dashboard");
+            } else {
+              router.replace("/register/onboarding/role");
+            }
+            return;
+          }
+
+          const docSnap = buyerSnap;
           if (docSnap.exists()) {
             setUserData(docSnap.data());
           }
@@ -66,21 +99,27 @@ export default function BuyerDashboard() {
             query(
               collection(db, "disputes"),
               where("buyerId", "==", user.uid),
-              orderBy("createdAt", "desc"),
               limit(50)
             ),
             (snapshot) => {
-              const disputes = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                createdAt: doc.data().createdAt?.toDate?.() || new Date()
-              }));
+              const disputes = snapshot.docs
+                .map(doc => ({
+                  id: doc.id,
+                  ...doc.data(),
+                  createdAt: doc.data().createdAt?.toDate?.() || new Date()
+                }))
+                .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
               setBuyerDisputes(disputes);
               setBuyerDisputeStats({
                 open: disputes.filter(d => ["open", "under_review"].includes(d.status)).length,
                 total: disputes.length
               });
+            },
+            (error) => {
+              console.error("Buyer disputes listener error:", error);
+              setBuyerDisputes([]);
+              setBuyerDisputeStats({ open: 0, total: 0 });
             }
           );
 
@@ -146,18 +185,38 @@ export default function BuyerDashboard() {
       unsubscribeOrders();
       unsubscribeNotifications();
     };
-  }, [router, userData]);
+  }, [router]);
 
   const handleBuyerDisputeAction = async (action: string, dispute: any) => {
     if (!auth.currentUser) return;
 
     try {
+      if (action === "respond") {
+        setDisputeResponseModal({ dispute });
+        setDisputeResponse("");
+        setDisputeResponseError("");
+        return;
+      }
+
       if (action === "view_order") {
         router.push(`/buyer/orders/${dispute.orderId}`);
       }
 
       if (action === "mark_read") {
-        await updateDoc(doc(db, "disputes", dispute.id), { read: true });
+        const idToken = await auth.currentUser.getIdToken();
+        const response = await fetch(`/api/disputes/${encodeURIComponent(dispute.id)}/actions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ action: "mark_read" }),
+        });
+
+        if (!response.ok) {
+          const result = await response.json();
+          throw new Error(result.error || "Failed to mark dispute as read");
+        }
       }
 
       if (action === "add_evidence") {
@@ -166,6 +225,40 @@ export default function BuyerDashboard() {
 
     } catch (error) {
       console.error("Dispute action error:", error);
+    }
+  };
+
+  const closeDisputeResponseModal = () => {
+    setDisputeResponseModal(null);
+    setDisputeResponse("");
+    setDisputeResponseError("");
+  };
+
+  const submitDisputeResponse = async () => {
+    if (!auth.currentUser || !disputeResponseModal || !disputeResponse.trim()) return;
+
+    setDisputeResponseLoading(true);
+    setDisputeResponseError("");
+
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const response = await fetch(`/api/disputes/${encodeURIComponent(disputeResponseModal.dispute.id)}/actions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ action: "respond", content: disputeResponse.trim() }),
+      });
+      const result = await response.json();
+
+      if (!response.ok) throw new Error(result.error || "Failed to submit response");
+      closeDisputeResponseModal();
+    } catch (error: any) {
+      console.error("Buyer dispute response failure:", error);
+      setDisputeResponseError(error.message || "Failed to submit response. Please try again.");
+    } finally {
+      setDisputeResponseLoading(false);
     }
   };
 
@@ -217,7 +310,7 @@ export default function BuyerDashboard() {
           {/* ❌ REMOVED: Edit Profile Link */}
           <NavItem icon={<Settings size={18} />} label="Settings" active={activeTab === "settings"} onClick={() => setActiveTab("settings")} />
           <NavItem icon={<User size={18} />} label="Account" active={activeTab === "account"} onClick={() => setActiveTab("account")} />
-          <button onClick={() => signOut(auth)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 mt-1 transition-colors">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 mt-1 transition-colors">
             <LogOut size={18} /> Logout
           </button>
         </div>
@@ -296,6 +389,18 @@ export default function BuyerDashboard() {
             {activeTab === "profile" && <ProfileTab />}
 
           </div>
+
+          <DisputeResponseModal
+            open={Boolean(disputeResponseModal)}
+            orderId={disputeResponseModal?.dispute?.orderId}
+            title="Respond to seller dispute response"
+            value={disputeResponse}
+            loading={disputeResponseLoading}
+            error={disputeResponseError}
+            onChange={setDisputeResponse}
+            onClose={closeDisputeResponseModal}
+            onSubmit={submitDisputeResponse}
+          />
 
           <footer className="py-8 text-center border-t border-gray-100 mt-auto">
             <p className="text-[9px] uppercase tracking-[0.3em] font-black text-gray-600">

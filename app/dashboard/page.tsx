@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import {
   doc, getDoc, getDocs, collection, query, where, onSnapshot,
-  updateDoc, addDoc, serverTimestamp, orderBy, limit, getCountFromServer // 🌟 Added for analytics counting
+  updateDoc, limit, getCountFromServer // 🌟 Added for analytics counting
 } from "firebase/firestore";
 
 // --- CUSTOM IMPORTS ---
@@ -42,6 +42,7 @@ import AddProductModal from "./modals/AddProductModal";
 import SocialShareModal from "./modals/SocialShareModal";
 import { ZebbleNotificationCenter } from "./ZebbleNotificationCenter";
 import PremiumFeatureModal from "./modals/PremiumFeatureModal";
+import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -116,9 +117,13 @@ function Dashboard() {
   const [disputedOrderIds, setDisputedOrderIds] = useState<Set<string>>(new Set());
   const [payoutHistory, setPayoutHistory] = useState<any[]>([]);
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [disputeResponseModal, setDisputeResponseModal] = useState<{ dispute: any } | null>(null);
+  const [disputeResponse, setDisputeResponse] = useState("");
+  const [disputeResponseLoading, setDisputeResponseLoading] = useState(false);
+  const [disputeResponseError, setDisputeResponseError] = useState("");
 
   useEffect(() => {
-    if (!currentUser || orders.length === 0) return;
+    if (!currentUser) return;
     
     const activeDisputedOrderIds = new Set(
       disputes
@@ -127,23 +132,19 @@ function Dashboard() {
     );
     setDisputedOrderIds(activeDisputedOrderIds);
 
-    const escrowTotal = orders
-      .filter(o => ["PAID_HELD", "SHIPPED"].includes(o.status))
-      .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-
-    const availableTotal = orders
-      .filter(o => o.status === "COMPLETED" && !activeDisputedOrderIds.has(o.id))
-      .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-
-    const totalSalesTotal = orders.reduce((acc, o) => acc + (o.totalAmount || 0), 0);
+    // The store ledger is canonical. Order-derived totals can drift when an order
+    // is updated by a client, while these fields are changed only by server transactions.
+    const availableTotal = Number(storeData?.availableBalance ?? 0);
+    const escrowTotal = Number(storeData?.escrowBalance ?? 0);
+    const totalSalesTotal = Number(storeData?.totalSales ?? 0);
 
     setStats(prev => ({
       ...prev,
-      totalSales: totalSalesTotal,
-      escrowBalance: escrowTotal,
-      availableBalance: availableTotal
+      totalSales: Number.isFinite(totalSalesTotal) ? Math.max(0, totalSalesTotal) : 0,
+      escrowBalance: Number.isFinite(escrowTotal) ? Math.max(0, escrowTotal) : 0,
+      availableBalance: Number.isFinite(availableTotal) ? Math.max(0, availableTotal) : 0
     }));
-  }, [orders, disputes, currentUser]);
+  }, [orders, disputes, currentUser, storeData]);
 
   useEffect(() => {
     let activeListeners: (() => void)[] = [];
@@ -156,6 +157,26 @@ function Dashboard() {
       clearActiveListeners();
       
       if (user) {
+        const [adminSnap, storeSnap, vendorSnap, buyerSnap, userSnap] = await Promise.all([
+          getDoc(doc(db, "admins", user.uid)).catch(() => null),
+          getDoc(doc(db, "stores", user.uid)).catch(() => null),
+          getDoc(doc(db, "vendors", user.uid)).catch(() => null),
+          getDoc(doc(db, "buyers", user.uid)).catch(() => null),
+          getDoc(doc(db, "users", user.uid)).catch(() => null),
+        ]);
+
+        if (!storeSnap?.exists() && !vendorSnap?.exists()) {
+          setLoading(false);
+          if (adminSnap?.exists() && adminSnap.data()?.isActive === true) {
+            router.replace("/admin");
+          } else if (buyerSnap?.exists() || userSnap?.exists()) {
+            router.replace("/buyer/dashboard");
+          } else {
+            router.replace("/register/onboarding/role");
+          }
+          return;
+        }
+
         setCurrentUser(user);
         
         const subQuery = query(
@@ -259,8 +280,8 @@ function Dashboard() {
         const unsubPayouts = onSnapshot(
           query(collection(db, "payouts"), where("vendorId", "==", user.uid)),
           (snapshot) => {
-            const payouts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-              .sort((a, b) => {
+            const payouts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+            payouts.sort((a, b) => {
                 const dateA = a.requestedAt?.toDate?.() || new Date(0);
                 const dateB = b.requestedAt?.toDate?.() || new Date(0);
                 return dateB.getTime() - dateA.getTime();
@@ -274,21 +295,26 @@ function Dashboard() {
           query(
             collection(db, "disputes"),
             where("vendorId", "==", user.uid),
-            orderBy("createdAt", "desc"),
             limit(50)
           ),
           (snapshot) => {
-            const disputeList = snapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data(),
-              createdAt: doc.data().createdAt?.toDate?.() || new Date()
-            }));
+            const disputeList: any[] = snapshot.docs
+              .map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                createdAt: doc.data().createdAt?.toDate?.() || new Date()
+              }))
+              .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
             setDisputes(disputeList);
             const openCount = disputeList.filter(d => 
               ["open", "under_review"].includes(d.status) && !d.read 
             ).length;
             setDisputeStats({ open: openCount, total: disputeList.length });
-          }, (err) => console.error("Handled Disputes stream exclusion:", err)
+          }, (err) => {
+            console.error("Disputes listener error:", err);
+            setDisputes([]);
+            setDisputeStats({ open: 0, total: 0 });
+          }
         );
         activeListeners.push(unsubDisputes);
 
@@ -354,43 +380,48 @@ function Dashboard() {
     }
   };
 
-  const handleWithdrawComplete = async () => {
-    if (!currentUser) return;
+  const openDisputeResponseModal = (dispute: any) => {
+    setDisputeResponseModal({ dispute });
+    setDisputeResponse("");
+    setDisputeResponseError("");
+  };
+
+  const closeDisputeResponseModal = () => {
+    setDisputeResponseModal(null);
+    setDisputeResponse("");
+    setDisputeResponseError("");
+  };
+
+  const submitDisputeResponse = async () => {
+    if (!currentUser || !disputeResponseModal || !disputeResponse.trim()) return;
+
+    setDisputeResponseLoading(true);
+    setDisputeResponseError("");
+
     try {
-      if (stats.availableBalance <= 0) {
-        throw new Error("No available funds to withdraw");
-      }
-      const grossAmount = stats.availableBalance;
-      const fee = grossAmount * 0.03;
-      const netAmount = grossAmount - fee;
-
-      const payoutRef = await addDoc(collection(db, "payouts"), {
-        vendorId: currentUser.uid,
-        grossAmount,
-        fee,
-        netAmount,
-        status: "pending",
-        requestedAt: serverTimestamp(),
-        processedAt: null,
-        bankAccount: storeData?.bankAccount || null,
-        meta: {
-          source: "dashboard-client",
-          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
-        }
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch(`/api/disputes/${encodeURIComponent(disputeResponseModal.dispute.id)}/actions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ action: "respond", content: disputeResponse.trim() }),
       });
+      const result = await response.json();
 
+      if (!response.ok) throw new Error(result.error || "Failed to submit response");
+
+      closeDisputeResponseModal();
       setNotification({
         type: "success",
-        message: `✅ Withdrawal of ₦${netAmount.toLocaleString()} submitted! Ref: ${payoutRef.id.slice(-8).toUpperCase()}`
+        message: "✅ Your response has been submitted. Admin will review shortly."
       });
-      return { success: true, payoutId: payoutRef.id, netAmount };
     } catch (error: any) {
-      console.error("Withdrawal execution error:", error);
-      setNotification({
-        type: "error",
-        message: error.message || "❌ Failed to process withdrawal. Please try again."
-      });
-      return { success: false, error: error.message };
+      console.error("Dispute response submission failure:", error);
+      setDisputeResponseError(error.message || "Failed to submit response. Please try again.");
+    } finally {
+      setDisputeResponseLoading(false);
     }
   };
 
@@ -398,30 +429,27 @@ function Dashboard() {
     if (!currentUser) return;
     try {
       if (action === "respond") {
-        await addDoc(collection(db, "disputes", dispute.id, "messages"), {
-          senderId: currentUser.uid,
-          role: "vendor",
-          content: dispute.response || "",
-          createdAt: serverTimestamp(),
-          attachments: dispute.evidence || []
-        });
-        await updateDoc(doc(db, "disputes", dispute.id), {
-          vendorResponded: true,
-          lastVendorResponse: serverTimestamp(),
-          status: "under_review",
-          updatedAt: serverTimestamp()
-        });
-        setNotification({
-          type: "success",
-          message: "✅ Your response has been submitted. Admin will review shortly."
-        });
+        openDisputeResponseModal(dispute);
+        return;
       }
-      if (action === "mark_read") {
-        await updateDoc(doc(db, "disputes", dispute.id), {
-          read: true,
-          updatedAt: serverTimestamp()
-        });
+
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch(`/api/disputes/${encodeURIComponent(dispute.id)}/actions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          action,
+        }),
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to process dispute action");
       }
+
     } catch (error) {
       console.error("Dispute action update failure:", error);
       setNotification({
@@ -474,6 +502,15 @@ function Dashboard() {
     storeData?.followersCount || 
     (Array.isArray(storeData?.followers) ? storeData.followers.length : Number(storeData?.followers || 0));
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } finally {
+      await fetch('/api/session', { method: 'DELETE' }).catch(() => undefined);
+      router.replace('/login');
+    }
+  };
+
   if (loading) return (
     <div className="flex h-screen items-center justify-center bg-white">
       <Loader2 className="animate-spin text-green-600" size={32} />
@@ -491,6 +528,18 @@ function Dashboard() {
           </button>
         </div>
       )}
+
+      <DisputeResponseModal
+        open={Boolean(disputeResponseModal)}
+        orderId={disputeResponseModal?.dispute?.orderId}
+        title="Respond to buyer dispute"
+        value={disputeResponse}
+        loading={disputeResponseLoading}
+        error={disputeResponseError}
+        onChange={setDisputeResponse}
+        onClose={closeDisputeResponseModal}
+        onSubmit={submitDisputeResponse}
+      />
 
       <aside className="w-64 bg-white border-r border-gray-100 hidden md:flex flex-col p-6 sticky top-0 h-screen">
         <div className="flex items-center px-2 py-2 mb-6">
@@ -536,7 +585,7 @@ function Dashboard() {
         </nav>
         <div className="pt-6 border-t border-gray-100">
           <NavItem icon={<Settings size={18} />} label="Settings" active={activeTab === "settings"} onClick={() => setActiveTab("settings")} />
-          <button onClick={() => signOut(auth)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 mt-1">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 mt-1">
             <LogOut size={18} /> Logout
           </button>
         </div>
@@ -601,12 +650,7 @@ function Dashboard() {
             <WithdrawTab
               stats={stats}
               bankDetails={storeData?.payoutSettings || storeData?.bankAccount} // 🌟 ADD THIS LINE
-              onWithdrawComplete={handleWithdrawComplete}
               payoutHistory={payoutHistory}
-              disputedAmount={orders
-                .filter(o => o.status === "COMPLETED" && disputedOrderIds.has(o.id))
-                .reduce((sum, o) => sum + (o.totalAmount || 0), 0)
-              }
             />
           )}
           {activeTab === "disputes" && (
@@ -640,7 +684,7 @@ function Dashboard() {
           {activeTab === "partner" && currentUser && (
             <PartnerTab storeId={currentUser.uid} />
           )}
-          {activeTab === "payouts" && currentUser && (<PayoutsTab storeId={currentUser.uid} />)}
+          {activeTab === "payouts" && currentUser && (<PayoutsTab payoutHistory={payoutHistory} />)}
           {activeTab === "settings" && currentUser && <SettingsTab storeId={currentUser.uid} />}
         </div>
         <footer className="p-8 text-center border-t border-gray-100 mt-auto">

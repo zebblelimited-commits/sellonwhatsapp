@@ -2,63 +2,107 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 
+class CompletionError extends Error {
+  status: number;
+
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = "CompletionError";
+    this.status = status;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    // 1. Verify User
     const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    
-    const token = authHeader.split(" ")[1];
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const token = authHeader.slice("Bearer ".length).trim();
     const decoded = await adminAuth.verifyIdToken(token);
     const userId = decoded.uid;
-
     const { orderId } = await request.json();
-    if (!orderId) return NextResponse.json({ error: "Order ID required" }, { status: 400 });
-
-    // 2. Fetch Order
-    const orderDoc = await adminDb.collection("orders").doc(orderId).get();
-    if (!orderDoc.exists) return NextResponse.json({ error: "Order not found" }, { status: 404 });
-
-    const orderData = orderDoc.data();
-    
-    // Security: Ensure the user is the vendor or buyer of this order
-    if (orderData.vendorId !== userId && orderData.buyerId !== userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!orderId || typeof orderId !== "string") {
+      return NextResponse.json({ error: "Order ID required" }, { status: 400 });
     }
 
-    // Prevent double completion
-    if (orderData.status === "COMPLETED") {
-      return NextResponse.json({ error: "Order already completed" }, { status: 400 });
-    }
+    const result = await adminDb.runTransaction(async (transaction) => {
+      const orderRef = adminDb.collection("orders").doc(orderId);
+      const orderSnap = await transaction.get(orderRef);
+      if (!orderSnap.exists) throw new CompletionError("Order not found", 404);
 
-    const orderAmount = orderData.totalAmount || 0;
-    const storeId = orderData.vendorId;
+      const orderData = orderSnap.data() || {};
+      if (orderData.vendorId !== userId && orderData.buyerId !== userId) {
+        throw new CompletionError("Forbidden", 403);
+      }
 
-    // 3. Batch Update Firestore
-    const batch = adminDb.batch();
+      const normalizedStatus = String(orderData.status || "").toUpperCase();
+      if (normalizedStatus === "COMPLETED") {
+        return { alreadyCompleted: true, orderAmount: Number(orderData.totalAmount || 0) };
+      }
 
-    // A. Update Order Status
-    batch.update(adminDb.collection("orders").doc(orderId), {
-      status: "COMPLETED",
-      completedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      if (!["PENDING", "PAID_HELD", "SHIPPED", "OUT_FOR_DELIVERY"].includes(normalizedStatus)) {
+        throw new CompletionError(`Order cannot be completed from status ${orderData.status || "unknown"}`, 409);
+      }
+
+      const orderAmount = Number(orderData.totalAmount ?? 0);
+      if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
+        throw new CompletionError("Order has an invalid amount", 409);
+      }
+
+      const storeId = orderData.vendorId;
+      if (!storeId || typeof storeId !== "string") {
+        throw new CompletionError("Order has no vendor wallet", 409);
+      }
+
+      const storeRef = adminDb.collection("stores").doc(storeId);
+      const storeSnap = await transaction.get(storeRef);
+      if (!storeSnap.exists) throw new CompletionError("Vendor wallet not found", 404);
+
+      const storeData = storeSnap.data() || {};
+      const escrowBalance = Number(storeData.escrowBalance ?? 0);
+      const availableBalance = Number(storeData.availableBalance ?? 0);
+      const totalSales = Number(storeData.totalSales ?? 0);
+
+      // Never use FieldValue.increment(-amount) here. The transaction must verify
+      // the current ledger before setting the exact non-negative result.
+      if (!Number.isFinite(escrowBalance) || escrowBalance < orderAmount) {
+        throw new CompletionError(
+          "Escrow ledger mismatch. Funds were not released; please contact support before retrying.",
+          409
+        );
+      }
+
+      transaction.update(orderRef, {
+        status: "COMPLETED",
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        ...(userId === orderData.buyerId ? { buyerConfirmed: true } : { vendorConfirmed: true }),
+        completedBy: userId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      transaction.update(storeRef, {
+        escrowBalance: escrowBalance - orderAmount,
+        availableBalance: (Number.isFinite(availableBalance) ? availableBalance : 0) + orderAmount,
+        totalSales: (Number.isFinite(totalSales) ? totalSales : 0) + orderAmount,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return { alreadyCompleted: false, orderAmount };
     });
 
-    // B. Update Store Balances (Move from Escrow to Available)
-    // Note: We move the full gross amount here. The platform fee is deducted later in the Withdraw API.
-    batch.update(adminDb.collection("stores").doc(storeId), {
-      escrowBalance: admin.firestore.FieldValue.increment(-orderAmount),
-      availableBalance: admin.firestore.FieldValue.increment(orderAmount),
-      totalSales: admin.firestore.FieldValue.increment(orderAmount),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    return NextResponse.json({
+      success: true,
+      alreadyCompleted: result.alreadyCompleted,
+      message: result.alreadyCompleted
+        ? "Order was already completed."
+        : "Order marked as completed and funds released.",
     });
-
-    await batch.commit();
-
-    return NextResponse.json({ success: true, message: "Order marked as completed and funds released." });
-
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Complete Order API Error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    const status = error instanceof CompletionError ? error.status : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

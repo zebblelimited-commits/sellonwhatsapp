@@ -19,6 +19,7 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area, PieChart, Pie, Cell, Legend, BarChart, Bar } from "recharts";
+import DisputeThread from "@/components/disputes/DisputeThread";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -263,16 +264,100 @@ function AdminStoresTab() {
   );
 }
 
+// ── Orders Tab ──
+function AdminOrdersTab() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [listenerError, setListenerError] = useState("");
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      query(collection(db, "orders"), limit(100)),
+      (snap) => {
+        const nextOrders = snap.docs
+          .map((order) => ({ id: order.id, ...order.data() }))
+          .sort((a, b) => (b.createdAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || 0));
+        setOrders(nextOrders);
+        setListenerError("");
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Admin orders listener error:", error);
+        setListenerError("Orders could not be loaded. Please refresh and try again.");
+        setLoading(false);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  if (loading) return <div className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-green-600" size={32} /></div>;
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div>
+        <h2 className="text-xl font-bold text-gray-900">Orders</h2>
+        <p className="text-sm text-gray-500">Monitor marketplace orders and escrow states</p>
+      </div>
+      {listenerError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{listenerError}</div>}
+      <div className="overflow-hidden rounded-[32px] border border-gray-100 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="border-b border-gray-100 bg-gray-50">
+              <tr>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-gray-400">Order</th>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-gray-400">Buyer / Seller</th>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-gray-400">Amount</th>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-gray-400">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {orders.map((order) => (
+                <tr key={order.id} className="hover:bg-gray-50/50">
+                  <td className="px-6 py-4 font-mono text-xs font-bold text-gray-800">#{order.id.slice(-8).toUpperCase()}</td>
+                  <td className="px-6 py-4 text-xs text-gray-500">
+                    <p>Buyer: {order.buyerId || "—"}</p>
+                    <p>Seller: {order.vendorId || "—"}</p>
+                  </td>
+                  <td className="px-6 py-4 text-sm font-bold text-gray-900">₦{Number(order.totalAmount || 0).toLocaleString()}</td>
+                  <td className="px-6 py-4"><StatusBadge status={order.status || "pending"} size="sm" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {orders.length === 0 && <div className="p-10 text-center text-sm text-gray-400">No orders found</div>}
+      </div>
+    </div>
+  );
+}
+
 // ── Payouts Tab (Simplified) ──
 function AdminPayoutsTab() {
   const [payouts, setPayouts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [listenerError, setListenerError] = useState("");
 
   useEffect(() => {
-    const unsub = onSnapshot(query(collection(db, "payouts"), where("status", "==", "pending"), orderBy("createdAt", "desc"), limit(50)), (snap) => {
-      setPayouts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      query(collection(db, "payouts"), limit(100)),
+      (snap) => {
+        const nextPayouts = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => {
+            const dateA = a.requestedAt?.toDate?.()?.getTime?.() || 0;
+            const dateB = b.requestedAt?.toDate?.()?.getTime?.() || 0;
+            return dateB - dateA;
+          });
+        setPayouts(nextPayouts);
+        setListenerError("");
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Admin payout listener error:", error);
+        setListenerError("Payouts could not be loaded. Please refresh and try again.");
+        setLoading(false);
+      }
+    );
     return () => unsub();
   }, []);
 
@@ -283,36 +368,37 @@ function AdminPayoutsTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Payout Approvals</h2>
-          <p className="text-sm text-gray-500">Review and approve vendor payout requests</p>
+          <p className="text-sm text-gray-500">Monitor withdrawal reservations and gateway outcomes</p>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-xl text-[10px] font-bold">
           <Clock size={14} /> {payouts.length} pending
         </div>
       </div>
+      {listenerError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{listenerError}</div>}
       <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Vendor</th>
-              <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Amount</th>
+              <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Gross / Net</th>
               <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Requested</th>
-              <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Actions</th>
+              <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {payouts.map((payout) => (
               <tr key={payout.id} className="hover:bg-gray-50/50">
                 <td className="px-6 py-4">
-                  <p className="font-bold text-sm text-gray-900">{payout.vendorName}</p>
-                  <p className="text-[10px] text-gray-400">{payout.vendorEmail}</p>
+                  <p className="font-bold text-sm text-gray-900">{payout.vendorName || payout.vendorId || "Unknown vendor"}</p>
+                  <p className="text-[10px] text-gray-400">{payout.vendorEmail || payout.id}</p>
                 </td>
-                <td className="px-6 py-4 text-sm font-bold text-gray-900">₦{payout.amount?.toLocaleString()}</td>
-                <td className="px-6 py-4 text-xs text-gray-500">{payout.createdAt?.toLocaleDateString('en-NG')}</td>
+                <td className="px-6 py-4 text-sm font-bold text-gray-900">
+                  <p>₦{Number(payout.grossAmount ?? payout.amount ?? 0).toLocaleString()}</p>
+                  <p className="text-[10px] font-medium text-gray-400">Net ₦{Number(payout.netAmount ?? 0).toLocaleString()}</p>
+                </td>
+                <td className="px-6 py-4 text-xs text-gray-500">{payout.requestedAt?.toDate?.()?.toLocaleDateString?.('en-NG') || "—"}</td>
                 <td className="px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    <button className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-[10px] font-bold hover:bg-green-700">Approve</button>
-                    <button className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-[10px] font-bold hover:bg-red-100">Reject</button>
-                  </div>
+                  <StatusBadge status={payout.status || "pending"} size="sm" />
                 </td>
               </tr>
             ))}
@@ -324,18 +410,38 @@ function AdminPayoutsTab() {
   );
 }
 
-// ── Disputes Tab (Simplified) ──
+// ── Disputes Tab ──
 function AdminDisputesTab() {
   const [disputes, setDisputes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("active");
+  const [listenerError, setListenerError] = useState("");
 
   useEffect(() => {
-    const unsub = onSnapshot(query(collection(db, "disputes"), where("status", "in", ["open", "under_review"]), orderBy("createdAt", "desc"), limit(50)), (snap) => {
-      setDisputes(snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.() || new Date() })));
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      query(collection(db, "disputes"), limit(100)),
+      (snap) => {
+        const nextDisputes = snap.docs
+          .map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.() || new Date() }))
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        setDisputes(nextDisputes);
+        setListenerError("");
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Admin disputes listener error:", error);
+        setListenerError("Disputes could not be loaded. Please refresh and try again.");
+        setLoading(false);
+      }
+    );
     return () => unsub();
   }, []);
+
+  const visibleDisputes = disputes.filter((dispute) => {
+    if (statusFilter === "active") return ["open", "under_review"].includes(dispute.status);
+    if (statusFilter === "resolved") return ["resolved_refund", "resolved_vendor", "closed"].includes(dispute.status);
+    return true;
+  });
 
   if (loading) return <div className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-green-600" size={32} /></div>;
 
@@ -344,14 +450,22 @@ function AdminDisputesTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Dispute Resolution</h2>
-          <p className="text-sm text-gray-500">Review and resolve customer disputes</p>
+          <p className="text-sm text-gray-500">Review the conversation and update the final outcome</p>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-700 rounded-xl text-[10px] font-bold">
-          <AlertTriangle size={14} /> {disputes.length} open
+        <div className="flex items-center gap-3">
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 outline-none focus:border-green-600">
+            <option value="active">Active disputes</option>
+            <option value="all">All disputes</option>
+            <option value="resolved">Resolved disputes</option>
+          </select>
+          <div className="flex items-center gap-2 rounded-xl bg-red-50 px-3 py-1.5 text-[10px] font-bold text-red-700">
+            <AlertTriangle size={14} /> {disputes.filter((d) => ["open", "under_review"].includes(d.status)).length} open
+          </div>
         </div>
       </div>
-      <div className="space-y-3">
-        {disputes.map((dispute) => (
+      {listenerError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{listenerError}</div>}
+      <div className="space-y-4">
+        {visibleDisputes.map((dispute) => (
           <div key={dispute.id} className="bg-white rounded-[32px] border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
@@ -368,15 +482,18 @@ function AdminDisputesTab() {
                   <span>•</span>
                   <span>₦{dispute.amount?.toLocaleString()}</span>
                 </div>
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <button className="px-3 py-1.5 bg-green-600 text-white rounded-xl text-[10px] font-bold hover:bg-green-700">Resolve</button>
-                <button className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-bold hover:bg-blue-100">View Details</button>
-              </div>
+                </div>
             </div>
+            <DisputeThread
+              key={dispute.id}
+              disputeId={dispute.id}
+              currentRole="admin"
+              currentStatus={dispute.status}
+              currentResolution={dispute.resolution || ""}
+            />
           </div>
         ))}
-        {disputes.length === 0 && <div className="text-center py-10 text-gray-400 text-sm">No open disputes</div>}
+        {visibleDisputes.length === 0 && <div className="text-center py-10 text-gray-400 text-sm">No disputes in this view</div>}
       </div>
     </div>
   );
@@ -1408,6 +1525,7 @@ export default function AdminDashboard() {
       case "home": return <AdminHome stats={stats} onNavigate={handleTabChange} />;
       case "users": return <AdminUsersTab/>;
       case "stores": return <AdminStoresTab/>;
+      case "orders": return <AdminOrdersTab/>;
       case "payouts": return <AdminPayoutsTab/>;
       case "disputes": return <AdminDisputesTab/>;
       case "notifications": return <AdminNotificationsTab/>;
@@ -1450,7 +1568,14 @@ export default function AdminDashboard() {
 
         <div className="pt-6 border-t border-gray-100">
           <NavItem icon={<Settings size={18} />} label="Settings" active={activeTab === "settings"} onClick={() => handleTabChange("settings")} />
-          <button onClick={() => signOut(auth)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 mt-1 transition-colors">
+          <button onClick={async () => {
+            try {
+              await signOut(auth);
+            } finally {
+              await fetch('/api/session', { method: 'DELETE' }).catch(() => undefined);
+              router.replace('/admin/login');
+            }
+          }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 mt-1 transition-colors">
             <LogOut size={18} /> Sign Out
           </button>
         </div>

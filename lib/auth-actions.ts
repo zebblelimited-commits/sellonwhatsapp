@@ -28,7 +28,8 @@ export async function verifySessionToken(): Promise<{ uid: string; email?: strin
 
   try {
     // Verify the JWT token with Firebase Admin
-    const decodedToken = await adminAuth.verifyIdToken(sessionCookie);
+    // __session contains a Firebase session cookie, not a client ID token.
+    const decodedToken = await adminAuth.verifySessionCookie(sessionCookie);
 
     return {
       uid: decodedToken.uid,

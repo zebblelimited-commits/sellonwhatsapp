@@ -68,21 +68,18 @@ export default function EscrowPage() {
         }
         try {
             setActionLoading(orderId);
-
-            const escrowRef = doc(db, "escrow", escrowId);
-            await updateDoc(escrowRef, {
-                status: "released",
-                releasedAt: new Date(),
-                releasedBy: user?.uid,
+            if (!user) throw new Error("Please sign in again");
+            const idToken = await user.getIdToken();
+            const response = await fetch("/api/orders/complete", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({ orderId }),
             });
-
-            // Update order status
-            const orderRef = doc(db, "orders", orderId);
-            await updateDoc(orderRef, {
-                status: "completed",
-                paymentReleased: true,
-                completedAt: new Date(),
-            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "Failed to release funds");
 
             alert("Funds released successfully! The vendor will receive payment shortly.");
 
