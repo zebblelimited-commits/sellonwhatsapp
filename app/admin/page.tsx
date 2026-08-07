@@ -5,10 +5,10 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { db, auth } from "@/lib/firebase";
 import { 
-  collection, query, where, getDocs, orderBy, limit, onSnapshot, 
+  collection, query, where, getDocs, getDoc, orderBy, limit, onSnapshot,
   updateDoc, doc, addDoc, serverTimestamp, deleteDoc 
 } from "firebase/firestore";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { 
   Users, Store, CreditCard, AlertTriangle, TrendingUp, Clock, 
@@ -22,6 +22,15 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tool
 import DisputeThread from "@/components/disputes/DisputeThread";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
+
+type AdminAnalytics = {
+  gmvData: Array<{ date: string; gmv: number; orders: number }>;
+  userGrowth: Array<{ date: string; newUsers: number; activeUsers: number }>;
+  orderStatus: Array<{ name: string; value: number; color: string }>;
+  topStores: Array<{ name: string; sales: number; orders: number }>;
+  disputeRate: Array<{ date: string; rate: string }>;
+  revenueByCategory: Array<{ category: string; revenue: number }>;
+};
 
 // ═══════════════════════════════════════════════════════════
 // 🧩 TAB COMPONENTS (All rendered in same page)
@@ -73,6 +82,7 @@ function AdminHome({ stats, onNavigate }: { stats: any; onNavigate: (tab: string
 function AdminUsersTab() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [listenerError, setListenerError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [actionModal, setActionModal] = useState<{ type: string; user: any } | null>(null);
@@ -83,6 +93,11 @@ function AdminUsersTab() {
     const unsub = onSnapshot(q, (snapshot) => {
       const usersList = snapshot.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.() || new Date() }));
       setUsers(usersList);
+      setListenerError("");
+      setLoading(false);
+    }, (error) => {
+      console.error("Admin users listener error:", error);
+      setListenerError("Users could not be loaded. Check admin permissions and try again.");
       setLoading(false);
     });
     return () => unsub();
@@ -120,6 +135,7 @@ function AdminUsersTab() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
+      {listenerError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{listenerError}</div>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -215,10 +231,16 @@ function AdminUsersTab() {
 function AdminStoresTab() {
   const [stores, setStores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [listenerError, setListenerError] = useState("");
 
   useEffect(() => {
     const unsub = onSnapshot(query(collection(db, "stores"), orderBy("createdAt", "desc"), limit(50)), (snap) => {
       setStores(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setListenerError("");
+      setLoading(false);
+    }, (error) => {
+      console.error("Admin stores listener error:", error);
+      setListenerError("Stores could not be loaded. Check admin permissions and try again.");
       setLoading(false);
     });
     return () => unsub();
@@ -228,6 +250,7 @@ function AdminStoresTab() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
+      {listenerError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{listenerError}</div>}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Store Management</h2>
@@ -275,7 +298,7 @@ function AdminOrdersTab() {
       query(collection(db, "orders"), limit(100)),
       (snap) => {
         const nextOrders = snap.docs
-          .map((order) => ({ id: order.id, ...order.data() }))
+          .map((order) => ({ id: order.id, ...order.data() } as any))
           .sort((a, b) => (b.createdAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || 0));
         setOrders(nextOrders);
         setListenerError("");
@@ -342,7 +365,7 @@ function AdminPayoutsTab() {
       query(collection(db, "payouts"), limit(100)),
       (snap) => {
         const nextPayouts = snap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
+          .map(d => ({ id: d.id, ...d.data() } as any))
           .sort((a, b) => {
             const dateA = a.requestedAt?.toDate?.()?.getTime?.() || 0;
             const dateB = b.requestedAt?.toDate?.()?.getTime?.() || 0;
@@ -555,8 +578,11 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
   const [newMessage, setNewMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sending, setSending] = useState(false);
+  const [listenerError, setListenerError] = useState("");
   const [mobileShowChat, setMobileShowChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const selectedChatId = selectedChat?.id;
+  const selectedChatUnreadCount = selectedChat?.unreadCount || 0;
 
   // ✅ Load conversations (real-time)
   useEffect(() => {
@@ -564,24 +590,31 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
     const q = query(collection(db, "admin_chats"), orderBy("lastMessageAt", "desc"), limit(50));
     const unsub = onSnapshot(q, (snap) => {
       setChats(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setListenerError("");
+    }, (error) => {
+      console.error("Admin chat listener error:", error);
+      setListenerError("Support conversations could not be loaded. Check admin permissions and indexes.");
     });
     return () => unsub();
   }, [adminId]);
 
   // ✅ Load messages for selected chat (real-time)
   useEffect(() => {
-    if (!selectedChat) return;
-    const msgRef = collection(db, "admin_chats", selectedChat.id, "messages");
+    if (!selectedChatId) return;
+    const msgRef = collection(db, "admin_chats", selectedChatId, "messages");
     const q = query(msgRef, orderBy("timestamp", "asc"));
     const unsub = onSnapshot(q, (snap) => {
       setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       // Mark as read if admin has unread
-      if (selectedChat.unreadCount > 0) {
-        updateDoc(doc(db, "admin_chats", selectedChat.id), { unreadCount: 0 });
+      if (selectedChatUnreadCount > 0) {
+        updateDoc(doc(db, "admin_chats", selectedChatId), { unreadCount: 0 });
       }
+    }, (error) => {
+      console.error("Admin chat message listener error:", error);
+      setListenerError("Messages could not be loaded for this conversation.");
     });
     return () => unsub();
-  }, [selectedChat?.id]);
+  }, [selectedChatId, selectedChatUnreadCount]);
 
   // ✅ Auto-scroll to latest message
   useEffect(() => {
@@ -636,7 +669,8 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
   };
 
   return (
-    <div className="h-[calc(100vh-140px)] bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden flex animate-in fade-in duration-300">
+    <div className="relative h-[calc(100vh-140px)] bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden flex animate-in fade-in duration-300">
+      {listenerError && <div className="absolute z-10 m-4 rounded-2xl bg-red-50 p-3 text-xs font-medium text-red-700">{listenerError}</div>}
       
       {/* LEFT: Conversation List */}
       <div className={`${mobileShowChat ? "hidden md:flex" : "flex"} w-full md:w-80 border-r border-gray-100 flex-col`}>
@@ -773,6 +807,7 @@ function AdminVerificationsTab() {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
+  const [listenerError, setListenerError] = useState("");
 
   useEffect(() => {
     const q = query(
@@ -782,6 +817,11 @@ function AdminVerificationsTab() {
     );
     const unsub = onSnapshot(q, (snap) => {
       setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setListenerError("");
+      setLoading(false);
+    }, (error) => {
+      console.error("Admin verification listener error:", error);
+      setListenerError("Verification requests could not be loaded. Check admin permissions and indexes.");
       setLoading(false);
     });
     return () => unsub();
@@ -820,6 +860,7 @@ function AdminVerificationsTab() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
+      {listenerError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{listenerError}</div>}
       <div>
         <h2 className="text-xl font-bold text-gray-900">Verification Requests</h2>
         <p className="text-sm text-gray-500">Review and approve store verification applications</p>
@@ -937,7 +978,7 @@ function AdminVerificationsTab() {
 function AdminAnalyticsTab() {
   const [timeRange, setTimeRange] = useState("7d");
   const [loading, setLoading] = useState(true);
-  const [analytics, setAnalytics] = useState({
+  const [analytics, setAnalytics] = useState<AdminAnalytics>({
     gmvData: [],
     userGrowth: [],
     orderStatus: [],
@@ -1110,7 +1151,7 @@ function AdminAnalyticsTab() {
                     backgroundColor: '#fff',
                     fontSize: '11px'
                   }}
-                  formatter={(value: number) => [`₦${value.toLocaleString()}`, 'GMV']}
+                  formatter={(value) => [`₦${Number(value ?? 0).toLocaleString()}`, 'GMV']}
                 />
                 <Line 
                   type="monotone" 
@@ -1191,7 +1232,7 @@ function AdminAnalyticsTab() {
                   outerRadius={80}
                   paddingAngle={2}
                   dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name} ${(Number(percent ?? 0) * 100).toFixed(0)}%`}
                   labelLine={false}
                 >
                   {analytics.orderStatus.map((entry, index) => (
@@ -1251,7 +1292,7 @@ function AdminAnalyticsTab() {
                     backgroundColor: '#fff',
                     fontSize: '11px'
                   }}
-                  formatter={(value: number) => [`₦${value.toLocaleString()}`, 'Sales']}
+                  formatter={(value) => [`₦${Number(value ?? 0).toLocaleString()}`, 'Sales']}
                 />
                 <Bar 
                   dataKey="sales" 
@@ -1294,7 +1335,7 @@ function AdminAnalyticsTab() {
                     backgroundColor: '#fff',
                     fontSize: '11px'
                   }}
-                  formatter={(value: string) => [`${value}%`, 'Dispute Rate']}
+                  formatter={(value) => [`${String(value ?? 0)}%`, 'Dispute Rate']}
                 />
                 <Line 
                   type="monotone" 
@@ -1338,7 +1379,7 @@ function AdminAnalyticsTab() {
                   backgroundColor: '#fff',
                   fontSize: '11px'
                 }}
-                formatter={(value: number) => [`₦${value.toLocaleString()}`, 'Revenue']}
+                formatter={(value) => [`₦${Number(value ?? 0).toLocaleString()}`, 'Revenue']}
               />
               <Bar 
                 dataKey="revenue" 
@@ -1391,7 +1432,7 @@ function AdminSettingsTab() {
         </div>
         <div>
           <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Email</label>
-          <input type="email" defaultValue={auth.currentUser?.email} disabled className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-gray-400" />
+          <input type="email" defaultValue={auth.currentUser?.email || ""} disabled className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-gray-400" />
         </div>
         <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-sm font-bold">Change Password</button>
         <hr className="border-gray-100" />
@@ -1412,10 +1453,11 @@ function AdminSettingsTab() {
 // ═══════════════════════════════════════════════════════════
 
 function NavItem({ icon, label, active, onClick, badge = null }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void; badge?: number | string | null }) {
+  const numericBadge = typeof badge === "number" ? badge : Number(badge || 0);
   return (
     <button onClick={onClick} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all ${active ? "bg-green-600 text-white shadow-lg shadow-green-100" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"}`}>
       <div className="flex items-center gap-3">{icon}{label}</div>
-      {badge !== null && badge !== undefined && badge > 0 && <span className="inline-flex items-center justify-center w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full">{badge > 9 ? "9+" : badge}</span>}
+      {numericBadge > 0 && <span className="inline-flex items-center justify-center w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full">{numericBadge > 9 ? "9+" : numericBadge}</span>}
     </button>
   );
 }
@@ -1460,6 +1502,8 @@ function StatusBadge({ status, size = 'sm' }: { status: string; size?: 'sm' | 'm
 export default function AdminDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [adminReady, setAdminReady] = useState(false);
+  const [adminError, setAdminError] = useState("");
   
   // ✅ Tab state - syncs with URL query param for shareability
   const [activeTab, setActiveTab] = useState(() => searchParams?.get("tab") || "home");
@@ -1471,16 +1515,60 @@ export default function AdminDashboard() {
   const [chats, setChats] = useState<any[]>([]);
 
   const [pendingVerifications, setPendingVerifications] = useState(0);
+  const [statsError, setStatsError] = useState("");
+
+  // Middleware protects the initial request, but this client-side check also
+  // protects client navigation and verifies that the admin is still active.
+  useEffect(() => {
+    let mounted = true;
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        if (mounted) router.replace("/admin/login");
+        return;
+      }
+
+      try {
+        const adminDocument = await getDoc(doc(db, "admins", user.uid));
+        if (!mounted) return;
+
+        if (!adminDocument?.exists() || adminDocument.data()?.isActive !== true) {
+          await signOut(auth);
+          await fetch("/api/session", { method: "DELETE" }).catch(() => undefined);
+          router.replace("/admin/login");
+          return;
+        }
+
+        setAdminReady(true);
+        setAdminError("");
+      } catch (error) {
+        console.error("Admin access verification failed:", error);
+        if (mounted) {
+          setAdminError("We could not verify admin access. Please sign in again.");
+          setAdminReady(false);
+        }
+      }
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [router]);
 
   useEffect(() => {
+  if (!adminReady) return;
   // Lightweight listener just for the badge count
   const q = query(collection(db, "store_verifications"), where("status", "==", "pending"));
-  const unsub = onSnapshot(q, (snap) => setPendingVerifications(snap.size));
+  const unsub = onSnapshot(q, (snap) => setPendingVerifications(snap.size), (error) => {
+    console.error("Pending verification badge listener error:", error);
+    setStatsError("Some admin metrics could not be loaded. Check Firestore permissions or indexes.");
+  });
   return () => unsub();
-  }, []);
+  }, [adminReady]);
 
   // ✅ Load stats on mount
   useEffect(() => {
+    if (!adminReady) return;
     async function loadStats() {
       try {
         const [users, stores, payouts, disputes] = await Promise.all([
@@ -1489,21 +1577,32 @@ export default function AdminDashboard() {
           getDocs(query(collection(db, "payouts"), where("status", "==", "pending"), limit(1000))),
           getDocs(query(collection(db, "disputes"), where("status", "in", ["open", "under_review"]), limit(1000)))
         ]);
-        // ✅ Load chats for sidebar badge
-      if (auth.currentUser) {
-        const chatsRef = collection(db, "admin_chats");
-        const q = query(chatsRef, orderBy("lastMessageAt", "desc"), limit(50));
-        const unsub = onSnapshot(q, (snap) => {
-          setChats(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-        return () => unsub(); // Cleanup listener
-      }
-
         setStats({ totalUsers: users.size, activeStores: stores.size, pendingPayouts: payouts.size, openDisputes: disputes.size, loading: false });
-      } catch (e) { console.error("Stats load failed:", e); setStats(s => ({ ...s, loading: false })); }
+        setStatsError("");
+      } catch (e) {
+        console.error("Stats load failed:", e);
+        setStatsError("Dashboard metrics could not be loaded. Check Firestore permissions and indexes.");
+        setStats(s => ({ ...s, loading: false }));
+      }
     }
     loadStats();
-  }, []);
+  }, [adminReady]);
+
+  useEffect(() => {
+    if (!adminReady || !auth.currentUser) return;
+
+    const chatsQuery = query(collection(db, "admin_chats"), orderBy("lastMessageAt", "desc"), limit(50));
+    const unsubscribe = onSnapshot(
+      chatsQuery,
+      (snapshot) => setChats(snapshot.docs.map((chat) => ({ id: chat.id, ...chat.data() }))),
+      (error) => {
+        console.error("Admin chat badge listener error:", error);
+        setStatsError("Support chat metrics could not be loaded. Check Firestore permissions or indexes.");
+      }
+    );
+
+    return () => unsubscribe();
+  }, [adminReady]);
 
   // ✅ Sync tab with URL (for shareable links)
   useEffect(() => {
@@ -1542,6 +1641,18 @@ export default function AdminDashboard() {
     chats.reduce((acc, c) => acc + (c.unreadCount || 0), 0), 
     [chats]
   );
+
+  if (!adminReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
+        <div className="rounded-3xl bg-white p-8 text-center shadow-sm">
+          <Loader2 className="mx-auto mb-4 animate-spin text-green-600" size={32} />
+          <p className="text-sm font-bold text-gray-900">Verifying admin access…</p>
+          {adminError && <p className="mt-2 text-xs font-medium text-red-600">{adminError}</p>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`${font.className} flex h-screen overflow-hidden bg-gray-50 text-gray-900`}>
@@ -1616,7 +1727,10 @@ export default function AdminDashboard() {
         </header>
 
         {/* Tab Content Area */}
-        <div className="flex-1 overflow-y-auto px-6 pb-10 no-scrollbar">{renderTabContent()}</div>
+        <div className="flex-1 overflow-y-auto px-6 pb-10 no-scrollbar">
+          {statsError && <div className="mb-6 rounded-2xl bg-amber-50 p-4 text-sm font-medium text-amber-800">{statsError}</div>}
+          {renderTabContent()}
+        </div>
       </main>
     </div>
   );

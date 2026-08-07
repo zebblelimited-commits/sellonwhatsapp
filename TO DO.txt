@@ -1,0 +1,77 @@
+Agreed. We’ll fix the admin system in controlled stages, starting with stability and security before operational actions.
+
+### Stage 1 — Admin foundation
+
+- Fix all TypeScript errors in `app/admin/page.tsx`.
+- Fix `app/admin/seed-chat/page.tsx`.
+- Confirm `/admin` is accessible only to active admins.
+- Verify sellers and buyers are redirected away.
+- Add proper loading and Firestore error states.
+- Confirm Firestore indexes and permissions.
+
+Acceptance: admin login works, `/admin` loads without console/build errors, and unauthorized users cannot access it.
+
+### Stage 2 — Users and stores
+
+- Standardize `users`, `buyers`, `vendors`, and `stores`.
+- Complete user actions: suspend, ban, verify, restore.
+- Complete store actions: approve, reject, suspend, verify.
+- Add user/store detail views.
+- Move admin writes behind secure server-side authorization.
+- Add audit logs for every admin action.
+
+### Stage 3 — Orders and disputes
+
+- Add order detail pages.
+- Add order filtering and status visibility.
+- Complete the dispute conversation workflow.
+- Allow admin messages and status changes.
+- Connect dispute resolutions to safe Firestore transactions:
+  - refund buyer
+  - release funds to seller
+  - close dispute
+- Prevent duplicate escrow releases or refunds.
+
+### Stage 4 — Payouts and financial reconciliation
+
+- Display complete payout history and provider references.
+- Add safe admin reconciliation statuses:
+  - pending
+  - processing
+  - completed
+  - failed
+  - refunded
+- Add retry/reconciliation controls only where safe.
+- Ensure payout actions are idempotent.
+- Ensure admin actions never mutate seller balances twice.
+- Add payout audit logs.
+
+### Stage 5 — Notifications and support chat
+
+- Standardize the chat collection currently split between `admin_chats` and `vendor_chats`.
+- Allow admins to open conversations with buyers and sellers.
+- Implement message read states.
+- Implement notification fan-out to the correct buyer/vendor/admin.
+- Replace browser `alert()` messages with modal/toast feedback.
+
+### Stage 6 — Analytics and settings
+
+- Replace random analytics data with real Firestore-based metrics.
+- Add date-range filtering.
+- Complete admin profile settings.
+- Add password reset/change flow.
+- Add admin role and permission management.
+- Add two-factor authentication planning or implementation.
+- Add an audit-log viewer.
+
+### Stage 7 — Final verification
+
+- Test admin login/logout.
+- Test buyer/seller/admin portal isolation.
+- Test all admin actions.
+- Test dispute financial outcomes.
+- Test payout failure and retry scenarios.
+- Test Firestore permission failures.
+- Run the production build and resolve remaining errors.
+
+The immediate next task should be Stage 1: stabilize and secure the admin foundation before adding more actions.

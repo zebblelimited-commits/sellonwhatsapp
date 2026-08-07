@@ -35,7 +35,7 @@ export default function SeedChatPage() {
         setTimeout(() => router.push("/admin?tab=chat"), 3000);
       } catch (error) {
         console.error("Seed failed:", error);
-        setStatus(`❌ Error: ${error.message}`);
+        setStatus(`❌ Error: ${error instanceof Error ? error.message : "Unable to create test chat"}`);
       }
     }
     seed();
