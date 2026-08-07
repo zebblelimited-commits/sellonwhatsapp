@@ -52,9 +52,10 @@ async function getAccessToken() {
 export async function GET() {
   try {
     const sandboxUrl = process.env.NOMBA_SANDBOX_URL;
+    const accountId = process.env.NOMBA_ACCOUNT_ID;
     
     // ✅ SAFETY CHECK: Ensure Sandbox URL is loaded
-    if (!sandboxUrl) {
+    if (!sandboxUrl || !accountId) {
       throw new Error("Missing NOMBA_SANDBOX_URL environment variable. Check your .env.local file.");
     }
 
@@ -69,7 +70,7 @@ export async function GET() {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
-          accountId: process.env.NOMBA_ACCOUNT_ID,
+          accountId,
           "Content-Type": "application/json",
         },
         cache: "no-store",
@@ -89,12 +90,13 @@ export async function GET() {
       banks: result?.data || [],
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("🔥 NOMBA ERROR:", error);
+    const message = error instanceof Error ? error.message : "Something went wrong";
 
     return NextResponse.json(
       {
-        error: error.message || "Something went wrong",
+        error: message,
       },
       {
         status: 500,

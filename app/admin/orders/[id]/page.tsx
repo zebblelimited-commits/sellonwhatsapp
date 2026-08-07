@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
 import { ArrowLeft, AlertCircle, Loader2, MessageSquare, Package, ShieldCheck } from "lucide-react";
 import { db } from "@/lib/firebase";
+import { adminMutation } from "@/components/admin/adminApi";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import DisputeThread from "@/components/disputes/DisputeThread";
 
@@ -32,6 +33,10 @@ export default function AdminOrderDetailsPage() {
   const [disputes, setDisputes] = useState<DisputeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reconcileReason, setReconcileReason] = useState("");
+  const [providerReference, setProviderReference] = useState("");
+  const [reconcileLoading, setReconcileLoading] = useState(false);
+  const [reconcileMessage, setReconcileMessage] = useState("");
 
   useEffect(() => {
     if (!orderId) return;
@@ -55,10 +60,38 @@ export default function AdminOrderDetailsPage() {
 
   const activeDispute = useMemo(() => disputes.find((item) => !["closed", "resolved_refund", "resolved_vendor"].includes(String(item.status || "").toLowerCase())) || disputes[0], [disputes]);
 
+  const reconcileEscrow = async () => {
+    if (!order) return;
+    const reason = reconcileReason.trim();
+    const reference = providerReference.trim();
+    if (!reference || !reason) {
+      setReconcileMessage("Enter the verified provider reference and a reason before reconciling.");
+      return;
+    }
+
+    setReconcileLoading(true);
+    setReconcileMessage("");
+    try {
+      await adminMutation(`/api/admin/orders/${encodeURIComponent(order.id)}/reconcile`, {
+        action: "reserve_escrow",
+        providerReference: reference,
+        reason,
+      });
+      setReconcileReason("");
+      setProviderReference("");
+      setReconcileMessage("Escrow was reserved successfully. The order can now continue through completion.");
+    } catch (reconcileError) {
+      setReconcileMessage(reconcileError instanceof Error ? reconcileError.message : "Escrow reconciliation failed.");
+    } finally {
+      setReconcileLoading(false);
+    }
+  };
+
   if (loading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="animate-spin text-green-600" size={30} /></div>;
   if (!order) return <div className="rounded-3xl bg-white p-10 text-center"><AlertCircle className="mx-auto mb-3 text-red-500" /><p className="font-bold">Order not found</p><button onClick={() => router.back()} className="mt-4 text-sm font-bold text-green-700">Go back</button></div>;
 
   const status = String(order.status || "pending");
+  const canReconcileEscrow = ["PENDING_PAYMENT", "PAID", "HELD", "PAID_HELD", "SHIPPED", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DISPUTED"].includes(status.toUpperCase());
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-10">
       <button onClick={() => router.back()} className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900"><ArrowLeft size={16} /> Back to orders</button>
@@ -73,8 +106,9 @@ export default function AdminOrderDetailsPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Info label="Product" value={text(order.productName || order.title)} />
             <Info label="Amount" value={money(order.totalAmount)} />
+            <Info label="Payment status" value={text(order.paymentStatus)} />
             <Info label="Funds state" value={text(order.fundsState)} />
-            <Info label="Escrow amount" value={money(order.escrowReservationAmount || order.totalAmount)} />
+            <Info label="Escrow amount" value={money(order.escrowReservedAmount || order.escrowReservationAmount || order.totalAmount)} />
             <Info label="Payment reference" value={text(order.paymentReference || order.nombaReference || order.orderId)} />
             <Info label="Last updated" value={displayDate(order.updatedAt as FirestoreValue)} />
           </div>
@@ -86,6 +120,21 @@ export default function AdminOrderDetailsPage() {
           <Info label="Store" value={text(order.storeName || order.vendorId)} />
         </section>
       </div>
+      {canReconcileEscrow && !["held", "released", "refunded", "refund_pending"].includes(String(order.fundsState || "").toLowerCase()) && !order.escrowReservedAt && (
+        <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+          <div className="mb-2 flex items-center gap-2"><AlertCircle size={17} className="text-amber-700" /><h2 className="font-black text-amber-950">Escrow reconciliation</h2></div>
+          <p className="max-w-3xl text-sm leading-6 text-amber-900">Use this only after confirming the payment succeeded in the payment provider dashboard. It reserves the order amount once, records the provider reference, and creates an audit log. If the seller ledger is negative, it is rebuilt from canonical held-order reservations in the same transaction. It must not be used to approve an unpaid order.</p>
+          {reconcileMessage && <div className="mt-3 rounded-xl bg-white/70 p-3 text-sm font-medium text-amber-950">{reconcileMessage}</div>}
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <input value={providerReference} onChange={(event) => setProviderReference(event.target.value)} placeholder="Verified provider reference" className="rounded-xl border border-amber-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-500" disabled={reconcileLoading} />
+            <input value={reconcileReason} onChange={(event) => setReconcileReason(event.target.value)} placeholder="Reason for reconciliation" className="rounded-xl border border-amber-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-500" disabled={reconcileLoading} />
+          </div>
+          <button onClick={reconcileEscrow} disabled={reconcileLoading} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60">
+            {reconcileLoading && <Loader2 size={15} className="animate-spin" />}
+            {reconcileLoading ? "Reconciling…" : "Reserve escrow once"}
+          </button>
+        </section>
+      )}
       <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><MessageSquare size={17} className="text-red-600" /><h2 className="font-black">Disputes</h2></div><span className="text-xs font-bold text-gray-400">{disputes.length} record{disputes.length === 1 ? "" : "s"}</span></div>
         {activeDispute ? <div><div className="mb-3 flex flex-wrap items-center gap-2"><StatusBadge status={String(activeDispute.status || "open")} /><span className="text-xs text-gray-500">{text(activeDispute.reason).replaceAll("_", " ")}</span></div><p className="mb-2 text-sm text-gray-600">{text(activeDispute.description)}</p><DisputeThread disputeId={activeDispute.id} currentRole="admin" currentStatus={String(activeDispute.status || "open")} currentResolution={String(activeDispute.resolution || "")} /></div> : <p className="text-sm text-gray-400">No dispute is attached to this order.</p>}

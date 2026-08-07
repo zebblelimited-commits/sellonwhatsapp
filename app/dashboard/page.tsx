@@ -269,7 +269,7 @@ function Dashboard() {
         const sQuery = query(
           collection(db, "orders"),
           where("vendorId", "==", user.uid),
-          where("status", "in", ["PAID_HELD", "SHIPPED", "COMPLETED", "DISPUTED"])
+          where("status", "in", ["PENDING_PAYMENT", "PAID_HELD", "SHIPPED", "COMPLETED", "DISPUTED"])
         );
         const unsubSales = onSnapshot(sQuery, (snapshot) => {
           const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));

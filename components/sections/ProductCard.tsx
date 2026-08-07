@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { trackMetric } from "@/lib/analytics";
 
 interface Product {
     id: string;
@@ -9,6 +10,8 @@ interface Product {
     imageUrl?: string;
     image?: string;
     storeName?: string;
+    storeId?: string;
+    vendorId?: string;
     currency?: string;
 }
 
@@ -20,9 +23,10 @@ interface ProductCardProps {
 export default function ProductCard({ product, compact = false }: ProductCardProps) {
     const currencySymbol = product.currency === "NGN" ? "₦" : product.currency || "₦";
     const productImage = product.images?.[0] || product.imageUrl || product.image;
+    const analyticsStoreId = product.storeId || product.vendorId;
 
     return (
-        <Link href={`/products/${product.id}`} className="group block">
+        <Link href={`/products/${product.id}`} onClick={() => analyticsStoreId && void trackMetric(analyticsStoreId, "click", { productId: product.id })} className="group block">
             <div className={`bg-white shadow-sm border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow duration-300 ${compact ? "rounded-lg" : "rounded-xl"}`}>
                 <div className={`relative w-full bg-gray-100 ${compact ? "h-36" : "h-48"}`}>
                     {productImage ? (

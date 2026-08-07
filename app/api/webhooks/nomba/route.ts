@@ -6,18 +6,19 @@ import { Novu } from "@novu/node";
 // ✅ 1. SAFELY Initialize Novu (Prevents entire webhook from crashing if key is missing)
 const novuApiKey = process.env.NOVU_API_KEY || process.env.NOVU_SECRET_KEY;
 const novu = novuApiKey ? new Novu(novuApiKey) : null;
+const novuWorkflowId = process.env.NOVU_WORKFLOW_ID?.trim();
 
 export const runtime = 'nodejs'; 
 
 // ✅ Helper function to safely trigger Novu
 async function triggerNovuNotification(userId: string, title: string, body: string, actionUrl: string, actionLabel: string, priority: string) {
-  if (!novu) {
-    console.warn("⚠️ [NOVU] Skipped: NOVU_API_KEY is missing in .env.local");
+  if (!novu || !novuWorkflowId) {
+    console.warn("⚠️ [NOVU] Skipped: configure NOVU_WORKFLOW_ID with an existing Novu workflow trigger");
     return;
   }
 
   try {
-    await novu.trigger('webhook-notification', {
+    await novu.trigger(novuWorkflowId, {
       to: { subscriberId: userId },
       payload: { title, body, actionUrl, actionLabel, priority }
     });
@@ -59,9 +60,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
 
+    const eventType = String(payload?.event_type || "").toUpperCase();
+    const transaction = payload?.data?.transaction || payload?.transaction || {};
     const orderRef = 
       payload?.data?.order?.orderReference || 
       payload?.order?.orderReference || 
+      transaction?.merchantTxRef ||
       payload?.data?.reference || 
       payload?.reference || 
       payload?.orderReference;
@@ -70,12 +74,16 @@ export async function POST(request: NextRequest) {
       payload?.data?.order?.status || 
       payload?.order?.status || 
       payload?.data?.status || 
-      payload?.status || 
+      payload?.status ||
+      (eventType === "PAYOUT_SUCCESS" ? "SUCCESS" : "") ||
+      (eventType === "PAYOUT_FAILED" || eventType === "PAYOUT_REFUND" ? "REFUNDED" : "") ||
       payload?.event_type;
       
     const gatewayStatus = String(rawStatus || "").toUpperCase();
-    const providerReference = payload?.data?.transaction?.transactionReference ||
-      payload?.data?.transaction?.reference ||
+    const providerReference = transaction?.transactionId ||
+      transaction?.transactionReference ||
+      transaction?.reference ||
+      transaction?.merchantTxRef ||
       payload?.data?.reference ||
       payload?.transaction?.reference ||
       orderRef;
@@ -270,9 +278,30 @@ export async function POST(request: NextRequest) {
             const storeSnap = await transaction.get(storeRef);
             if (!storeSnap.exists) throw new Error("Seller wallet not found; escrow was not reserved");
             const store = storeSnap.data() || {};
-            const escrowBalance = Number(store.escrowBalance ?? 0);
-            if (!Number.isFinite(escrowBalance) || escrowBalance < 0) {
+            const rawEscrowBalance = Number(store.escrowBalance ?? 0);
+            if (!Number.isFinite(rawEscrowBalance)) {
               throw new Error("Seller escrow ledger is invalid; payment was not credited to escrow");
+            }
+
+            let escrowBalance = rawEscrowBalance;
+            let ledgerWasRebuilt = false;
+            if (escrowBalance < 0) {
+              // Negative escrow is impossible in the current ledger. Rebuild
+              // it from canonical held reservations before crediting this
+              // provider-confirmed payment, atomically.
+              const vendorOrders = await transaction.get(
+                adminDb.collection("orders").where("vendorId", "==", vendorId),
+              );
+              escrowBalance = vendorOrders.docs.reduce((total, vendorOrderSnap) => {
+                const vendorOrder = vendorOrderSnap.data() || {};
+                if (String(vendorOrder.fundsState || "").trim().toLowerCase() !== "held") return total;
+                const reservedAmount = Number(vendorOrder.escrowReservedAmount ?? vendorOrder.escrowReservationAmount ?? 0);
+                return vendorOrder.escrowReservedAt && Number.isFinite(reservedAmount) && reservedAmount > 0
+                  ? total + reservedAmount
+                  : total;
+              }, 0);
+              ledgerWasRebuilt = true;
+              console.warn(`[ESCROW] Rebuilt negative seller ledger for ${vendorId}: ${rawEscrowBalance} -> ${escrowBalance}`);
             }
 
             const now = admin.firestore.FieldValue.serverTimestamp();
@@ -280,14 +309,32 @@ export async function POST(request: NextRequest) {
               escrowBalance: escrowBalance + orderAmount,
               updatedAt: now,
             });
+            if (ledgerWasRebuilt) {
+              transaction.set(adminDb.collection("auditLogs").doc(), {
+                action: "system_escrow_ledger_rebuilt",
+                targetType: "store",
+                targetId: vendorId,
+                performedBy: "system:nomba-webhook",
+                performedByEmail: "",
+                details: {
+                  reason: "negative_escrow_before_payment_reservation",
+                  previousEscrowBalance: rawEscrowBalance,
+                  rebuiltEscrowBalance: escrowBalance,
+                  orderId: docSnap.id,
+                  orderAmount,
+                },
+                timestamp: now,
+              });
+            }
             transaction.update(docSnap.ref, {
               status: "PAID_HELD",
+              paymentStatus: "paid",
               fundsState: "held",
               escrowReservedAmount: orderAmount,
               escrowReservedAt: now,
               updatedAt: now,
             });
-            return { transitioned: true, amount: orderAmount };
+            return { transitioned: true, amount: orderAmount, ledgerWasRebuilt };
           });
           console.log(`✅ [ESCROW] Order ${orderRef} ${holdResult.transitioned ? `reserved ₦${holdResult.amount}` : "was already reserved"}.`);
         } else {
@@ -485,6 +532,7 @@ export async function POST(request: NextRequest) {
       } else {
         await docSnap.ref.update({
           status: "failed",
+          ...(collectionName === "orders" ? { paymentStatus: "failed" } : {}),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
@@ -521,6 +569,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true }, { status: 200 });
   } catch (error: unknown) {
     console.error("❌ [WEBHOOK CRITICAL ERROR]:", error);
-    return NextResponse.json({ received: true, error: error instanceof Error ? error.message : "Webhook processing failed" }, { status: 200 });
+    // The payment may have succeeded while our ledger update failed. Return a
+    // retryable status so Nomba can deliver the webhook again after the ledger
+    // issue is corrected. All successful paths above are idempotent.
+    return NextResponse.json({ received: false, retryable: true, error: error instanceof Error ? error.message : "Webhook processing failed" }, { status: 500 });
   }
 }

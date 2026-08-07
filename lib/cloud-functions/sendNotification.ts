@@ -34,7 +34,8 @@ export async function sendNotification(params: SendNotificationParams) {
   }
 
   // 2. Trigger Novu (for the Inbox bell icon)
-  if (novuTriggerId && process.env.NOVU_SECRET_KEY) {
+  const novuWorkflowId = process.env.NOVU_WORKFLOW_ID?.trim();
+  if (novuWorkflowId && process.env.NOVU_SECRET_KEY) {
     try {
       const novuResponse = await fetch('https://api.novu.co/v1/events/trigger', {
         method: 'POST',
@@ -43,14 +44,14 @@ export async function sendNotification(params: SendNotificationParams) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: novuTriggerId,
+          name: novuWorkflowId,
           to: { subscriberId: vendorId },
-          payload: novuPayload || {},
+          payload: { eventType: novuTriggerId || null, ...(novuPayload || {}) },
         }),
       });
 
       if (novuResponse.ok) {
-        console.log(`✅ [Novu] Triggered workflow '${novuTriggerId}' for vendor: ${vendorId}`);
+        console.log(`✅ [Novu] Triggered workflow '${novuWorkflowId}' for vendor: ${vendorId}`);
       } else {
         const errText = await novuResponse.text();
         console.error(`❌ [Novu] API Error (${novuResponse.status}):`, errText);
@@ -58,5 +59,7 @@ export async function sendNotification(params: SendNotificationParams) {
     } catch (error) {
       console.error(`❌ [Novu] Failed to trigger workflow:`, error);
     }
+  } else if (novuTriggerId) {
+    console.warn("⚠️ [Novu] Skipped: configure NOVU_WORKFLOW_ID with an existing Novu workflow trigger");
   }
 }

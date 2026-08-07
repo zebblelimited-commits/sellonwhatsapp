@@ -43,7 +43,11 @@ export async function createNotification(params: CreateNotificationParams) {
       // Determine your Novu Workflow Trigger ID. 
       // You can create a master generic workflow in Novu called 'in-app-alerts',
       // or separate workflows mapped dynamically per type (e.g., 'payment-alert')
-      const workflowTriggerId = "in-app-alerts"; 
+      const workflowTriggerId = process.env.NOVU_WORKFLOW_ID?.trim();
+      if (!workflowTriggerId) {
+        console.warn("⚠️ Novu trigger skipped: configure NOVU_WORKFLOW_ID with an existing workflow trigger.");
+        return;
+      }
 
       await novu.trigger(workflowTriggerId, {
         // maps directly to user.uid handled by ZebbleNotificationCenter.tsx

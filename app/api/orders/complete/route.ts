@@ -37,7 +37,14 @@ export async function POST(request: NextRequest) {
         throw new CompletionError("Forbidden", 403);
       }
 
-      const normalizedStatus = String(orderData.status || "").toUpperCase();
+      const rawStatus = String(orderData.status || "").toUpperCase();
+      const normalizedStatus = ["COMPLETED", "DELIVERED"].includes(rawStatus)
+        ? "COMPLETED"
+        : ["SHIPPED", "IN_TRANSIT", "OUT_FOR_DELIVERY"].includes(rawStatus)
+          ? "SHIPPED"
+          : ["PAID", "HELD", "PAID_HELD"].includes(rawStatus)
+            ? "PAID_HELD"
+            : rawStatus;
       const fundsState = String(orderData.fundsState || "").toLowerCase();
       if (normalizedStatus === "COMPLETED" || fundsState === "released") {
         return { alreadyCompleted: true, orderAmount: Number(orderData.totalAmount || 0) };
@@ -46,7 +53,7 @@ export async function POST(request: NextRequest) {
         throw new CompletionError("This order has already been refunded and cannot release funds", 409);
       }
 
-      if (!["PENDING", "PAID_HELD", "SHIPPED", "OUT_FOR_DELIVERY"].includes(normalizedStatus)) {
+      if (!["PAID_HELD", "SHIPPED", "OUT_FOR_DELIVERY"].includes(normalizedStatus)) {
         throw new CompletionError(`Order cannot be completed from status ${orderData.status || "unknown"}`, 409);
       }
 

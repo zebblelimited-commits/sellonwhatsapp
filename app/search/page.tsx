@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { MessageCircle, Search, SlidersHorizontal } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
 import ProductCard from "@/components/sections/ProductCard";
@@ -11,6 +11,8 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { getAllSubcategories } from "@/app/dashboard/nigeriaData";
 import Image from "next/image";
+import FollowButton from "@/components/store/FollowButton";
+import { trackMetric } from "@/lib/analytics";
 
 const CATEGORY_OPTIONS = getAllSubcategories();
 const PRICE_SLIDER_MAX = 1000000;
@@ -18,25 +20,38 @@ const PRICE_SLIDER_MAX = 1000000;
 // --- MINI STORE CARD COMPONENT (Matching NewStores design) ---
 const MiniStoreCard = ({ store }: { store: any }) => {
   const filterBlue = "invert(42%) sepia(93%) saturate(1352%) hue-rotate(190deg) brightness(103%) contrast(105%)";
+  const [followerCount, setFollowerCount] = useState(Number(store.followerCount || 0));
+  const storeName = store.storeName || store.name || "Store";
+  const username = store.username || store.id;
+  const directWhatsAppLink = store.whatsappUrl || store.whatsappLink;
+  const rawPhone = store.whatsappNumber || store.whatsappPhone || store.phone || store.phoneNumber || "";
+  const phoneDigits = String(rawPhone).replace(/\D/g, "");
+  const whatsappPhone = phoneDigits.startsWith("0") ? `234${phoneDigits.slice(1)}` : phoneDigits;
+  const whatsappUrl = directWhatsAppLink || (whatsappPhone
+    ? `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(`Hello ${storeName}, I found your store on Sowa.`)}`
+    : `/${username}`);
+  const trackStoreClick = () => { void trackMetric(store.id, "click"); };
+  const trackWhatsAppClick = () => { void trackMetric(store.id, "whatsapp_click"); };
 
   return (
-    <div className="bg-white border border-gray-100 rounded-[24px] shadow-sm overflow-hidden p-3 hover:shadow-md transition-all group cursor-pointer">
+    <div className="bg-white border border-gray-100 rounded-[24px] shadow-sm overflow-hidden p-3 hover:shadow-md transition-all group">
       {/* Banner */}
-      <div className="relative h-24 w-full rounded-xl overflow-hidden">
+      <Link href={`/${username}`} onClick={trackStoreClick} className="relative block h-24 w-full rounded-xl overflow-hidden">
         <Image
-          src={store.bannerUrl || store.coverImage || "/images/placeholder-cover.jpg"}
-          alt={store.storeName || store.name}
+          src={store.bannerUrl || store.coverImage || "/images/placeholder-cover.svg"}
+          alt={storeName}
           fill
           className="object-cover group-hover:scale-105 transition-transform duration-500"
+          sizes="(min-width: 1536px) 18vw, (min-width: 640px) 45vw, 100vw"
         />
-      </div>
+      </Link>
 
       {/* Header with Overlapping Logo */}
       <div className="flex items-start gap-3 px-1 -mt-5 relative z-10">
         <div className="p-0.5 bg-white rounded-full shadow-sm">
           <div className="relative w-12 h-12 rounded-full overflow-hidden border border-gray-50 bg-gray-100">
             <Image
-              src={store.logoUrl || store.logo || "/images/placeholder-logo.png"}
+              src={store.logoUrl || store.logo || "/images/placeholder-logo.svg"}
               className="w-full h-full object-cover"
               alt="logo"
               width={48}
@@ -48,25 +63,31 @@ const MiniStoreCard = ({ store }: { store: any }) => {
         <div className="pt-6 flex-1 min-w-0">
           <div className="flex items-center gap-1">
             <h3 className="font-bold text-sm text-gray-900 leading-tight truncate">
-              {store.storeName || store.name}
+              {storeName}
             </h3>
             {(store.isVerified || store.verified) && (
               <Image src="/icons/badge.svg" width={12} height={12} alt="verified" style={{ filter: filterBlue }} />
             )}
           </div>
-          <p className="text-[10px] text-gray-400 font-medium truncate">@{store.username}</p>
+          <p className="text-[10px] text-gray-400 font-medium truncate">@{username}</p>
         </div>
       </div>
 
-      {/* Price & Action */}
-      <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between">
-        <div>
-          <p className="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Starts from</p>
-          <span className="text-sm font-bold text-gray-900">{store.price || store.startingPrice || "₦0"}</span>
-        </div>
-        <button className="text-[11px] font-bold text-[#00a63e] bg-green-50 px-3 py-1.5 rounded-lg hover:bg-green-100 transition-colors">
+      {/* Store actions */}
+      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-gray-50 pt-3">
+        <a href={whatsappUrl} target={directWhatsAppLink || whatsappPhone ? "_blank" : undefined} rel={directWhatsAppLink || whatsappPhone ? "noopener noreferrer" : undefined} onClick={trackWhatsAppClick} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-green-700">
+          <MessageCircle size={13} /> WhatsApp
+        </a>
+        <Link href={`/${username}`} onClick={trackStoreClick} className="inline-flex items-center justify-center rounded-lg border border-gray-200 px-3 py-2 text-[11px] font-bold text-gray-700 transition hover:bg-gray-50">
           View Store
-        </button>
+        </Link>
+        <div className="col-span-2">
+          <FollowButton
+            vendorId={store.id}
+            currentCount={followerCount}
+            onFollowChange={setFollowerCount}
+          />
+        </div>
       </div>
     </div>
   );
@@ -352,9 +373,10 @@ function SearchResultsContent() {
 
 function RecommendedProduct({ product }: { product: any }) {
   const image = product.images?.[0] || product.imageUrl || product.image;
+  const analyticsStoreId = product.storeId || product.vendorId;
 
   return (
-    <Link href={`/products/${product.id}`} className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3 transition hover:border-green-200 hover:bg-green-50/50">
+    <Link href={`/products/${product.id}`} onClick={() => analyticsStoreId && void trackMetric(analyticsStoreId, "click", { productId: product.id })} className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3 transition hover:border-green-200 hover:bg-green-50/50">
       <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-gray-100">
         {image ? (
           <Image src={image} alt={product.name || "Product"} fill className="object-cover" sizes="56px" />

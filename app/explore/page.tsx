@@ -15,6 +15,7 @@ import { collection, getDocs, query, limit, where } from "firebase/firestore";
 import Header from "@/components/layout/Header";
 // ✅ Import the new Explore-specific card
 import StoreCardExplore from "@/components/sections/StoreCardExplore";
+import { trackMetric } from "@/lib/analytics";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
@@ -208,7 +209,7 @@ function RecommendedStore({ store }: { store: any }) {
   const initials = storeName.slice(0, 2).toUpperCase();
 
   return (
-    <Link href={store.username ? `/${store.username}` : "#"} className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3 transition hover:border-green-200 hover:bg-green-50/50">
+    <Link href={store.username ? `/${store.username}` : "#"} onClick={() => void trackMetric(store.id, "click")} className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3 transition hover:border-green-200 hover:bg-green-50/50">
       <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-green-100">
         {logo ? (
           <Image src={logo} alt={storeName} fill className="object-cover" sizes="48px" />

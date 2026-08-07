@@ -1,15 +1,22 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
-import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp, addDoc, getDocs } from "firebase/firestore";
-import { Package, Truck, CheckCircle, Clock, Info, X, MapPin, Flag, AlertTriangle, MessageSquare, Search } from "lucide-react";
-import Image from "next/image";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { Package, Truck, CheckCircle, Clock, Info, X, Flag, AlertTriangle, MessageSquare, Search } from "lucide-react";
 import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 import { showToast } from "@/lib/toast";
+import { supportChatRequest } from "@/components/chat/chatApi";
 
 export default function OrdersTab({ disputes = [], onDisputeAction }) {
+    const router = useRouter();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [listenerError, setListenerError] = useState("");
+    const [shippingLoading, setShippingLoading] = useState(false);
+    const [chatLoadingOrderId, setChatLoadingOrderId] = useState(null);
+    const [completionLoadingOrderId, setCompletionLoadingOrderId] = useState(null);
     
     // ✅ NEW: Filter and Search State
     const [filter, setFilter] = useState('all');
@@ -18,28 +25,46 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
     // UI State for the shipping form
     const [shippingForm, setShippingForm] = useState({ orderId: null, trackingId: "", carrier: "Zebble Internal" });
     
-    // Dispute modal state
-    const [disputeForm, setDisputeForm] = useState({ 
-        orderId: null, 
-        reason: "item_not_received", 
-        description: "",
-        evidence: [] 
-    });
     const [responseModal, setResponseModal] = useState<any>(null);
     const [responseText, setResponseText] = useState("");
     const [responseLoading, setResponseLoading] = useState(false);
     const [responseError, setResponseError] = useState("");
 
     useEffect(() => {
-        const user = auth.currentUser;
-        if (!user) return;
-        const q = query(collection(db, "orders"), where("vendorId", "==", user.uid));
-        const unsub = onSnapshot(q, (snap) => {
-            const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setOrders(data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
-            setLoading(false);
+        let unsubscribeOrders = () => { };
+        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+            unsubscribeOrders();
+            if (!user) {
+                setOrders([]);
+                setLoading(false);
+                setListenerError("Your seller session has expired. Please sign in again.");
+                return;
+            }
+
+            setLoading(true);
+            setListenerError("");
+            const q = query(collection(db, "orders"), where("vendorId", "==", user.uid));
+            unsubscribeOrders = onSnapshot(q, (snap) => {
+                const data = snap.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() }));
+                data.sort((a, b) => {
+                    const dateA = a.createdAt?.toMillis?.() || (a.createdAt?.seconds || 0) * 1000;
+                    const dateB = b.createdAt?.toMillis?.() || (b.createdAt?.seconds || 0) * 1000;
+                    return dateB - dateA;
+                });
+                setOrders(data);
+                setLoading(false);
+            }, (error) => {
+                console.error("Seller orders listener error:", error);
+                setOrders([]);
+                setLoading(false);
+                setListenerError("Orders could not be loaded. Check your seller permissions and try again.");
+            });
         });
-        return () => unsub();
+
+        return () => {
+            unsubscribeAuth();
+            unsubscribeOrders();
+        };
     }, []);
 
     // 1. Internal ID Generator
@@ -59,24 +84,61 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
 
     // 3. Finalize shipping
     const handleFinalizeShipping = async () => {
-        if (!shippingForm.orderId) return;
+        if (!shippingForm.orderId || shippingLoading) return;
+        setShippingLoading(true);
         try {
-            const orderRef = doc(db, "orders", shippingForm.orderId);
-            await updateDoc(orderRef, {
-                status: "SHIPPED",
-                shippedAt: serverTimestamp(),
-                trackingId: shippingForm.trackingId,
-                carrier: shippingForm.carrier
+            const user = auth.currentUser;
+            if (!user) throw new Error("Your seller session has expired. Please sign in again.");
+            const token = await user.getIdToken();
+            const response = await fetch("/api/orders/ship", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    orderId: shippingForm.orderId,
+                    trackingId: shippingForm.trackingId,
+                    carrier: shippingForm.carrier,
+                }),
             });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "Failed to ship order");
             setShippingForm({ orderId: null, trackingId: "", carrier: "" });
+            showToast("success", result.alreadyShipped ? "This order was already marked as shipped." : "Order marked as in transit.");
         } catch (error) {
             console.error("Error updating order:", error);
+            showToast("error", error instanceof Error ? error.message : "Failed to update shipment.");
+        } finally {
+            setShippingLoading(false);
+        }
+    };
+
+    const handleOpenBuyerChat = async (order) => {
+        if (!order.buyerId || chatLoadingOrderId) {
+            if (!order.buyerId) showToast("error", "This order has no buyer account to chat with.");
+            return;
+        }
+
+        setChatLoadingOrderId(order.id);
+        try {
+            await supportChatRequest("/api/chats", {
+                participantId: order.buyerId,
+                participantRole: "buyer",
+                subject: `Order ${order.id}`,
+            });
+            showToast("success", "Buyer chat opened.");
+            router.push("/dashboard?tab=chat");
+        } catch (error) {
+            console.error("Failed to open buyer chat:", error);
+            showToast("error", error instanceof Error ? error.message : "Could not open buyer chat.");
+        } finally {
+            setChatLoadingOrderId(null);
         }
     };
 
     // Mark order as completed and release funds from escrow
     const handleMarkAsCompleted = async (orderId: string) => {
+        if (completionLoadingOrderId) return;
         if (!confirm("Mark this order as delivered? The funds will be released to your available balance for withdrawal.")) return;
+        setCompletionLoadingOrderId(orderId);
         try {
             const user = auth.currentUser;
             if (!user) return;
@@ -95,50 +157,8 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
         } catch (error: any) {
             console.error(error);
             showToast("error", error.message || 'Failed to update order.');
-        }
-    };
-
-    // Open dispute form
-    const openDisputeForm = (order) => {
-        setDisputeForm({
-            orderId: order.id,
-            reason: "item_not_received",
-            description: "",
-            evidence: []
-        });
-    };
-
-    // Submit dispute to Firestore
-    const handleSubmitDispute = async () => {
-        if (!disputeForm.orderId || !auth.currentUser) return;
-        try {
-            const order = orders.find(o => o.id === disputeForm.orderId);
-            if (!order) throw new Error("Order not found");
-
-            await addDoc(collection(db, "disputes"), {
-                orderId: disputeForm.orderId,
-                vendorId: order.vendorId,
-                buyerId: order.buyerId,
-                reason: disputeForm.reason,
-                description: disputeForm.description,
-                evidence: disputeForm.evidence,
-                status: "open",
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                read: false,
-                vendorResponded: false
-            });
-
-            const orderRef = doc(db, "orders", disputeForm.orderId);
-            await updateDoc(orderRef, {
-                status: "DISPUTED",
-                disputedAt: serverTimestamp()
-            });
-
-            onDisputeAction?.("dispute_opened", { orderId: disputeForm.orderId });
-            setDisputeForm({ orderId: null, reason: "item_not_received", description: "", evidence: [] });
-        } catch (error) {
-            console.error("Error creating dispute:", error);
+        } finally {
+            setCompletionLoadingOrderId(null);
         }
     };
 
@@ -186,16 +206,26 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
 
     // Helper: Get active dispute for an order
     const getOrderDispute = (orderId) => {
-        return disputes?.find(d => d.orderId === orderId && ['open', 'under_review'].includes(d.status));
+        return disputes?.find(d => d.orderId === orderId && ['open', 'under_review'].includes(String(d.status || "").toLowerCase()));
     };
+
+    const canonicalStatus = (value) => {
+        const status = String(value || "").toUpperCase();
+        if (["PAID", "HELD", "PAID_HELD"].includes(status)) return "PAID_HELD";
+        if (["SHIPPED", "IN_TRANSIT", "OUT_FOR_DELIVERY"].includes(status)) return "SHIPPED";
+        if (["COMPLETED", "DELIVERED"].includes(status)) return "COMPLETED";
+        return status;
+    };
+
+    const normalizedOrderStatus = (order) => canonicalStatus(order.status);
 
     // ✅ NEW: Filter and Search Logic
     const filteredOrders = useMemo(() => {
         let result = orders;
         
-        if (filter === 'escrow') result = result.filter(o => o.status === 'PAID_HELD');
-        else if (filter === 'transit') result = result.filter(o => o.status === 'SHIPPED');
-        else if (filter === 'completed') result = result.filter(o => o.status === 'COMPLETED');
+        if (filter === 'escrow') result = result.filter(o => normalizedOrderStatus(o) === 'PAID_HELD');
+        else if (filter === 'transit') result = result.filter(o => normalizedOrderStatus(o) === 'SHIPPED');
+        else if (filter === 'completed') result = result.filter(o => normalizedOrderStatus(o) === 'COMPLETED');
         else if (filter === 'disputes') result = result.filter(o => getOrderDispute(o.id));
         
         if (searchQuery) {
@@ -210,9 +240,10 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
         }
         
         return result;
-    }, [orders, filter, searchQuery, disputes]);
+    }, [orders, filter, searchQuery, disputes, getOrderDispute, normalizedOrderStatus]);
 
     const getStatusStyle = (status, hasDispute) => {
+        status = canonicalStatus(status);
         if (hasDispute) return "bg-red-50 text-red-600 border-red-100";
         switch (status) {
             case "PAID_HELD": return "bg-orange-50 text-orange-600 border-orange-100";
@@ -224,6 +255,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
     };
 
     const getStatusIcon = (status, hasDispute) => {
+        status = canonicalStatus(status);
         if (hasDispute) return <AlertTriangle size={14} />;
         if (status === "PAID_HELD") return <Clock size={14} />;
         if (status === "SHIPPED") return <Truck size={14} />;
@@ -232,10 +264,11 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
     };
 
     const getStatusLabel = (status, hasDispute) => {
+        status = canonicalStatus(status);
         if (hasDispute) return "Disputed";
         if (status === "PAID_HELD") return "Escrow";
-        if (status === "SHIPPED") return "Transit";
-        if (status === "COMPLETED") return "Done";
+        if (status === "SHIPPED") return "In Transit";
+        if (status === "COMPLETED") return "Completed";
         return status.replace("_", " ");
     };
 
@@ -276,60 +309,10 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
                             </div>
                             <button 
                                 onClick={handleFinalizeShipping}
-                                className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-bold text-sm shadow-lg shadow-green-100 transition-all active:scale-[0.98] mt-4"
+                                disabled={shippingLoading || !shippingForm.trackingId.trim() || !shippingForm.carrier.trim()}
+                                className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm shadow-lg shadow-green-100 transition-all active:scale-[0.98] mt-4"
                             >
-                                Confirm Shipment
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* DISPUTE MODAL */}
-            {disputeForm.orderId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in zoom-in duration-200">
-                    <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl border border-gray-100">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-black text-gray-900 flex items-center gap-2">
-                                <Flag size={20} className="text-red-600" /> Report Issue
-                            </h3>
-                            <button onClick={() => setDisputeForm({ ...disputeForm, orderId: null })} className="p-2 bg-gray-50 rounded-full text-gray-400 hover:text-gray-900">
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Reason</label>
-                                <select 
-                                    className="w-full mt-1 p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                    value={disputeForm.reason}
-                                    onChange={(e) => setDisputeForm({...disputeForm, reason: e.target.value})}
-                                >
-                                    <option value="item_not_received">Item Not Received</option>
-                                    <option value="damaged">Item Damaged</option>
-                                    <option value="wrong_item">Wrong Item Sent</option>
-                                    <option value="not_as_described">Not As Described</option>
-                                    <option value="other">Other</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Description</label>
-                                <textarea 
-                                    className="w-full mt-1 p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-red-500/20 min-h-[100px]"
-                                    placeholder="Describe the issue in detail..."
-                                    value={disputeForm.description}
-                                    onChange={(e) => setDisputeForm({...disputeForm, description: e.target.value})}
-                                />
-                            </div>
-                            <div className="text-[10px] text-gray-400 bg-gray-50 p-3 rounded-xl">
-                                💡 <strong>Tip:</strong> Attach screenshots or tracking info in the next step. Funds are held securely in escrow until resolved.
-                            </div>
-                            <button 
-                                onClick={handleSubmitDispute}
-                                disabled={!disputeForm.description.trim()}
-                                className="w-full py-4 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm shadow-lg shadow-red-100 transition-all active:scale-[0.98] mt-4 flex items-center justify-center gap-2"
-                            >
-                                <Flag size={16} /> Submit Dispute
+                                {shippingLoading ? "Updating…" : "Confirm Shipment"}
                             </button>
                         </div>
                     </div>
@@ -337,6 +320,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
             )}
 
             {/* ✅ NEW: FILTERS & SEARCH BAR (Sticky) */}
+            {listenerError && <div className="rounded-2xl border border-red-100 bg-red-50 p-3 text-xs font-bold text-red-700">{listenerError}</div>}
             <div className="flex flex-col sm:flex-row gap-3 sticky top-0 z-20 bg-[#fafafa] py-2 -mx-2 px-2 border-b border-gray-100">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
@@ -373,7 +357,11 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
 
             {/* ✅ NEW: COMPACT 2-COLUMN GRID LAYOUT */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {filteredOrders.length === 0 && !loading ? (
+                {loading ? (
+                    <div className="col-span-full grid gap-3 md:grid-cols-2">
+                        {[1, 2, 3, 4].map((item) => <div key={item} className="h-40 animate-pulse rounded-2xl bg-white border border-gray-100" />)}
+                    </div>
+                ) : filteredOrders.length === 0 ? (
                     <div className="col-span-full text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
                         <Package className="mx-auto text-gray-200 mb-4" size={48} />
                         <p className="text-gray-400 font-bold text-sm">
@@ -384,6 +372,8 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
                     filteredOrders.map((order) => {
                         const dispute = getOrderDispute(order.id);
                         const hasDispute = !!dispute;
+                        const orderStatus = normalizedOrderStatus(order);
+                        const customerPhone = order.customerPhone || order.buyerPhone || order.phone || "";
                         return (
                             <div key={order.id} className={`bg-white p-4 rounded-2xl border shadow-sm transition-all hover:shadow-md ${hasDispute ? 'border-red-200 ring-1 ring-red-100' : 'border-gray-100'}`}>
                                 {/* Row 1: ID and Status */}
@@ -435,39 +425,47 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
 
                                 {/* Row 4: Actions */}
                                 <div className="flex items-center gap-2">
-                                    <a 
-                                        href={`https://wa.me/${order.customerPhone?.replace(/\D/g, '')}`} 
-                                        target="_blank" rel="noopener noreferrer"
-                                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#25D366] hover:bg-[#20ba5a] text-white rounded-xl text-[10px] font-bold transition-all"
-                                    >
-                                        <MessageSquare size={12} /> Chat
-                                    </a>
+                                    {customerPhone ? (
+                                        <a
+                                            href={`https://wa.me/${customerPhone.replace(/\D/g, '')}`}
+                                            target="_blank" rel="noopener noreferrer"
+                                            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#25D366] hover:bg-[#20ba5a] text-white rounded-xl text-[10px] font-bold transition-all"
+                                        >
+                                            <MessageSquare size={12} /> WhatsApp
+                                        </a>
+                                    ) : (
+                                        <button
+                                            onClick={() => void handleOpenBuyerChat(order)}
+                                            disabled={chatLoadingOrderId !== null}
+                                            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#25D366] hover:bg-[#20ba5a] disabled:opacity-60 text-white rounded-xl text-[10px] font-bold transition-all"
+                                        >
+                                            <MessageSquare size={12} /> {chatLoadingOrderId === order.id ? "Opening…" : "Chat"}
+                                        </button>
+                                    )}
                                     
                                     {hasDispute ? (
                                         <div className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[9px] font-bold ${getStatusStyle(order.status, true)}`}>
                                             <Flag size={10} /> Reviewing
                                         </div>
-                                    ) : order.status === "PAID_HELD" ? (
+                                    ) : orderStatus === "PAID_HELD" ? (
                                         <button 
                                             onClick={() => openShippingForm(order.id)}
                                             className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-gray-900 hover:bg-black text-white rounded-xl text-[10px] font-bold transition-all"
                                         >
                                             <Truck size={12} /> Ship
                                         </button>
-                                    ) : order.status === "SHIPPED" ? (
+                                    ) : ["SHIPPED", "OUT_FOR_DELIVERY"].includes(orderStatus) ? (
                                         <button 
                                             onClick={() => handleMarkAsCompleted(order.id)}
-                                            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-[10px] font-bold transition-all"
+                                            disabled={completionLoadingOrderId !== null}
+                                            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white rounded-xl text-[10px] font-bold transition-all"
                                         >
-                                            <CheckCircle size={12} /> Delivered
+                                            <CheckCircle size={12} /> {completionLoadingOrderId === order.id ? "Updating…" : "Delivered"}
                                         </button>
-                                    ) : order.status === "COMPLETED" ? (
-                                        <button 
-                                            onClick={() => openDisputeForm(order)}
-                                            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-xl text-[10px] font-bold transition-all"
-                                        >
-                                            <Flag size={12} /> Issue
-                                        </button>
+                                    ) : orderStatus === "COMPLETED" ? (
+                                        <div className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-green-100 bg-green-50 text-green-700 text-[10px] font-bold">
+                                            <CheckCircle size={12} /> Completed
+                                        </div>
                                     ) : (
                                         <div className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[9px] font-bold ${getStatusStyle(order.status, false)}`}>
                                             <Info size={10} /> {order.status}

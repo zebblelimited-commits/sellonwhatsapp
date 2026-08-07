@@ -798,7 +798,7 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
     const unsub = onSnapshot(q, (snap) => {
       setChats(snap.docs.map(d => {
         const data = d.data();
-        return { id: d.id, ...data, userName: data.userName || data.buyerName || data.storeName || "Support user", userEmail: data.userEmail || data.buyerEmail || "", userRole: data.userRole || (data.vendorId ? "vendor" : "buyer"), unreadCount: data.unreadBy?.admin ?? data.unreadCount ?? 0 };
+        return { id: d.id, ...data, userName: data.userName || data.buyerName || data.storeName || data.username || data.name || data.userEmail || data.contactPhone || "Support user", userEmail: data.userEmail || data.buyerEmail || data.email || "", userPhone: data.userPhone || data.buyerPhone || data.contactPhone || data.whatsappNumber || data.phone || "", userRole: data.userRole || (data.vendorId ? "vendor" : "buyer"), unreadCount: data.unreadBy?.admin ?? data.unreadCount ?? 0 };
       }));
       setListenerError("");
     }, (error) => {
@@ -913,7 +913,7 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
                     <span className="text-[9px] text-gray-400 whitespace-nowrap">{formatTime(chat.lastMessageAt)}</span>
                   </div>
                   <div className="flex items-center justify-between mt-0.5">
-                    <p className="text-[10px] text-gray-500 truncate">{chat.lastMessage || "No messages yet"}</p>
+                    <div className="min-w-0"><p className="text-[10px] text-gray-500 truncate">{chat.userPhone ? `WhatsApp: ${chat.userPhone}` : chat.userEmail || "Contact not provided"}</p><p className="text-[10px] text-gray-400 truncate">{chat.lastMessage || "No messages yet"}</p></div>
                     <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase ${
                       chat.userRole === "vendor" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
                     }`}>
@@ -944,7 +944,8 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
               </div>
               <div className="flex-1">
                 <p className="font-bold text-sm text-gray-900">{selectedChat.userName}</p>
-                <p className="text-[10px] text-gray-400">{selectedChat.userEmail} • {selectedChat.userRole}</p>
+                <p className="text-[10px] text-gray-500">{selectedChat.userPhone ? `WhatsApp: ${selectedChat.userPhone}` : selectedChat.userEmail || "Contact not provided"} • {selectedChat.userRole}</p>
+                {selectedChat.userPhone && selectedChat.userEmail && <p className="text-[10px] text-gray-400">{selectedChat.userEmail}</p>}
               </div>
               <button className="p-2 hover:bg-gray-50 rounded-lg"><Phone size={18} className="text-gray-400" /></button>
               <button className="p-2 hover:bg-gray-50 rounded-lg"><MoreVertical size={18} className="text-gray-400" /></button>

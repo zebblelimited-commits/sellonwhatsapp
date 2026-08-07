@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Store logo placeholder">
+  <rect width="128" height="128" rx="28" fill="#dcfce7"/>
+  <path d="M34 57h60v43H34zM27 57l37-30 37 30" fill="none" stroke="#15803d" stroke-width="8" stroke-linejoin="round"/>
+  <circle cx="64" cy="76" r="7" fill="#15803d"/>
+</svg>

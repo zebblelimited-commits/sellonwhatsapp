@@ -31,7 +31,9 @@ interface OrderDocument {
     storeUsername: string | null;
     storeName: string | null;
     productName: string;
-    status: "PAID_HELD";
+    productImage: string | null;
+    status: "PENDING_PAYMENT";
+    paymentStatus: "pending";
     totalAmount: number;
     deliveryFee: number;
     quantity: number;
@@ -168,16 +170,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
 
         // --- STAGE 3: NOMBA AUTHENTICATION ---
-        const BASE_URL: string = process.env.NOMBA_SANDBOX_URL
-            ? `${process.env.NOMBA_SANDBOX_URL}/v1`
-            : "https://sandbox.nomba.com/v1";
+        const nombaOrigin = process.env.NOMBA_SANDBOX_URL || "https://sandbox.nomba.com";
+        const isSandbox = Boolean(process.env.NOMBA_SANDBOX_URL) || process.env.NEXT_PUBLIC_ENVIRONMENT === "sandbox";
+        const authBaseUrl = `${nombaOrigin}/v1`;
+        // This sandbox account previously worked with /v1/checkout/order.
+        // Keep that route first and fall back to the newer sandbox path when
+        // the account/API version supports it.
+        const checkoutBaseUrls = isSandbox
+            ? [`${nombaOrigin}/v1`, `${nombaOrigin}/sandbox`]
+            : [`${nombaOrigin}/v1`];
 
-        console.log('🔵 Connecting to Nomba:', BASE_URL);
+        console.log('🔵 Connecting to Nomba:', checkoutBaseUrls[0]);
 
         // Get Nomba auth token
         let authRes: Response;
         try {
-            authRes = await fetchWithRetry(`${BASE_URL}/auth/token/issue`, {
+            authRes = await fetchWithRetry(`${authBaseUrl}/auth/token/issue`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -238,40 +246,45 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
         // --- STAGE 5: CREATE NOMBA CHECKOUT ORDER ---
         let orderRes: Response;
-        try {
-            orderRes = await fetchWithRetry(`${BASE_URL}/checkout/order`, {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "accountId": process.env.NOMBA_ACCOUNT_ID!,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    order: {
-                        orderReference,
-                        amount: totalAmount.toFixed(2),
-                        currency: "NGN",
-                        callbackUrl: callbackUrl,
-                        customerEmail: customerEmail || "customer@zebble.com",
-                        description: isBooking
-                            ? `Booking: ${productName} (${bookingDate} ${bookingSlot})`
-                            : `Order: ${productName}`,
-                        allowedPaymentMethods: [paymentMethod || "Card", "Transfer"],
-                        metaData: {
-                            isBooking: !!isBooking,
-                            slotId: slotId,
-                            productId: productId,
-                            storeId: storeId,
-                            buyerId: buyerId,
-                            storeUsername: storeUsername || null,
-                            storeName: storeName || null,
-                            productName: productName,
-                            bookingDate: bookingDate || null,
-                            bookingSlot: bookingSlot || null
-                        }
+        const checkoutRequest: RequestInit = {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${token}`,
+                "accountId": process.env.NOMBA_ACCOUNT_ID!,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                order: {
+                    orderReference,
+                    amount: totalAmount.toFixed(2),
+                    currency: "NGN",
+                    callbackUrl: callbackUrl,
+                    customerEmail: customerEmail || "customer@zebble.com",
+                    description: isBooking
+                        ? `Booking: ${productName} (${bookingDate} ${bookingSlot})`
+                        : `Order: ${productName}`,
+                    allowedPaymentMethods: [paymentMethod || "Card", "Transfer"],
+                    metaData: {
+                        isBooking: !!isBooking,
+                        slotId: slotId,
+                        productId: productId,
+                        storeId: storeId,
+                        buyerId: buyerId,
+                        storeUsername: storeUsername || null,
+                        storeName: storeName || null,
+                        productName: productName,
+                        bookingDate: bookingDate || null,
+                        bookingSlot: bookingSlot || null
                     }
-                }),
-            });
+                }
+            }),
+        };
+        try {
+            orderRes = await fetchWithRetry(`${checkoutBaseUrls[0]}/checkout/order`, checkoutRequest);
+            if (!orderRes.ok && orderRes.status === 404 && checkoutBaseUrls.length > 1) {
+                console.warn("⚠️ Primary Nomba checkout route returned 404; trying sandbox checkout route.");
+                orderRes = await fetchWithRetry(`${checkoutBaseUrls[1]}/checkout/order`, checkoutRequest);
+            }
         } catch (fetchError: any) {
             console.error("❌ Failed to create Nomba order:", fetchError.message);
             return NextResponse.json(
@@ -313,6 +326,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 }
 
                 // 6.2: Create the main order record with ALL required fields
+                const productSnap = await adminDb.collection("products").doc(productId).get().catch(() => null);
+                const productData = productSnap?.data() || {};
+                const productImages = Array.isArray(productData.images) ? productData.images : [];
+                const productImage = String(productImages[0] || productData.imageUrl || productData.image || "") || null;
+
                 const orderDoc: OrderDocument = {
                     orderId: orderReference,
                     buyerId: buyerId,
@@ -321,7 +339,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     storeUsername: storeUsername || null,
                     storeName: storeName || null,
                     productName: productName || "Unknown Product",
-                    status: "PAID_HELD",  // Must start as PAID_HELD for escrow flow
+                    productImage,
+                    status: "PENDING_PAYMENT",
+                    paymentStatus: "pending",
                     totalAmount: totalAmount,
                     deliveryFee: Number(deliveryFee || 0),
                     quantity: Number(quantity || 1),

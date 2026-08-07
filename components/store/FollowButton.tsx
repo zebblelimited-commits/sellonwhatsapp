@@ -13,6 +13,7 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { trackMetric } from "@/lib/analytics";
 
 // ✅ Added Props Interface for Parent-Child Communication
 interface FollowButtonProps {
@@ -77,6 +78,7 @@ export default function FollowButton({ vendorId, currentCount, onFollowChange }:
     }
 
     setActionLoading(true);
+    void trackMetric(vendorId, "click");
 
     const followDocId = `${user.uid}_${vendorId}`;
     const followRef = doc(db, "follows", followDocId);

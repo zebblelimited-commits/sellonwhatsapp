@@ -52,7 +52,7 @@ export default function BuyerDashboard() {
     totalOrders: 0,
     pendingDeliveries: 0,
     totalSpent: 0,
-    favoriteStores: 0
+    followedStores: 0
   });
 
   const handleLogout = async () => {
@@ -69,6 +69,7 @@ export default function BuyerDashboard() {
     let unsubscribeOrders = () => { };
     let unsubscribeNotifications = () => { };
     let unsubscribeChats = () => { };
+    let unsubscribeFollows = () => { };
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -144,12 +145,26 @@ export default function BuyerDashboard() {
                 .filter(o => o.status === "COMPLETED")
                 .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
-              setDashboardStats({
+              setDashboardStats((current) => ({
+                ...current,
                 totalOrders,
                 pendingDeliveries,
                 totalSpent,
-                favoriteStores: userData?.favoriteStores?.length || 0
-              });
+              }));
+            }
+          );
+
+          unsubscribeFollows = onSnapshot(
+            query(collection(db, "follows"), where("followerId", "==", user.uid)),
+            (snapshot) => {
+              setDashboardStats((current) => ({
+                ...current,
+                followedStores: snapshot.size,
+              }));
+            },
+            (error) => {
+              console.error("Buyer followed stores listener error:", error);
+              setDashboardStats((current) => ({ ...current, followedStores: 0 }));
             }
           );
 
@@ -194,6 +209,7 @@ export default function BuyerDashboard() {
       unsubscribeOrders();
       unsubscribeNotifications();
       unsubscribeChats();
+      unsubscribeFollows();
     };
   }, [router]);
 
@@ -480,7 +496,7 @@ function NavItem({ icon, label, active, onClick, badge = null, href }: {
 // ═══════════════════════════════════════════════════════════
 function BuyerHome({ userData, stats, buyerDisputeStats, onExploreClick, onViewOrders, onViewDisputes }: {
   userData: any;
-  stats: { totalOrders: number; pendingDeliveries: number; totalSpent: number; favoriteStores: number };
+  stats: { totalOrders: number; pendingDeliveries: number; totalSpent: number; followedStores: number };
   buyerDisputeStats: { open: number; total: number };
   onExploreClick: () => void;
   onViewOrders: () => void;
@@ -499,23 +515,44 @@ function BuyerHome({ userData, stats, buyerDisputeStats, onExploreClick, onViewO
       return;
     }
 
+    let active = true;
     const unsub = onSnapshot(
       query(collection(db, "orders"), where("buyerId", "==", user.uid), orderBy("createdAt", "desc"), limit(5)),
       (snapshot) => {
-        const orders = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate?.() || new Date()
-        }));
-        setRecentOrders(orders);
-        setLoadingOrders(false);
+        void Promise.all(snapshot.docs.map(async (orderDoc) => {
+          const data = orderDoc.data();
+          let productImage = data.productImage || data.imageUrl || data.image || (Array.isArray(data.images) ? data.images[0] : "");
+
+          if (!productImage && data.productId) {
+            const productSnap = await getDoc(doc(db, "products", String(data.productId))).catch(() => null);
+            const productData = productSnap?.data() || {};
+            productImage = productData.images?.[0] || productData.imageUrl || productData.image || "";
+          }
+
+          return {
+            id: orderDoc.id,
+            ...data,
+            productImage,
+            createdAt: data.createdAt?.toDate?.() || new Date(),
+          };
+        })).then((orders) => {
+          if (!active) return;
+          setRecentOrders(orders);
+          setLoadingOrders(false);
+        }).catch((error) => {
+          console.error("Order image hydration failed:", error);
+          if (active) setLoadingOrders(false);
+        });
       },
       (error) => {
         console.error("Orders listener error:", error);
         setLoadingOrders(false);
       }
     );
-    return () => unsub();
+    return () => {
+      active = false;
+      unsub();
+    };
   }, []);
 
   const fetchRecommendedStores = useCallback(async () => {
@@ -610,7 +647,7 @@ function BuyerHome({ userData, stats, buyerDisputeStats, onExploreClick, onViewO
         <StatCard icon={<ShoppingBag size={20} />} label="Total Orders" value={stats.totalOrders.toLocaleString()} trend={stats.totalOrders > 0 ? "+ Active" : "Get started"} color="green" />
         <StatCard icon={<Truck size={20} />} label="In Transit" value={stats.pendingDeliveries.toLocaleString()} trend={stats.pendingDeliveries > 0 ? "Track now" : "No pending"} color="blue" onClick={stats.pendingDeliveries > 0 ? onViewOrders : undefined} />
         <StatCard icon={<CreditCard size={20} />} label="Total Spent" value={formatCurrency(stats.totalSpent)} trend="All time" color="purple" />
-        <StatCard icon={<Star size={20} />} label="Favorite Stores" value={stats.favoriteStores.toLocaleString()} trend="Saved" color="orange" />
+        <StatCard icon={<Star size={20} />} label="Followed Stores" value={stats.followedStores.toLocaleString()} trend="Following" color="orange" />
       </div>
 
       <div className="bg-white rounded-[32px] border border-gray-100 p-6 shadow-sm">
@@ -633,23 +670,18 @@ function BuyerHome({ userData, stats, buyerDisputeStats, onExploreClick, onViewO
           <div className="space-y-3">
             {recentOrders.map((order) => {
               const { label, icon: StatusIcon, color } = getStatusConfig(order.status);
+              const productImage = order.productImage || order.imageUrl || order.image || order.images?.[0];
               return (
                 <Link key={order.id} href={`/${order.storeUsername || order.storeId}`} className="flex items-center gap-4 p-4 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-colors group">
                   <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center overflow-hidden border border-gray-100">
-                    {order.productImage ? (
+                    {productImage ? (
                       <Image
-                        src={order.productImage}
-                        alt={order.productName}
+                        src={productImage}
+                        alt={order.productName || "Ordered product"}
                         width={64}
                         height={64}
                         className="w-full h-full object-cover"
                         priority={recentOrders.indexOf(order) < 2}
-                        onLoad={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.opacity = '1';
-                          target.style.transition = 'opacity 0.2s ease-in';
-                        }}
-                        style={{ opacity: 0 }}
                       />
                     ) : (
                       <ShoppingBag size={24} className="text-gray-300" />

@@ -19,6 +19,7 @@ class WithdrawalError extends Error {
 
 function isConnectFailure(error: unknown) {
   if (!(error instanceof Error)) return false;
+  if (error.name === "AbortError") return true;
   const cause = (error as Error & { cause?: { code?: string } }).cause;
   return ["UND_ERR_CONNECT_TIMEOUT", "ECONNREFUSED", "ENETUNREACH", "EAI_AGAIN"].includes(cause?.code || "");
 }
@@ -27,8 +28,47 @@ function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function nombaUrl(baseUrl: string, path: string) {
+  const base = baseUrl.replace(/\/+$/, "");
+  const normalizedPath = path.replace(/^\/+/, "");
+  if (base.endsWith("/v1") && normalizedPath.startsWith("v1/")) {
+    return `${base}/${normalizedPath.slice(3)}`;
+  }
+  return `${base}/${normalizedPath}`;
+}
+
+function getNombaConfig() {
+  const authUrl = process.env.NOMBA_AUTH_URL?.trim();
+  // Keep sandbox as the current default, but allow production to be selected
+  // explicitly without changing the withdrawal code.
+  const apiUrl = process.env.NOMBA_API_URL?.trim() || process.env.NOMBA_SANDBOX_URL?.trim() || "https://api.nomba.com";
+  const accountId = process.env.NOMBA_ACCOUNT_ID?.trim();
+  const clientId = process.env.NOMBA_CLIENT_ID?.trim();
+  const clientSecret = process.env.NOMBA_CLIENT_SECRET?.trim();
+
+  if (!authUrl || !accountId || !clientId || !clientSecret) {
+    throw new WithdrawalError("Payout provider configuration is incomplete. Please contact support.", 503, true);
+  }
+
+  return { authUrl, apiUrl, accountId, clientId, clientSecret };
+}
+
+async function readProviderResponse(response: Response): Promise<Record<string, unknown>> {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return recordValue(JSON.parse(text));
+  } catch {
+    return { message: text.slice(0, 500) };
+  }
+}
+
 function providerReferenceFrom(result: Record<string, unknown>, data: Record<string, unknown>) {
+  const meta = recordValue(data.meta);
   for (const value of [
+    data.id,
+    meta.merchantTxRef,
+    meta.rrn,
     data.reference,
     data.transferReference,
     data.transactionReference,
@@ -58,19 +98,56 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 1
   }
 }
 
-async function getNombaToken() {
-  const response = await fetchWithTimeout(`${process.env.NOMBA_AUTH_URL}/v1/auth/token/issue`, {
+async function getNombaToken(config: ReturnType<typeof getNombaConfig>) {
+  const response = await fetchWithTimeout(nombaUrl(config.authUrl, "/v1/auth/token/issue"), {
     method: "POST",
-    headers: { "Content-Type": "application/json", accountId: process.env.NOMBA_ACCOUNT_ID || "" },
+    headers: { "Content-Type": "application/json", accountId: config.accountId },
     body: JSON.stringify({
       grant_type: "client_credentials",
-      client_id: process.env.NOMBA_CLIENT_ID,
-      client_secret: process.env.NOMBA_CLIENT_SECRET,
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
     }),
   });
-  const result = await response.json();
-  if (!response.ok || !result?.data?.access_token) throw new WithdrawalError("Failed to authenticate with Nomba");
-  return result.data.access_token as string;
+  const result = await readProviderResponse(response);
+  const data = recordValue(result.data);
+  const accessToken = data.access_token;
+  if (!response.ok || typeof accessToken !== "string" || !accessToken) {
+    const providerMessage = typeof result.description === "string" ? result.description : "Failed to authenticate with Nomba";
+    throw new WithdrawalError(providerMessage, 503, true);
+  }
+  return accessToken;
+}
+
+async function lookupBankAccount(
+  token: string,
+  config: ReturnType<typeof getNombaConfig>,
+  bankCode: string,
+  accountNumber: string,
+) {
+  const response = await fetchWithTimeout(nombaUrl(config.apiUrl, "/v1/transfers/bank/lookup"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      accountId: config.accountId,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ accountNumber, bankCode }),
+  }, 12000);
+  const result = await readProviderResponse(response);
+  const data = recordValue(result.data);
+  const providerMessage = typeof result.description === "string"
+    ? result.description
+    : typeof result.message === "string" ? result.message : "Unable to verify the bank account";
+  const accountName = typeof data.accountName === "string" ? data.accountName.trim() : "";
+
+  if (!response.ok || !accountName) {
+    throw new WithdrawalError(`Bank account verification failed: ${providerMessage}`, 400, true);
+  }
+
+  return {
+    accountName,
+    accountNumber: typeof data.accountNumber === "string" && data.accountNumber.trim() ? data.accountNumber.trim() : accountNumber,
+  };
 }
 
 async function refundReservation(storeId: string, payoutRef: DocumentReference, reason: string) {
@@ -140,6 +217,7 @@ export async function POST(request: NextRequest) {
     const transferRef = `PAYOUT_${storeId}_${idempotencyKey}`;
     payoutRef = adminDb.collection("payouts").doc(transferRef);
     const storeRef = adminDb.collection("stores").doc(storeId);
+    const nombaConfig = getNombaConfig();
 
     // Reserve the gross amount and create the payout record atomically.
     // A second click cannot pass this check after the first request reserves funds.
@@ -245,10 +323,25 @@ export async function POST(request: NextRequest) {
 
     let nombaToken: string;
     try {
-      nombaToken = await getNombaToken();
+      nombaToken = await getNombaToken(nombaConfig);
     } catch {
       throw new WithdrawalError("The payout provider is temporarily unavailable. Please try again shortly.", 503, true);
     }
+
+    // Nomba requires account resolution before a bank transfer. Use the verified
+    // account name in the transfer payload instead of trusting manually entered text.
+    const verifiedAccount = await lookupBankAccount(
+      nombaToken,
+      nombaConfig,
+      String(reservation.payoutSettings.bankCode),
+      String(reservation.payoutSettings.accountNumber),
+    );
+    await payoutRef.update({
+      accountName: verifiedAccount.accountName,
+      accountNumber: verifiedAccount.accountNumber,
+      accountVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
 
     transferAttempted = true;
     await payoutRef.update({
@@ -256,25 +349,26 @@ export async function POST(request: NextRequest) {
       nombaReference: transferRef,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    const transferResponse = await fetchWithTimeout(`${process.env.NOMBA_SANDBOX_URL}/v1/transfers`, {
+    const transferResponse = await fetchWithTimeout(nombaUrl(nombaConfig.apiUrl, "/v2/transfers/bank"), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${nombaToken}`,
-        accountId: process.env.NOMBA_ACCOUNT_ID || "",
+        accountId: nombaConfig.accountId,
+        "X-Idempotent-key": transferRef,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        amount: reservation.netPayout.toFixed(2),
-        reference: transferRef,
+        amount: Number(reservation.netPayout.toFixed(2)),
+        merchantTxRef: transferRef,
+        senderName: "Zebble Marketplace",
         narration: "Zebble Store Payout",
         bankCode: reservation.payoutSettings.bankCode,
-        accountNumber: reservation.payoutSettings.accountNumber,
-        accountName: reservation.payoutSettings.accountName,
-        currency: "NGN",
+        accountNumber: verifiedAccount.accountNumber,
+        accountName: verifiedAccount.accountName,
       }),
     }, 15000);
 
-    const transferResult = await transferResponse.json() as Record<string, unknown>;
+    const transferResult = await readProviderResponse(transferResponse);
     const transferData = recordValue(transferResult.data);
     const providerReference = providerReferenceFrom(transferResult, transferData);
     const providerStatus = providerStatusFrom(transferResult, transferData);
@@ -295,6 +389,10 @@ export async function POST(request: NextRequest) {
       throw new WithdrawalError(providerMessage || "Gateway rejected transfer", 400, true);
     }
 
+    if (["REFUND", "REFUNDED", "FAILED", "DECLINED", "REJECTED", "CANCELLED"].includes(providerStatus.toUpperCase())) {
+      throw new WithdrawalError(providerMessage || `Nomba returned ${providerStatus}`, 400, true);
+    }
+
     await payoutRef.update({
       status: "processing",
       nombaReference: transferRef,
@@ -313,7 +411,10 @@ export async function POST(request: NextRequest) {
     let reservationRefunded = false;
     let reservationRefundError: unknown = null;
 
-    if (payoutRef && (!transferAttempted || (error instanceof WithdrawalError && error.safeToRefund) || safeTransportFailure)) {
+    // Before the transfer request, a failed auth/lookup can be safely refunded.
+    // Once the transfer request has started, a timeout is ambiguous: Nomba may
+    // have accepted it. Keep the payout processing and reconcile by webhook.
+    if (payoutRef && (!transferAttempted || (error instanceof WithdrawalError && error.safeToRefund && !safeTransportFailure))) {
       try {
         await refundReservation(
           storeId,

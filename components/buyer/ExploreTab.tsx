@@ -1,21 +1,29 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Image from "next/image";
-import Link from "next/link";
 import { 
-  Search, MapPin, Star, MessageCircle, 
-  LayoutGrid, Users,
+  Search,
+  LayoutGrid,
   Smartphone, Shirt, Utensils, Sparkles, Bike, X,
   Home, Cpu, HeartPulse, Car
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, limit, where } from "firebase/firestore";
-import FollowButton from "@/components/store/FollowButton";
+import StoreCardExplore from "@/components/sections/StoreCardExplore";
+
+interface ExploreTabProps {
+  isFilterOpen: boolean;
+  setIsFilterOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+interface ExploreStore {
+  id: string;
+  [key: string]: unknown;
+}
 
 // Accept isFilterOpen and setIsFilterOpen as props from Dashboard
-export function ExploreTab({ isFilterOpen, setIsFilterOpen }) {
-  const [stores, setStores] = useState([]);
+export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
+  const [stores, setStores] = useState<ExploreStore[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("All");
   
@@ -88,7 +96,7 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }) {
       {/* Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {loading ? [1,2,3,4].map(i => <StoreSkeleton key={i} />) : stores.map((store) => (
-          <StoreCard key={store.id} store={store} />
+          <StoreCardExplore key={store.id} store={store} />
         ))}
       </div>
 
@@ -126,75 +134,6 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function StoreCard({ store }) {
-  const blueFilter = {
-    filter: 'invert(48%) sepia(79%) saturate(2476%) hue-rotate(190deg) brightness(100%) contrast(105%)'
-  };
-
-  const displayItemCount = store.productCount || 0;  
-
-  return (
-    <div className="group bg-white rounded-[32px] border border-gray-100 overflow-hidden hover:shadow-2xl hover:shadow-gray-200/50 transition-all duration-500 flex flex-col">
-      <Link href={`/${store.username}`} className="relative h-32 w-full bg-gray-100">
-        {store.bannerUrl ? (
-          <Image src={store.bannerUrl} fill className="object-cover" alt="banner" />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-green-50 to-green-100" />
-        )}
-        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
-           <Star size={12} className="fill-yellow-400 text-yellow-400" />
-           <span className="text-[10px] font-extrabold text-gray-700">4.8</span>
-        </div>
-      </Link>
-
-      <div className="px-5 pb-6 flex-1 flex flex-col items-center text-center">
-        <Link href={`/${store.username}`} className="relative w-20 h-20 rounded-2xl border-4 border-white overflow-hidden bg-white shadow-xl -mt-10 mb-3 group-hover:rotate-3 transition-transform duration-500">
-          <img 
-            src={store.logoUrl || `https://ui-avatars.com/api/?name=${store.storeName}&background=00a63e&color=fff`} 
-            className="w-full h-full object-cover"
-            alt="logo"
-          />
-        </Link>
-        
-        <div className="flex items-center gap-1.5 mb-0.5">
-           <h3 className="font-extrabold text-gray-900">{store.storeName}</h3>
-           <Image src="/icons/badge.svg" width={14} height={14} alt="verified" style={blueFilter} />
-        </div>
-        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-tight mb-4">@{store.username}</p>
-        
-        <div className="grid grid-cols-3 w-full gap-2 border-y border-gray-50 py-3 mb-6">
-           <div className="flex flex-col items-center">
-             <span className="flex items-center gap-1 text-[#00a63e] font-bold text-xs"><Users size={12}/> {store.followerCount || 0}</span>
-             <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Followers</span>
-           </div>
-           
-           <div className="flex flex-col items-center border-x border-gray-50">
-             <span className="flex items-center gap-1 text-gray-700 font-bold text-xs">
-               <LayoutGrid size={12}/> {displayItemCount}
-             </span>
-             <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Items</span>
-           </div>
-
-           <div className="flex flex-col items-center">
-             <span className="flex items-center gap-1 text-gray-700 font-bold text-xs truncate max-w-[60px]"><MapPin size={12}/> {store.state || "N/A"}</span>
-             <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Location</span>
-           </div>
-        </div>
-
-        <div className="w-full space-y-2">
-          <Link href={`/${store.username}`} className="w-full py-3 bg-[#00a63e] hover:bg-[#008c34] rounded-2xl text-[11px] font-extrabold text-white transition-all flex items-center justify-center gap-2 shadow-sm">
-            <MessageCircle size={16} /> View WhatsApp Shop
-          </Link>
-          
-          <div className="w-full follow-button-wrapper">
-             <FollowButton vendorId={store.id} />
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

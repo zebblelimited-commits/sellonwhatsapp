@@ -16,10 +16,16 @@ class ChatError extends Error {
 async function actorFor(uid: string): Promise<{ role: ChatRole; email: string }> {
   const adminSnap = await adminDb.collection("admins").doc(uid).get();
   if (adminSnap.exists && adminSnap.data()?.isActive === true) return { role: "admin", email: String(adminSnap.data()?.email || "") };
-  const userSnap = await adminDb.collection("users").doc(uid).get();
+  const [userSnap, vendorSnap, storeSnap] = await Promise.all([
+    adminDb.collection("users").doc(uid).get(),
+    adminDb.collection("vendors").doc(uid).get(),
+    adminDb.collection("stores").doc(uid).get(),
+  ]);
   const user = userSnap.data() || {};
-  const role: ChatRole = user.role === "vendor" ? "vendor" : "buyer";
-  return { role, email: String(user.email || "") };
+  const vendor = vendorSnap.data() || {};
+  const store = storeSnap.data() || {};
+  const role: ChatRole = user.role === "vendor" || vendorSnap.exists || storeSnap.exists ? "vendor" : "buyer";
+  return { role, email: String(user.email || vendor.email || store.email || "") };
 }
 
 export async function POST(request: NextRequest) {
@@ -51,13 +57,19 @@ export async function POST(request: NextRequest) {
     const chatId = `support_${buyerId || "none"}_${vendorId || "none"}`;
     const chatRef = adminDb.collection("support_chats").doc(chatId);
     const targetId = actor.role === "admin" ? participantId : actor.role === "buyer" ? vendorId : buyerId;
-    const [targetUserSnap, targetStoreSnap] = await Promise.all([
+    const [targetUserSnap, targetVendorSnap, targetStoreSnap] = await Promise.all([
       targetId ? adminDb.collection("users").doc(targetId).get() : Promise.resolve(null),
+      targetId ? adminDb.collection("vendors").doc(targetId).get() : Promise.resolve(null),
       targetId ? adminDb.collection("stores").doc(targetId).get() : Promise.resolve(null),
     ]);
-    const targetData = targetUserSnap?.data() || targetStoreSnap?.data() || {};
-    const targetName = String(targetData.displayName || targetData.storeName || targetData.name || targetData.email || targetId);
+    const targetData = {
+      ...(targetUserSnap?.data() || {}),
+      ...(targetVendorSnap?.data() || {}),
+      ...(targetStoreSnap?.data() || {}),
+    };
+    const targetName = String(targetData.storeName || targetData.displayName || targetData.username || targetData.name || targetData.email || targetId);
     const targetEmail = String(targetData.email || "");
+    const targetPhone = String(targetData.whatsappNumber || targetData.whatsappPhone || targetData.phone || targetData.phoneNumber || "");
 
     const result = await adminDb.runTransaction(async (transaction) => {
       const existing = await transaction.get(chatRef);
@@ -76,6 +88,8 @@ export async function POST(request: NextRequest) {
         participantRole: actor.role === "admin" ? participantRole : actor.role === "buyer" ? "vendor" : "buyer",
         userName: targetName,
         userEmail: targetEmail,
+        userPhone: targetPhone,
+        contactPhone: targetPhone,
         userRole: participantRole || (actor.role === "buyer" ? "vendor" : "buyer"),
         subject: typeof body.subject === "string" ? body.subject.trim() : current.subject || "Support conversation",
         unreadBy: current.unreadBy || { buyer: 0, vendor: 0, admin: 0 },
@@ -83,9 +97,9 @@ export async function POST(request: NextRequest) {
         updatedAt: now,
       };
       transaction.set(chatRef, fields, { merge: true });
-      return { chatId, ...fields };
+      return fields;
     });
-    return NextResponse.json({ success: true, chat: result });
+    return NextResponse.json({ success: true, chat: { id: chatId, ...result } });
   } catch (error: unknown) {
     console.error("Create support chat error:", error);
     const status = error instanceof ChatError ? error.status : 500;

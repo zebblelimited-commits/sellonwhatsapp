@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" role="img" aria-label="Store cover placeholder">
+  <defs>
+    <linearGradient id="cover" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#166534"/>
+      <stop offset="1" stop-color="#86efac"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="600" fill="url(#cover)"/>
+  <circle cx="980" cy="80" r="220" fill="#ffffff" fill-opacity=".12"/>
+  <circle cx="150" cy="560" r="260" fill="#ffffff" fill-opacity=".08"/>
+  <path d="M520 255h160v150H520zM485 255l115-105 115 105" fill="none" stroke="#fff" stroke-width="20" stroke-linejoin="round" opacity=".8"/>
+</svg>

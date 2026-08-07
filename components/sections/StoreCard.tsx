@@ -58,10 +58,11 @@ export default function StoreCard({ store, onClick }: StoreCardProps) {
       {/* 1. COVER IMAGE AREA */}
       <div className="relative h-36 w-full rounded-2xl overflow-hidden">
         <Image
-          src={store.coverImage || "/images/placeholder-cover.jpg"}
+          src={store.coverImage || "/images/placeholder-cover.svg"}
           alt={store.name}
           fill
           className="object-cover brightness-95"
+          sizes="(min-width: 1280px) 280px, (min-width: 768px) 30vw, 100vw"
         />
 
         {/* ✅ Badges Container - Top Right */}
@@ -96,7 +97,7 @@ export default function StoreCard({ store, onClick }: StoreCardProps) {
           <div className="p-0.5 bg-white rounded-full shadow-sm">
             <div className="relative w-16 h-16 rounded-full overflow-hidden border-[1px] border-gray-100 bg-gray-50">
               <Image
-                src={store.logo || "/images/placeholder-logo.png"}
+              src={store.logo || "/images/placeholder-logo.svg"}
                 alt={`${store.name} logo`}
                 width={64}
                 height={64}

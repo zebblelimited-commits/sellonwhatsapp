@@ -25,6 +25,7 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
     const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
     const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
     const [isUpdating, setIsUpdating] = useState(false);
+    const [updateError, setUpdateError] = useState("");
     
     // Dispute Form State
     const [disputeForm, setDisputeForm] = useState({
@@ -77,6 +78,7 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
         e.preventDefault();
         e.stopPropagation();
         setSelectedOrderId(orderId);
+        setUpdateError("");
         setIsConfirmModalOpen(true);
     };
 
@@ -97,11 +99,13 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || "Failed to complete order");
             setIsConfirmModalOpen(false);
+            setSelectedOrderId(null);
         } catch (error) {
             console.error("Update Error:", error);
+            if (error instanceof DOMException && error.name === "AbortError") return;
+            setUpdateError(error instanceof Error ? error.message : "Could not complete the order. Please try again.");
         } finally {
             setIsUpdating(false);
-            setSelectedOrderId(null);
         }
     };
 
@@ -110,6 +114,7 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
         e.preventDefault();
         e.stopPropagation();
         setSelectedOrderId(order.id);
+        setUpdateError("");
         setDisputeForm({ reason: "item_not_received", description: "" });
         setIsDisputeModalOpen(true);
     };
@@ -191,6 +196,7 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                                     This action will release funds from Escrow to the vendor immediately.
                                 </span>
                             </p>
+                            {updateError && <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 p-3 text-left text-xs font-semibold leading-relaxed text-red-700">{updateError}</div>}
                             
                             <div className="flex flex-col gap-3">
                                 <button
@@ -204,6 +210,7 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                                     onClick={() => {
                                         setIsConfirmModalOpen(false);
                                         setSelectedOrderId(null);
+                                        setUpdateError("");
                                     }}
                                     className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-bold text-sm transition-all"
                                 >

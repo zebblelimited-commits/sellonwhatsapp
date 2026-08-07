@@ -93,6 +93,17 @@ export default function ProductPageClient({ product, store }: { product: any; st
       return;
     }
 
+    const productId = product?.id || product?.uid;
+    const storeId = store?.id || store?.uid;
+    if (!productId) {
+      setError("This product is unavailable. Please refresh and try again.");
+      return;
+    }
+    if (!storeId) {
+      setError("This store is unavailable for checkout. Please return to the store and try again.");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -101,12 +112,12 @@ export default function ProductPageClient({ product, store }: { product: any; st
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productId: product.id || product.uid,
+          productId,
           productName: product.name,
           price: productPrice,
           quantity: activeQuantity,
           deliveryFee: (isBooking || isServiceOrUtility) ? 0 : deliveryFee,
-          storeId: store.id || store.uid,
+          storeId,
           storeUsername: store.username,
           storeName: store.storeName,
           vendorNombaAccountId: store.nombaAccountId,
