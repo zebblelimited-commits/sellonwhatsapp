@@ -2,8 +2,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { auth, db } from "@/lib/firebase";
-import { collection, addDoc } from "firebase/firestore";
+import { auth } from "@/lib/firebase";
+import { supportChatRequest } from "@/components/chat/chatApi";
 
 export default function SeedChatPage() {
   const router = useRouter();
@@ -17,19 +17,8 @@ export default function SeedChatPage() {
           return;
         }
 
-        const docRef = await addDoc(collection(db, "admin_chats"), {
-          participants: [auth.currentUser.uid, "testBuyerUid123"],
-          userName: "Test Buyer",
-          userEmail: "test@zebble.com",
-          userRole: "buyer",
-          lastMessage: "Hello admin, I need help with my order",
-          lastMessageAt: new Date(),
-          status: "active",
-          unreadCount: 1,
-          createdAt: new Date()
-        });
-
-        setStatus(`✅ Chat created: ${docRef.id}`);
+        const result = await supportChatRequest<{ chat: { chatId: string } }>("/api/chats", { participantId: "testBuyerUid123", participantRole: "buyer" });
+        setStatus(`✅ Chat created: ${result.chat.chatId}`);
         
         // Auto-redirect after 3 seconds
         setTimeout(() => router.push("/admin?tab=chat"), 3000);

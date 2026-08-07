@@ -8,7 +8,7 @@ import {
   ChevronRight, CreditCard, Sparkles, Crown, Eye, MousePointerClick, Globe
 } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
-import { doc, updateDoc, getDoc, setDoc, deleteDoc, collection, query, where, onSnapshot } from "firebase/firestore";
+import { doc, updateDoc, getDoc, setDoc, deleteDoc, collection, query, where, onSnapshot, serverTimestamp } from "firebase/firestore";
 import {
   FacebookIcon, InstagramIcon, TwitterIcon,
   YoutubeIcon, TikTokIcon
@@ -608,12 +608,18 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
     data.append("folder", `verifications/${folder}`);
     
     try {
-      const res = await fetch("https://api.cloudinary.com/v1_1/dmjzgqigl/raw/upload", {
+      // Use the same public image delivery path as store images. The unsigned
+      // preset does not expose raw assets correctly and those URLs return 401.
+      // Cloudinary supports PDF uploads through image/upload as well.
+      const res = await fetch("https://api.cloudinary.com/v1_1/dmjzgqigl/image/upload", {
         method: "POST",
         body: data
       });
       const resData = await res.json();
-      return { url: resData.secure_url, public_id: resData.public_id };
+      if (!res.ok || !resData.secure_url) {
+        throw new Error(resData.error?.message || "Cloudinary did not return a public document URL");
+      }
+      return { url: resData.secure_url, public_id: resData.public_id, resourceType: "image" };
     } catch (err) {
       console.error("Verification upload cluster failure:", err);
       return null;
@@ -656,6 +662,12 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
 
       await setDoc(doc(db, "store_verifications", auth.currentUser.uid), {
         storeId: auth.currentUser.uid,
+        storeName: formData.storeName,
+        ownerName: auth.currentUser.displayName || auth.currentUser.email || "",
+        ownerEmail: auth.currentUser.email || "",
+        businessAddress: formData.address,
+        whatsappNumber: formData.phone,
+        verificationType: "business",
         cacNumber: verificationData.cacNumber,
         cacDocument: cacUpload,
         payoutDetails: {
@@ -668,7 +680,9 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
           document: idUpload
         },
         status: "pending",
-        submittedAt: new Date()
+        submittedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
 
       setVerificationStatus("pending");

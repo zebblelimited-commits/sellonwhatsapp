@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { showToast } from "@/lib/toast";
 
 export function BuyerPurchases() {
   const [purchases, setPurchases] = useState<any[]>([]);
@@ -104,7 +105,7 @@ export function BuyerPurchases() {
   const submitReview = async () => {
     if (!selectedPurchase || !auth.currentUser) return;
     if (!reviewText.trim()) {
-      alert("Please write a review");
+      showToast("error", "Please write a review");
       return;
     }
     
@@ -122,12 +123,12 @@ export function BuyerPurchases() {
         verified: true // Since they purchased it
       });
       
-      alert("✅ Thank you for your review!");
+      showToast("success", "Thank you for your review!");
       setShowReviewModal(false);
       setReviewText("");
     } catch (error) {
       console.error("Review submission error:", error);
-      alert("❌ Failed to submit review. Please try again.");
+      showToast("error", "Failed to submit review. Please try again.");
     } finally {
       setReviewSubmitting(false);
     }
@@ -145,7 +146,7 @@ export function BuyerPurchases() {
   const submitReport = async () => {
     if (!selectedPurchase || !auth.currentUser) return;
     if (!reportDescription.trim()) {
-      alert("Please describe the issue");
+      showToast("error", "Please describe the issue");
       return;
     }
     
@@ -160,12 +161,12 @@ export function BuyerPurchases() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Failed to create dispute");
 
-      alert("✅ Issue reported. Our team will review shortly.");
+      showToast("success", "Issue reported. Our team will review shortly.");
       setShowReportModal(false);
       setReportDescription("");
     } catch (error: any) {
       console.error("Report submission error:", error);
-      alert(`❌ Failed to report: ${error.message || "Please try again."}`);
+      showToast("error", `Failed to report: ${error.message || "Please try again."}`);
     } finally {
       setReportSubmitting(false);
     }

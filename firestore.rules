@@ -265,12 +265,24 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
     match /notifications/{notifId} {
       allow read: if request.auth != null && (
-        resource.data.vendorId == request.auth.uid || 
-        resource.data.buyerId == request.auth.uid
+        resource.data.get("vendorId", "") == request.auth.uid || 
+        resource.data.get("buyerId", "") == request.auth.uid ||
+        resource.data.get("recipientId", "") == request.auth.uid ||
+        resource.data.get("adminId", "") == request.auth.uid ||
+        isActiveAdmin()
       );
       allow create: if false;
-      allow update: if request.auth != null && request.resource.data.read == true;
-      allow delete: if request.auth != null;
+      allow update: if request.auth != null && (
+        resource.data.get("vendorId", "") == request.auth.uid ||
+        resource.data.get("buyerId", "") == request.auth.uid ||
+        resource.data.get("recipientId", "") == request.auth.uid ||
+        resource.data.get("adminId", "") == request.auth.uid
+      ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read", "readAt", "updatedAt"]);
+      allow delete: if request.auth != null && (
+        resource.data.get("vendorId", "") == request.auth.uid ||
+        resource.data.get("buyerId", "") == request.auth.uid ||
+        resource.data.get("recipientId", "") == request.auth.uid
+      );
     }
     
     // ═══════════════════════════════════════════════════════════
@@ -285,6 +297,30 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
     // 💬 CHAT SYSTEMS
     // ═══════════════════════════════════════════════════════════
+    match /support_chats/{chatId} {
+      allow read: if request.auth != null && (
+        isActiveAdmin() ||
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.vendorId == request.auth.uid ||
+        request.auth.uid in resource.data.participants
+      );
+      // Messages, read receipts, unread counters, and notifications are written
+      // by the authenticated server routes so fan-out remains atomic.
+      allow create, update, delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if request.auth != null && (
+          isActiveAdmin() ||
+          (exists(/databases/$(database)/documents/support_chats/$(chatId)) && (
+            get(/databases/$(database)/documents/support_chats/$(chatId)).data.buyerId == request.auth.uid ||
+            get(/databases/$(database)/documents/support_chats/$(chatId)).data.vendorId == request.auth.uid ||
+            request.auth.uid in get(/databases/$(database)/documents/support_chats/$(chatId)).data.participants
+          ))
+        );
+        allow create, update, delete: if false;
+      }
+    }
+
     match /vendor_chats/{chatId} {
       // ✅ Allow read if docId matches UID, user is vendor/buyer/participant, OR is admin
       allow read: if request.auth != null && (

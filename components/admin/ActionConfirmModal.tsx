@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { X, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { showToast } from "@/lib/toast";
 
 interface ActionConfirmModalProps {
   action: string;
@@ -76,7 +77,7 @@ export function ActionConfirmModal({
 
   const handleConfirm = async () => {
     if (requiresReason && !reason.trim()) {
-      alert("Please provide a reason for this action");
+      showToast("error", "Please provide a reason for this action");
       return;
     }
     await onConfirm(reason);

@@ -5,6 +5,7 @@ import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp, 
 import { Package, Truck, CheckCircle, Clock, Info, X, MapPin, Flag, AlertTriangle, MessageSquare, Search } from "lucide-react";
 import Image from "next/image";
 import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
+import { showToast } from "@/lib/toast";
 
 export default function OrdersTab({ disputes = [], onDisputeAction }) {
     const [orders, setOrders] = useState([]);
@@ -90,10 +91,10 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to complete order');
-            alert('✅ Order marked as delivered! Funds released to your available balance.');
+            showToast("success", 'Order marked as delivered! Funds released to your available balance.');
         } catch (error: any) {
             console.error(error);
-            alert('❌ ' + (error.message || 'Failed to update order.'));
+            showToast("error", error.message || 'Failed to update order.');
         }
     };
 

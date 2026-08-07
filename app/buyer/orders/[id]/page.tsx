@@ -13,6 +13,7 @@ import {
 import Image from "next/image";
 import OrderTimeline from "@/components/buyer/OrderTimeline";
 import { useAuth } from "@/contexts/AuthContext"; // ✅ Added Auth Context
+import { showToast } from "@/lib/toast";
 
 export default function OrderDetailsPage() {
     const { id } = useParams();
@@ -54,7 +55,7 @@ export default function OrderDetailsPage() {
 
     const handleConfirmReceipt = async () => {
         if (!user) {
-            alert("Please log in to confirm receipt");
+            showToast("error", "Please log in to confirm receipt");
             return;
         }
 
@@ -76,7 +77,7 @@ export default function OrderDetailsPage() {
             setShowSuccessModal(true);
         } catch (error: any) {
             console.error("Confirmation error:", error);
-            alert(`❌ Failed to confirm: ${error.message || "Please try again."}`);
+            showToast("error", `Failed to confirm: ${error.message || "Please try again."}`);
         } finally {
             setProcessing(false);
         }
@@ -86,7 +87,7 @@ export default function OrderDetailsPage() {
         if (!user || !order) return;
 
         if (!disputeDescription.trim()) {
-            alert("Please describe the issue");
+            showToast("error", "Please describe the issue");
             return;
         }
 
@@ -101,12 +102,12 @@ export default function OrderDetailsPage() {
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || "Failed to submit dispute");
 
-            alert("✅ Dispute submitted. Our team will review shortly.");
+            showToast("success", "Dispute submitted. Our team will review shortly.");
             setShowDisputeModal(false);
             setDisputeDescription("");
         } catch (error: any) {
             console.error("Dispute error:", error);
-            alert(`❌ Failed to submit dispute: ${error.message || "Please try again."}`);
+            showToast("error", `Failed to submit dispute: ${error.message || "Please try again."}`);
         } finally {
             setProcessing(false);
         }

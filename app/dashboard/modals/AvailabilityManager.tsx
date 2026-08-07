@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Clock, Save, Calendar } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, doc, writeBatch, Timestamp } from 'firebase/firestore';
+import { showToast } from '@/lib/toast';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const BRAND_GREEN = "#00A63E";
@@ -54,7 +55,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({ productId, on
 
   const handleSave = async () => {
     if (!productId) {
-      alert("Product ID is required to sync availability.");
+      showToast("error", "Product ID is required to sync availability.");
       return;
     }
     
@@ -83,7 +84,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({ productId, on
       if (onSaveSuccess) onSaveSuccess();
     } catch (err: any) {
       console.error("Firestore Batch Error:", err);
-      alert("Failed to sync availability: " + err.message);
+      showToast("error", "Failed to sync availability: " + err.message);
     } finally {
       setLoading(false);
     }

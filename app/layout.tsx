@@ -5,6 +5,7 @@ import "./globals.css";
 
 // ✅ FIX: Pointed to the correct file in the /contexts folder
 import { AuthProvider } from "@/contexts/AuthContext";
+import GlobalToast from "@/components/ui/GlobalToast";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -27,6 +28,7 @@ export default function RootLayout({
     <html lang="en" className={`${plusJakarta.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col font-sans" suppressHydrationWarning>
         <AuthProvider>
+          <GlobalToast />
           <Suspense fallback={
             <div className="min-h-screen flex items-center justify-center bg-white">
               <div className="w-6 h-6 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />

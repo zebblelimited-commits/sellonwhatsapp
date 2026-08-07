@@ -337,7 +337,7 @@ function Dashboard() {
 
         const unsubChatBadge = onSnapshot(
           query(
-            collection(db, "chats"),
+            collection(db, "support_chats"),
             where("vendorId", "==", user.uid),
             limit(100)
           ),
@@ -345,9 +345,7 @@ function Dashboard() {
             let unreadCount = 0;
             snapshot.forEach(doc => {
               const data = doc.data();
-              if (data.unreadByVendor === true || data.vendorRead === false) {
-                unreadCount += (data.unreadMessages || 1);
-              }
+              unreadCount += Number(data.unreadBy?.vendor || (data.unreadByVendor === true || data.vendorRead === false ? data.unreadMessages || 1 : 0));
             });
             setChatStats({ unread: unreadCount });
           },

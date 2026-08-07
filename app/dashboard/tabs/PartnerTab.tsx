@@ -7,6 +7,7 @@ import {
   Calendar, Wallet, Percent, ArrowRight, AlertCircle,
   ShoppingCart, MessageSquare, Eye, Star, Zap
 } from "lucide-react";
+import { showToast } from "@/lib/toast";
 
 export default function PartnerTab({ storeId }: { storeId: string }) {
   const [storeData, setStoreData] = useState<any>(null);
@@ -80,7 +81,7 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
       }
     } catch (err: any) {
       console.error("Subscription error:", err);
-      alert(`Error: ${err.message}. Please try again.`);
+      showToast("error", `Error: ${err.message}. Please try again.`);
     } finally {
       setSubscribing(false);
     }

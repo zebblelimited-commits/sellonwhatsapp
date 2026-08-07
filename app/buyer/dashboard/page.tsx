@@ -26,6 +26,7 @@ import { BuyerSettings as SettingsTab } from "@/components/buyer/BuyerSettings";
 import { ExploreTab } from "@/components/buyer/ExploreTab";
 import { BuyerDisputesTab } from "@/components/buyer/BuyerDisputesTab";
 import { BuyerNotification } from "@/components/buyer/BuyerNotification";
+import BuyerSupportChat from "@/components/buyer/BuyerSupportChat";
 import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 // ⚠️ We will create this file in the next step once you supply your profile code!
 import { BuyerProfile as ProfileTab } from "@/components/buyer/BuyerProfile";
@@ -40,6 +41,7 @@ export default function BuyerDashboard() {
   const [loading, setLoading] = useState(true);
   const [buyerNotifications, setBuyerNotifications] = useState<any[]>([]);
   const [notificationStats, setNotificationStats] = useState({ unread: 0, total: 0 });
+  const [chatStats, setChatStats] = useState({ unread: 0 });
   const [buyerDisputes, setBuyerDisputes] = useState<any[]>([]);
   const [buyerDisputeStats, setBuyerDisputeStats] = useState({ open: 0, total: 0 });
   const [disputeResponseModal, setDisputeResponseModal] = useState<{ dispute: any } | null>(null);
@@ -66,6 +68,7 @@ export default function BuyerDashboard() {
     let unsubscribeDisputes = () => { };
     let unsubscribeOrders = () => { };
     let unsubscribeNotifications = () => { };
+    let unsubscribeChats = () => { };
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -169,6 +172,12 @@ export default function BuyerDashboard() {
             }
           );
 
+          unsubscribeChats = onSnapshot(
+            query(collection(db, "support_chats"), where("buyerId", "==", user.uid), limit(100)),
+            (snapshot) => setChatStats({ unread: snapshot.docs.reduce((total, item) => total + Number(item.data().unreadBy?.buyer || 0), 0) }),
+            (error) => console.error("Buyer support chat badge error:", error),
+          );
+
         } catch (err) {
           console.error("Buyer fetch error:", err);
         } finally {
@@ -184,6 +193,7 @@ export default function BuyerDashboard() {
       unsubscribeDisputes();
       unsubscribeOrders();
       unsubscribeNotifications();
+      unsubscribeChats();
     };
   }, [router]);
 
@@ -296,6 +306,13 @@ export default function BuyerDashboard() {
             onClick={() => setActiveTab("notifications")}
             badge={notificationStats.unread > 0 ? notificationStats.unread : null}
           />
+          <NavItem
+            icon={<MessageCircle size={18} />}
+            label="Support Chat"
+            active={activeTab === "support-chat"}
+            onClick={() => setActiveTab("support-chat")}
+            badge={chatStats.unread > 0 ? chatStats.unread : null}
+          />
 
           {/* ✅ NEW: Profile Tab added under Notifications */}
           <NavItem
@@ -384,6 +401,7 @@ export default function BuyerDashboard() {
               />
             )}
             {activeTab === "notifications" && <BuyerNotification />}
+            {activeTab === "support-chat" && <BuyerSupportChat buyerId={auth.currentUser?.uid || ""} />}
 
             {/* ✅ Render Profile Tab */}
             {activeTab === "profile" && <ProfileTab />}

@@ -5,9 +5,10 @@ import { useState, useEffect, useRef } from "react";
 import { db } from "@/lib/firebase";
 import { 
   collection, query, where, orderBy, onSnapshot, 
-  addDoc, serverTimestamp, doc, updateDoc, getDocs 
+  
 } from "firebase/firestore";
 import { Send, Loader2, User, Phone, MoreVertical, X } from "lucide-react";
+import { supportChatRequest } from "@/components/chat/chatApi";
 
 interface Message {
   id: string;
@@ -42,13 +43,22 @@ export default function VendorChatTab({ vendorId, storeName }: { vendorId: strin
     if (!vendorId) return;
     
     const q = query(
-      collection(db, "vendor_chats"),
+      collection(db, "support_chats"),
       where("vendorId", "==", vendorId),
       orderBy("lastMessageAt", "desc")
     );
     
     const unsub = onSnapshot(q, (snapshot) => {
-      const convos = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
+      const convos = snapshot.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          buyerName: data.buyerName || data.userName || "Buyer",
+          buyerEmail: data.buyerEmail || data.userEmail || "",
+          unreadCount: data.unreadBy?.vendor ?? data.unreadCount ?? 0,
+        } as Conversation;
+      });
       setConversations(convos);
     });
     
@@ -59,7 +69,7 @@ export default function VendorChatTab({ vendorId, storeName }: { vendorId: strin
   useEffect(() => {
     if (!selectedConversation) return;
     
-    const msgRef = collection(db, "vendor_chats", selectedConversation.id, "messages");
+    const msgRef = collection(db, "support_chats", selectedConversation.id, "messages");
     const q = query(msgRef, orderBy("timestamp", "asc"));
     
     const unsub = onSnapshot(q, (snapshot) => {
@@ -71,12 +81,7 @@ export default function VendorChatTab({ vendorId, storeName }: { vendorId: strin
       setMessages(msgs);
       
       // Mark messages as read
-      if (selectedConversation.unreadCount > 0) {
-        updateDoc(doc(db, "vendor_chats", selectedConversation.id), {
-          unreadCount: 0,
-          lastReadAt: serverTimestamp()
-        });
-      }
+      if (selectedConversation.unreadCount > 0) supportChatRequest(`/api/chats/${encodeURIComponent(selectedConversation.id)}/read`).catch((error) => console.error("Failed to mark support chat read:", error));
     });
     
     return () => unsub();
@@ -94,22 +99,7 @@ export default function VendorChatTab({ vendorId, storeName }: { vendorId: strin
     
     setSending(true);
     try {
-      const chatRef = doc(db, "vendor_chats", selectedConversation.id);
-      const messagesRef = collection(db, "vendor_chats", selectedConversation.id, "messages");
-      
-      await Promise.all([
-        addDoc(messagesRef, {
-          senderId: vendorId,
-          senderRole: "vendor",
-          content: newMessage,
-          timestamp: serverTimestamp(),
-          read: false
-        }),
-        updateDoc(chatRef, {
-          lastMessage: newMessage,
-          lastMessageAt: serverTimestamp()
-        })
-      ]);
+      await supportChatRequest(`/api/chats/${encodeURIComponent(selectedConversation.id)}/messages`, { content: newMessage });
       
       setNewMessage("");
     } catch (error) {

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {
+import { 
   X, Upload, Plus, Trash2, Package,
   Globe, Zap, Calendar, Truck, Box, Clock, CheckCircle, MapPin, Layers, Info, Loader2, ArrowUpRight
 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, increment, query, where, getCountFromServer, getDoc } from 'firebase/firestore';
 import AvailabilityManager from './AvailabilityManager';
+import { showToast } from '@/lib/toast';
 
 // ✅ 1. IMPORT THE COMPREHENSIVE CATEGORIES FROM YOUR DATA FILE
 // ⚠️ Adjust the path '../nigeriaData' if your file is located elsewhere (e.g., '@/lib/nigeriaData')
@@ -169,7 +170,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
     if (e) e.preventDefault();
 
     if (currentCount >= productLimit && !initialData) {
-      alert(`You have reached your limit of ${productLimit} products. Please upgrade to add more.`);
+      showToast("error", `You have reached your limit of ${productLimit} products. Please upgrade to add more.`);
       router.push('/pricing');
       return;
     }
@@ -178,7 +179,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
 
     const user = auth.currentUser;
     if (!user) {
-      alert("You must be logged in to publish a product.");
+      showToast("error", "You must be logged in to publish a product.");
       setLoading(false);
       return;
     }
@@ -237,7 +238,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
       }
     } catch (err) {
       console.error("Submit Error:", err);
-      alert(`Submission failed: ${err.message}`);
+      showToast("error", `Submission failed: ${err.message}`);
       setLoading(false);
     }
   };

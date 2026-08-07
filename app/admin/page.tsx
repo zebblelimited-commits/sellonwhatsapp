@@ -22,11 +22,17 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tool
 import DisputeThread from "@/components/disputes/DisputeThread";
 import AdminUsersManagement from "@/components/admin/AdminUsersManagement";
 import AdminStoresManagement from "@/components/admin/AdminStoresManagement";
+import AdminSettingsPanel from "@/components/admin/AdminSettingsPanel";
+import AdminAuditLogsTab from "@/components/admin/AdminAuditLogsTab";
+import AdminVerificationsPanel from "@/components/admin/AdminVerificationsTab";
 import { adminMutation } from "@/components/admin/adminApi";
+import { supportChatRequest } from "@/components/chat/chatApi";
+import { showToast } from "@/lib/toast";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
 type AdminAnalytics = {
+  summary?: { totalGmv: number; totalOrders: number; activeUsers: number; disputeRate: number };
   gmvData: Array<{ date: string; gmv: number; orders: number }>;
   userGrowth: Array<{ date: string; newUsers: number; activeUsers: number }>;
   orderStatus: Array<{ name: string; value: number; color: string }>;
@@ -38,10 +44,26 @@ type AdminAnalytics = {
 type AdminStats = {
   totalUsers: number;
   activeStores: number;
+  totalOrders: number;
+  totalRevenue: number;
   pendingPayouts: number;
   pendingPayoutAmount: number;
   openDisputes: number;
+  pendingVerifications: number;
+  subscriptionRevenue: number;
+  boostRevenue: number;
+  partnerCommissionRevenue: number;
+  recentActivity: RecentActivity[];
+  activityLoading: boolean;
   loading: boolean;
+};
+
+type RecentActivity = {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  timestamp: string;
 };
 
 function asNumber(value: unknown): number {
@@ -75,6 +97,17 @@ function isOpenDispute(data: Record<string, unknown>): boolean {
   return ["open", "under_review", "disputed", "pending"].includes(normalizedStatus(data.status));
 }
 
+function formatActivityTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "Recently";
+  return date.toLocaleString("en-NG", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 // ═══════════════════════════════════════════════════════════
 // 🧩 TAB COMPONENTS (All rendered in same page)
 // ═══════════════════════════════════════════════════════════
@@ -84,11 +117,17 @@ function AdminHome({ stats, onNavigate }: { stats: AdminStats; onNavigate: (tab:
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* KPI Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <KPICard icon={Users} label="Total Users" value={stats.totalUsers.toLocaleString()} trend="Live count" trendColor="text-gray-500" onClick={() => onNavigate("users")} />
         <KPICard icon={Store} label="Active Stores" value={stats.activeStores.toLocaleString()} trend="Live count" trendColor="text-gray-500" onClick={() => onNavigate("stores")} />
+        <KPICard icon={ClipboardList} label="Total Orders" value={stats.totalOrders.toLocaleString()} trend="All orders" trendColor="text-gray-500" onClick={() => onNavigate("orders")} />
+        <KPICard icon={TrendingUp} label="Marketplace GMV" value={formatNaira(stats.totalRevenue)} trend="Paid order value" trendColor="text-green-600" onClick={() => onNavigate("orders")} />
         <KPICard icon={CreditCard} label="Pending Payouts" value={stats.pendingPayouts.toLocaleString()} trend={`${formatNaira(stats.pendingPayoutAmount)} pending`} trendColor="text-amber-600" onClick={() => onNavigate("payouts")} />
         <KPICard icon={AlertTriangle} label="Open Disputes" value={stats.openDisputes.toLocaleString()} trend="Needs attention" trendColor="text-red-600" onClick={() => onNavigate("disputes")} />
+        <KPICard icon={ShieldCheck} label="Pending Verifications" value={stats.pendingVerifications.toLocaleString()} trend="Needs review" trendColor="text-amber-600" onClick={() => onNavigate("verifications")} />
+        <KPICard icon={CreditCard} label="Subscription Revenue" value={formatNaira(stats.subscriptionRevenue)} trend="Paid subscriptions" trendColor="text-green-600" onClick={() => onNavigate("analytics")} />
+        <KPICard icon={TrendingUp} label="Store Boost Revenue" value={formatNaira(stats.boostRevenue)} trend="Paid boosts" trendColor="text-green-600" onClick={() => onNavigate("analytics")} />
+        <KPICard icon={Store} label="Partner Revenue & Commissions" value={formatNaira(stats.partnerCommissionRevenue)} trend="Partner fees + commissions" trendColor="text-green-600" onClick={() => onNavigate("analytics")} />
       </div>
 
       {/* Quick Actions */}
@@ -105,17 +144,36 @@ function AdminHome({ stats, onNavigate }: { stats: AdminStats; onNavigate: (tab:
       {/* Recent Activity */}
       <div className="bg-white rounded-[32px] border border-gray-100 p-6 shadow-sm">
         <h3 className="font-bold text-lg mb-4">Recent Platform Activity</h3>
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl">
-              <div className="w-10 h-10 bg-gray-200 rounded-xl animate-pulse" />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse" />
-                <div className="h-3 bg-gray-100 rounded w-1/2 animate-pulse" />
+        {stats.activityLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((item) => (
+              <div key={item} className="flex items-center gap-4 rounded-2xl bg-gray-50 p-4">
+                <div className="h-10 w-10 animate-pulse rounded-xl bg-gray-200" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-gray-200" />
+                  <div className="h-3 w-1/2 animate-pulse rounded bg-gray-100" />
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : stats.recentActivity.length > 0 ? (
+          <div className="space-y-3">
+            {stats.recentActivity.map((activity) => (
+              <div key={activity.id} className="flex items-center gap-4 rounded-2xl bg-gray-50 p-4">
+                <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${activity.type === "audit" ? "bg-purple-100 text-purple-700" : activity.type === "payout" ? "bg-amber-100 text-amber-700" : activity.type === "verification" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"}`}>
+                  {activity.type === "audit" ? <ClipboardList size={17} /> : activity.type === "payout" ? <CreditCard size={17} /> : activity.type === "verification" ? <ShieldCheck size={17} /> : <ClipboardList size={17} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-gray-900">{activity.title}</p>
+                  <p className="mt-1 truncate text-xs text-gray-500">{activity.description}</p>
+                </div>
+                <time dateTime={activity.timestamp} className="flex-shrink-0 text-[10px] font-bold text-gray-400">{formatActivityTime(activity.timestamp)}</time>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-gray-50 p-8 text-center text-sm font-medium text-gray-400">No recent platform activity.</div>
+        )}
       </div>
     </div>
   );
@@ -598,17 +656,59 @@ function AdminNotificationsTab() {
   const [message, setMessage] = useState("");
   const [target, setTarget] = useState("all");
   const [sending, setSending] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [inbox, setInbox] = useState<any[]>([]);
+  const [inboxLoading, setInboxLoading] = useState(true);
+  const [inboxError, setInboxError] = useState("");
+  const adminId = auth.currentUser?.uid;
+
+  useEffect(() => {
+    if (!adminId) {
+      setInboxLoading(false);
+      setInboxError("Admin session is not available. Please sign in again.");
+      return;
+    }
+    return onSnapshot(query(collection(db, "notifications"), where("recipientId", "==", adminId), orderBy("createdAt", "desc"), limit(25)), (snapshot) => {
+      setInbox(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+      setInboxLoading(false);
+      setInboxError("");
+    }, (error) => {
+      console.error("Admin notification inbox error:", error);
+      setInboxLoading(false);
+      setInboxError("Admin notifications could not be loaded. Check Firestore permissions and indexes.");
+    });
+  }, [adminId]);
+
+  const markNotificationRead = async (notificationId: string) => {
+    try {
+      await updateDoc(doc(db, "notifications", notificationId), { read: true, readAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      setInbox((current) => current.map((item) => item.id === notificationId ? { ...item, read: true } : item));
+    } catch (error) {
+      console.error("Admin notification read update failed:", error);
+      showToast("error", "Could not mark notification as read");
+    }
+  };
 
   const handleSend = async () => {
-    if (!message.trim()) return alert("Please enter a message");
+    if (!message.trim()) {
+      setFeedback({ type: "error", message: "Please enter a message" });
+      return;
+    }
     setSending(true);
+    setFeedback(null);
     try {
-      await addDoc(collection(db, "notifications"), {
-        message, target, sentBy: auth.currentUser?.uid, sentAt: serverTimestamp(), read: false
+      const result = await adminMutation<{ recipientCount: number }>("/api/admin/notifications", { message: message.trim(), target });
+      setFeedback({
+        type: result.recipientCount > 0 ? "success" : "error",
+        message: result.recipientCount > 0
+          ? `Notification sent to ${result.recipientCount} recipient${result.recipientCount === 1 ? "" : "s"}.`
+          : "No eligible recipients were found for this audience.",
       });
-      alert("✅ Notification sent!");
       setMessage("");
-    } catch (e) { alert("Failed to send"); console.error(e); }
+    } catch (error: unknown) {
+      console.error("Admin notification send error:", error);
+      setFeedback({ type: "error", message: error instanceof Error ? error.message : "Failed to send notification" });
+    }
     finally { setSending(false); }
   };
 
@@ -618,6 +718,7 @@ function AdminNotificationsTab() {
         <h2 className="text-xl font-bold text-gray-900">Send Notifications</h2>
         <p className="text-sm text-gray-500">Broadcast announcements to users or vendors</p>
       </div>
+      {feedback && <div className={`rounded-2xl p-4 text-sm font-medium ${feedback.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{feedback.message}</div>}
       <div className="bg-white rounded-[32px] border border-gray-100 p-6 shadow-sm space-y-4">
         <div>
           <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Target Audience</label>
@@ -636,6 +737,7 @@ function AdminNotificationsTab() {
           {sending ? <><Loader2 size={18} className="animate-spin" /> Sending...</> : <><Bell size={18} /> Send Notification</>}
         </button>
       </div>
+      <div className="rounded-[32px] border border-gray-100 bg-white p-6 shadow-sm"><div className="mb-4 flex items-center justify-between"><h3 className="font-black">Admin inbox</h3><span className="text-xs font-bold text-gray-400">{inbox.filter((item) => !item.read).length} unread</span></div>{inboxError && <div className="mb-3 rounded-xl bg-red-50 p-3 text-xs font-medium text-red-700">{inboxError}</div>}{inboxLoading ? <p className="text-sm text-gray-400">Loading notifications…</p> : <div className="space-y-2">{inbox.map((item) => <button key={item.id} onClick={() => markNotificationRead(item.id)} className={`w-full rounded-2xl p-3 text-left ${item.read ? "bg-gray-50" : "bg-blue-50"}`}><p className="text-xs font-bold text-gray-800">{item.title || "Notification"}</p><p className="mt-1 text-xs text-gray-500">{item.body || item.message}</p></button>)}{inbox.length === 0 && <p className="text-sm text-gray-400">No admin notifications yet.</p>}</div>}</div>
     </div>
   );
 }
@@ -651,16 +753,53 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
   const [sending, setSending] = useState(false);
   const [listenerError, setListenerError] = useState("");
   const [mobileShowChat, setMobileShowChat] = useState(false);
+  const [recipientId, setRecipientId] = useState("");
+  const [recipientRole, setRecipientRole] = useState<"buyer" | "vendor">("buyer");
+  const [openingChat, setOpeningChat] = useState(false);
+  const [migratingChats, setMigratingChats] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedChatId = selectedChat?.id;
   const selectedChatUnreadCount = selectedChat?.unreadCount || 0;
 
+  const openConversation = async () => {
+    if (!recipientId.trim()) return;
+    setOpeningChat(true);
+    setListenerError("");
+    try {
+      const result = await supportChatRequest<{ chat: any }>("/api/chats", { participantId: recipientId.trim(), participantRole: recipientRole });
+      const chat = { id: result.chat.chatId, ...result.chat, unreadCount: result.chat.unreadBy?.admin || 0 };
+      setChats((current) => [chat, ...current.filter((item) => item.id !== chat.id)]);
+      setSelectedChat(chat);
+      setMobileShowChat(true);
+      setRecipientId("");
+    } catch (error: unknown) {
+      setListenerError(error instanceof Error ? error.message : "Could not open support conversation");
+    } finally {
+      setOpeningChat(false);
+    }
+  };
+
+  const migrateLegacyChats = async () => {
+    setMigratingChats(true);
+    try {
+      const result = await supportChatRequest<{ migrated: number; skipped: number }>("/api/admin/chats/migrate");
+      showToast("success", `Imported ${result.migrated} legacy chat${result.migrated === 1 ? "" : "s"}; ${result.skipped} already existed.`);
+    } catch (error: unknown) {
+      showToast("error", error instanceof Error ? error.message : "Could not import legacy chats");
+    } finally {
+      setMigratingChats(false);
+    }
+  };
+
   // ✅ Load conversations (real-time)
   useEffect(() => {
     if (!adminId) return;
-    const q = query(collection(db, "admin_chats"), orderBy("lastMessageAt", "desc"), limit(50));
+    const q = query(collection(db, "support_chats"), orderBy("lastMessageAt", "desc"), limit(50));
     const unsub = onSnapshot(q, (snap) => {
-      setChats(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setChats(snap.docs.map(d => {
+        const data = d.data();
+        return { id: d.id, ...data, userName: data.userName || data.buyerName || data.storeName || "Support user", userEmail: data.userEmail || data.buyerEmail || "", userRole: data.userRole || (data.vendorId ? "vendor" : "buyer"), unreadCount: data.unreadBy?.admin ?? data.unreadCount ?? 0 };
+      }));
       setListenerError("");
     }, (error) => {
       console.error("Admin chat listener error:", error);
@@ -672,14 +811,12 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
   // ✅ Load messages for selected chat (real-time)
   useEffect(() => {
     if (!selectedChatId) return;
-    const msgRef = collection(db, "admin_chats", selectedChatId, "messages");
+    const msgRef = collection(db, "support_chats", selectedChatId, "messages");
     const q = query(msgRef, orderBy("timestamp", "asc"));
     const unsub = onSnapshot(q, (snap) => {
       setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      // Mark as read if admin has unread
-      if (selectedChatUnreadCount > 0) {
-        updateDoc(doc(db, "admin_chats", selectedChatId), { unreadCount: 0 });
-      }
+      // Mark the full conversation as read for this admin.
+      if (selectedChatUnreadCount > 0) supportChatRequest(`/api/chats/${encodeURIComponent(selectedChatId)}/read`).catch((readError) => console.error("Failed to mark support chat read:", readError));
     }, (error) => {
       console.error("Admin chat message listener error:", error);
       setListenerError("Messages could not be loaded for this conversation.");
@@ -699,23 +836,7 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
     
     setSending(true);
     try {
-      const chatRef = doc(db, "admin_chats", selectedChat.id);
-      const messagesRef = collection(db, "admin_chats", selectedChat.id, "messages");
-      
-      // Optimistic update
-      await Promise.all([
-        addDoc(messagesRef, {
-          senderId: adminId,
-          senderRole: "admin",
-          content: newMessage,
-          timestamp: serverTimestamp(),
-          read: false
-        }),
-        updateDoc(chatRef, {
-          lastMessage: newMessage,
-          lastMessageAt: serverTimestamp()
-        })
-      ]);
+      await supportChatRequest(`/api/chats/${encodeURIComponent(selectedChat.id)}/messages`, { content: newMessage });
       
       setNewMessage("");
     } catch (error) {
@@ -756,6 +877,12 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-green-500/20 outline-none"
             />
+          </div>
+          <div className="mt-3 space-y-2 rounded-2xl bg-gray-50 p-2">
+            <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">Open conversation</p>
+            <div className="flex gap-2"><select value={recipientRole} onChange={(event) => setRecipientRole(event.target.value as "buyer" | "vendor")} className="rounded-lg border border-gray-200 bg-white px-2 text-[10px] font-bold"><option value="buyer">Buyer</option><option value="vendor">Seller</option></select><input value={recipientId} onChange={(event) => setRecipientId(event.target.value)} placeholder="User/store ID" className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[10px] outline-none" /></div>
+            <button onClick={openConversation} disabled={openingChat || !recipientId.trim()} className="w-full rounded-lg bg-gray-900 py-1.5 text-[10px] font-bold text-white disabled:opacity-50">{openingChat ? "Opening…" : "Open support chat"}</button>
+            <button onClick={migrateLegacyChats} disabled={migratingChats} className="w-full rounded-lg border border-gray-200 bg-white py-1.5 text-[10px] font-bold text-gray-600 disabled:opacity-50">{migratingChats ? "Importing legacy chats…" : "Import legacy chats"}</button>
           </div>
         </div>
 
@@ -873,171 +1000,8 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
   );
 }
 
-// ── Admin Verifications Tab ──
 function AdminVerificationsTab() {
-  const [requests, setRequests] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedRequest, setSelectedRequest] = useState<any>(null);
-  const [listenerError, setListenerError] = useState("");
-
-  useEffect(() => {
-    const q = query(
-      collection(db, "store_verifications"),
-      where("status", "==", "pending"),
-      orderBy("createdAt", "desc")
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setListenerError("");
-      setLoading(false);
-    }, (error) => {
-      console.error("Admin verification listener error:", error);
-      setListenerError("Verification requests could not be loaded. Check admin permissions and indexes.");
-      setLoading(false);
-    });
-    return () => unsub();
-  }, []);
-
-  const handleDecision = async (requestId: string, storeId: string, approved: boolean, notes: string) => {
-    try {
-      const reqRef = doc(db, "store_verifications", requestId);
-      
-      // 1. Update verification request
-      await updateDoc(reqRef, {
-        status: approved ? "approved" : "rejected",
-        reviewNotes: notes,
-        reviewedAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      // 2. If approved, update the store itself
-      if (approved && storeId) {
-        await adminMutation(`/api/admin/stores/${storeId}`, { action: "verify", reason: notes });
-      }
-
-      setSelectedRequest(null);
-    } catch (error) {
-      console.error("Verification update failed:", error);
-      alert("Failed to update verification status");
-    }
-  };
-
-  if (loading) return <div className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-green-600" size={32} /></div>;
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      {listenerError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{listenerError}</div>}
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">Verification Requests</h2>
-        <p className="text-sm text-gray-500">Review and approve store verification applications</p>
-      </div>
-
-      {requests.length === 0 ? (
-        <div className="text-center py-10 text-gray-400">
-          <ShieldCheck size={48} className="mx-auto mb-4 opacity-30" />
-          <p className="text-sm font-bold">No pending verification requests</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {requests.map((req) => (
-            <div key={req.id} className="bg-white rounded-[32px] border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h4 className="font-bold text-sm text-gray-900">{req.storeName || "Unnamed Store"}</h4>
-                    <span className="text-[9px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-bold">Pending</span>
-                  </div>
-                  <p className="text-[10px] text-gray-500">Owner: {req.ownerName} • CAC: {req.cacNumber}</p>
-                  <div className="flex items-center gap-2 mt-3">
-                    {req.documents?.map((docItem: any, i: number) => (
-                      <a 
-                        key={i} 
-                        href={docItem.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-[10px] text-green-600 hover:underline"
-                      >
-                        <FileText size={12} /> {docItem.type?.replace("_", " ")}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setSelectedRequest(req)}
-                  className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-bold hover:bg-blue-100 flex items-center gap-1"
-                >
-                  <Eye size={12} /> Review
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Review Modal */}
-      {selectedRequest && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-lg rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-            <h3 className="text-lg font-bold mb-4">Review: {selectedRequest.storeName}</h3>
-            
-            <div className="space-y-4 mb-6">
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Business Details</p>
-                <p className="text-sm"><strong>Owner:</strong> {selectedRequest.ownerName}</p>
-                <p className="text-sm"><strong>CAC Number:</strong> {selectedRequest.cacNumber}</p>
-              </div>
-              
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Documents</p>
-                <div className="space-y-2">
-                  {selectedRequest.documents?.map((docItem: any, i: number) => (
-                    <a key={i} href={docItem.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                      <FileText size={16} className="text-gray-400" />
-                      <div>
-                        <p className="text-sm font-bold text-gray-900">{docItem.type?.replace("_", " ")}</p>
-                        <p className="text-[10px] text-gray-400">Uploaded: {docItem.uploadedAt?.toDate?.().toLocaleDateString()}</p>
-                      </div>
-                    </a>
-                  ))}
-                </div>
-              </div>
-              
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Review Notes</p>
-                <textarea 
-                  id="reviewNotes"
-                  className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none min-h-[80px]"
-                  placeholder="Add notes for the store owner..."
-                  defaultValue={selectedRequest.reviewNotes}
-                />
-              </div>
-            </div>
-            
-            <div className="flex gap-3">
-              <button 
-                onClick={() => {
-                  const notes = (document.getElementById("reviewNotes") as HTMLTextAreaElement)?.value || "Rejected";
-                  handleDecision(selectedRequest.id, selectedRequest.storeId, false, notes);
-                }}
-                className="flex-1 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2"
-              >
-                <X size={16} /> Reject
-              </button>
-              <button 
-                onClick={() => {
-                  const notes = (document.getElementById("reviewNotes") as HTMLTextAreaElement)?.value || "Approved";
-                  handleDecision(selectedRequest.id, selectedRequest.storeId, true, notes);
-                }}
-                className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2"
-              >
-                <ShieldCheck size={16} /> Approve & Verify
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <AdminVerificationsPanel />;
 }
 
 // ── Analytics Tab (with Charts) ──
@@ -1045,6 +1009,7 @@ function AdminAnalyticsTab() {
   const [timeRange, setTimeRange] = useState("7d");
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<AdminAnalytics>({
+    summary: { totalGmv: 0, totalOrders: 0, activeUsers: 0, disputeRate: 0 },
     gmvData: [],
     userGrowth: [],
     orderStatus: [],
@@ -1053,81 +1018,32 @@ function AdminAnalyticsTab() {
     revenueByCategory: []
   });
 
-  // ✅ Load analytics data (mock data shown - replace with real queries)
+  // Load analytics from the server-side Firestore aggregation endpoint.
   useEffect(() => {
+    let cancelled = false;
+
     async function loadAnalytics() {
       try {
-        // In production: query Firestore/BigQuery for real metrics
-        // For demo: generate mock data
-        const days = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
-        const today = new Date();
-        
-        // GMV Data (line chart)
-        const gmvData = Array.from({ length: days }, (_, i) => {
-          const date = new Date(today);
-          date.setDate(date.getDate() - (days - 1 - i));
-          return {
-            date: date.toLocaleDateString('en-NG', { month: 'short', day: 'numeric' }),
-            gmv: Math.floor(Math.random() * 500000) + 100000,
-            orders: Math.floor(Math.random() * 50) + 10
-          };
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) throw new Error("Your admin session has expired. Please sign in again.");
+        const response = await fetch(`/api/admin/analytics?range=${timeRange}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
         });
-
-        // User Growth (area chart)
-        const userGrowth = Array.from({ length: days }, (_, i) => {
-          const date = new Date(today);
-          date.setDate(date.getDate() - (days - 1 - i));
-          return {
-            date: date.toLocaleDateString('en-NG', { month: 'short', day: 'numeric' }),
-            newUsers: Math.floor(Math.random() * 30) + 5,
-            activeUsers: Math.floor(Math.random() * 200) + 50
-          };
-        });
-
-        // Order Status Distribution (pie chart)
-        const orderStatus = [
-          { name: 'Completed', value: 65, color: '#22c55e' },
-          { name: 'Shipped', value: 20, color: '#3b82f6' },
-          { name: 'Pending', value: 10, color: '#f59e0b' },
-          { name: 'Disputed', value: 5, color: '#ef4444' }
-        ];
-
-        // Top Stores (horizontal bar)
-        const topStores = [
-          { name: 'Max Jhon', sales: 245000, orders: 89 },
-          { name: 'Lagos Fashion', sales: 198000, orders: 67 },
-          { name: 'Tech Hub NG', sales: 156000, orders: 45 },
-          { name: 'Home Essentials', sales: 134000, orders: 52 },
-          { name: 'Beauty Corner', sales: 98000, orders: 38 }
-        ];
-
-        // Dispute Rate Trend (line)
-        const disputeRate = Array.from({ length: days }, (_, i) => {
-          const date = new Date(today);
-          date.setDate(date.getDate() - (days - 1 - i));
-          return {
-            date: date.toLocaleDateString('en-NG', { month: 'short', day: 'numeric' }),
-            rate: (Math.random() * 3 + 0.5).toFixed(1)
-          };
-        });
-
-        // Revenue by Category (bar)
-        const revenueByCategory = [
-          { category: 'Fashion', revenue: 450000 },
-          { category: 'Electronics', revenue: 380000 },
-          { category: 'Home & Garden', revenue: 290000 },
-          { category: 'Beauty', revenue: 210000 },
-          { category: 'Sports', revenue: 150000 }
-        ];
-
-        setAnalytics({ gmvData, userGrowth, orderStatus, topStores, disputeRate, revenueByCategory });
-        setLoading(false);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "Analytics could not be loaded");
+        if (!cancelled) setAnalytics(payload as AdminAnalytics);
       } catch (e) {
         console.error("Analytics load failed:", e);
-        setLoading(false);
+        if (!cancelled) {
+          setAnalytics({ summary: { totalGmv: 0, totalOrders: 0, activeUsers: 0, disputeRate: 0 }, gmvData: [], userGrowth: [], orderStatus: [], topStores: [], disputeRate: [], revenueByCategory: [] });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
     loadAnalytics();
+    return () => { cancelled = true; };
   }, [timeRange]);
 
   if (loading) {
@@ -1179,10 +1095,10 @@ function AdminAnalyticsTab() {
 
       {/* KPI Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPISummary label="Total GMV" value="₦12.4M" trend="+18.5%" trendIcon={ArrowUpRight} trendColor="text-green-600" />
-        <KPISummary label="Total Orders" value="1,248" trend="+12.3%" trendIcon={ArrowUpRight} trendColor="text-green-600" />
-        <KPISummary label="Active Users" value="3,892" trend="+8.1%" trendIcon={ArrowUpRight} trendColor="text-green-600" />
-        <KPISummary label="Dispute Rate" value="2.1%" trend="-0.4%" trendIcon={ArrowDownRight} trendColor="text-green-600" />
+        <KPISummary label="Total GMV" value={formatNaira(analytics.summary?.totalGmv || 0)} trend="Selected range" />
+        <KPISummary label="Total Orders" value={(analytics.summary?.totalOrders || 0).toLocaleString()} trend="Selected range" />
+        <KPISummary label="Active Users" value={(analytics.summary?.activeUsers || 0).toLocaleString()} trend="Ordered in range" />
+        <KPISummary label="Dispute Rate" value={`${analytics.summary?.disputeRate || 0}%`} trend="Selected range" />
       </div>
 
       {/* Charts Grid */}
@@ -1480,38 +1396,8 @@ function KPISummary({ label, value, trend, trendIcon: TrendIcon, trendColor }: {
   );
 }
 
-// ── Settings Tab (Simplified) ──
 function AdminSettingsTab() {
-  return (
-    <div className="space-y-6 animate-in fade-in duration-300 max-w-2xl">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">Admin Settings</h2>
-        <p className="text-sm text-gray-500">Manage your admin profile and preferences</p>
-      </div>
-      <div className="bg-white rounded-[32px] border border-gray-100 p-6 shadow-sm space-y-4">
-        <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center text-green-700 font-bold">A</div>
-          <div>
-            <p className="font-bold text-sm text-gray-900">{auth.currentUser?.email}</p>
-            <p className="text-[10px] text-gray-400 uppercase">Super Admin</p>
-          </div>
-        </div>
-        <div>
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Email</label>
-          <input type="email" defaultValue={auth.currentUser?.email || ""} disabled className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-gray-400" />
-        </div>
-        <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-sm font-bold">Change Password</button>
-        <hr className="border-gray-100" />
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-bold text-sm text-gray-900">Two-Factor Authentication</p>
-            <p className="text-[10px] text-gray-400">Add an extra layer of security</p>
-          </div>
-          <button className="px-4 py-2 bg-green-600 text-white rounded-xl text-[10px] font-bold hover:bg-green-700">Enable 2FA</button>
-        </div>
-      </div>
-    </div>
-  );
+  return <AdminSettingsPanel />;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1575,7 +1461,22 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState(() => searchParams?.get("tab") || "home");
   
   // ✅ Stats state
-  const [stats, setStats] = useState<AdminStats>({ totalUsers: 0, activeStores: 0, pendingPayouts: 0, pendingPayoutAmount: 0, openDisputes: 0, loading: true });
+  const [stats, setStats] = useState<AdminStats>({
+    totalUsers: 0,
+    activeStores: 0,
+    totalOrders: 0,
+    totalRevenue: 0,
+    pendingPayouts: 0,
+    pendingPayoutAmount: 0,
+    openDisputes: 0,
+    pendingVerifications: 0,
+    subscriptionRevenue: 0,
+    boostRevenue: 0,
+    partnerCommissionRevenue: 0,
+    recentActivity: [],
+    activityLoading: true,
+    loading: true,
+  });
 
   // ✅ Add this with your other useState declarations in AdminDashboard
   const [chats, setChats] = useState<any[]>([]);
@@ -1644,14 +1545,15 @@ export default function AdminDashboard() {
 
     const refreshStats = () => {
       const payoutData = latest.payouts.filter(isPendingPayout);
-        setStats({
+        setStats((current) => ({
+          ...current,
           totalUsers: latest.users.length,
           activeStores: latest.stores.filter(isActiveStore).length,
           pendingPayouts: payoutData.length,
           pendingPayoutAmount: payoutData.reduce((total, payout) => total + payoutAmount(payout), 0),
           openDisputes: latest.disputes.filter(isOpenDispute).length,
           loading: false,
-        });
+        }));
     };
 
     const listen = (name: keyof typeof latest) => onSnapshot(
@@ -1672,10 +1574,42 @@ export default function AdminDashboard() {
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }, [adminReady]);
 
+  // Financial and order totals are aggregated server-side because the raw
+  // subscription and boost collections are not client-readable.
+  useEffect(() => {
+    if (!adminReady) return;
+    let cancelled = false;
+    const loadOverview = async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) throw new Error("Admin session expired");
+        const response = await fetch("/api/admin/overview", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "Overview metrics could not be loaded");
+        if (!cancelled) setStats((current) => ({ ...current, ...payload, activityLoading: false, loading: false }));
+      } catch (error) {
+        console.error("Admin overview metrics error:", error);
+        if (!cancelled) {
+          setStats((current) => ({ ...current, activityLoading: false }));
+          setStatsError("Some financial overview metrics could not be loaded.");
+        }
+      }
+    };
+    void loadOverview();
+    const refreshTimer = window.setInterval(loadOverview, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshTimer);
+    };
+  }, [adminReady]);
+
   useEffect(() => {
     if (!adminReady || !auth.currentUser) return;
 
-    const chatsQuery = query(collection(db, "admin_chats"), orderBy("lastMessageAt", "desc"), limit(50));
+    const chatsQuery = query(collection(db, "support_chats"), orderBy("lastMessageAt", "desc"), limit(50));
     const unsubscribe = onSnapshot(
       chatsQuery,
       (snapshot) => setChats(snapshot.docs.map((chat) => ({ id: chat.id, ...chat.data() }))),
@@ -1714,6 +1648,7 @@ export default function AdminDashboard() {
       case "notifications": return <AdminNotificationsTab/>;
       case "chat": return <AdminChatTab initialChats={chats} />;  
       case "analytics": return <AdminAnalyticsTab/>;
+      case "audit": return <AdminAuditLogsTab />;
       case "verifications": return <AdminVerificationsTab/>;  
       case "settings": return <AdminSettingsTab/>;
       default: return <AdminHome stats={stats} onNavigate={handleTabChange} />;
@@ -1753,11 +1688,13 @@ export default function AdminDashboard() {
           <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard" active={activeTab === "home"} onClick={() => handleTabChange("home")} />
           <NavItem icon={<Users size={18} />} label="Users" active={activeTab === "users"} onClick={() => handleTabChange("users")} badge={stats.totalUsers > 1000 ? "1k+" : null} />
           <NavItem icon={<Store size={18} />} label="Stores" active={activeTab === "stores"} onClick={() => handleTabChange("stores")} badge={stats.activeStores > 100 ? "100+" : null} />
+          <NavItem icon={<ClipboardList size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => handleTabChange("orders")} />
           <NavItem icon={<CreditCard size={18} />} label="Payouts" active={activeTab === "payouts"} onClick={() => handleTabChange("payouts")} badge={stats.pendingPayouts > 0 ? stats.pendingPayouts : null} />
           <NavItem icon={<AlertTriangle size={18} />} label="Disputes" active={activeTab === "disputes"} onClick={() => handleTabChange("disputes")} badge={stats.openDisputes > 0 ? stats.openDisputes : null} />
           <NavItem icon={<MessageSquare size={18} />} label="Chat" active={activeTab === "chat"} onClick={() => handleTabChange("chat")}badge={totalUnreadChats > 0 ? totalUnreadChats : null}/>
           <NavItem icon={<Bell size={18} />} label="Notifications" active={activeTab === "notifications"} onClick={() => handleTabChange("notifications")} />
           <NavItem icon={<TrendingUp size={18} />} label="Analytics" active={activeTab === "analytics"} onClick={() => handleTabChange("analytics")} />
+          <NavItem icon={<ClipboardList size={18} />} label="Audit logs" active={activeTab === "audit"} onClick={() => handleTabChange("audit")} />
           <NavItem icon={<ShieldCheck size={18} />} label="Verifications" active={activeTab === "verifications"} onClick={() => handleTabChange("verifications")}badge={pendingVerifications > 0 ? pendingVerifications : null}/>
         </nav>
 
@@ -1786,11 +1723,13 @@ export default function AdminDashboard() {
               {activeTab === "home" ? "Real-time platform metrics and quick actions" :
                activeTab === "users" ? "Manage buyer and vendor accounts" :
                activeTab === "stores" ? "Review, approve, and manage vendor stores" :
+               activeTab === "orders" ? "Monitor marketplace orders and escrow states" :
                activeTab === "payouts" ? "Review and approve vendor payout requests" :
                activeTab === "disputes" ? "Review and resolve customer disputes" :
                activeTab === "chat" ? "Real-time support & user communication hub" :
                activeTab === "notifications" ? "Broadcast announcements to users or vendors" :
                activeTab === "analytics" ? "Track growth, revenue, and engagement metrics" :
+               activeTab === "audit" ? "Review administrative actions and security events" :
                activeTab === "settings" ? "Manage your admin profile and preferences" :
                "Admin dashboard"} {/* ✅ Final fallback - removed the "..." */}
             </p>

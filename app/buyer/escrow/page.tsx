@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import OrderStatus from "@/components/OrderStatus";
+import { showToast } from "@/lib/toast";
 
 interface EscrowOrder {
     id: string;
@@ -81,13 +82,13 @@ export default function EscrowPage() {
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || "Failed to release funds");
 
-            alert("Funds released successfully! The vendor will receive payment shortly.");
+            showToast("success", "Funds released successfully! The vendor will receive payment shortly.");
 
             // Refresh list
             setEscrowOrders(prev => prev.filter(o => o.id !== escrowId));
         } catch (error: any) {
             console.error("Error releasing funds:", error);
-            alert("Failed to release funds. Please try again.");
+            showToast("error", "Failed to release funds. Please try again.");
         } finally {
             setActionLoading(null);
         }
@@ -95,7 +96,7 @@ export default function EscrowPage() {
 
     const handleInitiateDispute = async () => {
         if (!selectedOrder || !disputeReason.trim()) {
-            alert("Please provide a reason for the dispute");
+            showToast("error", "Please provide a reason for the dispute");
             return;
         }
         try {
@@ -128,7 +129,7 @@ export default function EscrowPage() {
                 createdAt: new Date(),
             });
 
-            alert("Dispute initiated successfully. Our team will review and contact you within 48 hours.");
+            showToast("success", "Dispute initiated successfully. Our team will review and contact you within 48 hours.");
             setShowDisputeModal(false);
             setDisputeReason("");
             setSelectedOrder(null);
@@ -137,7 +138,7 @@ export default function EscrowPage() {
             setEscrowOrders(prev => prev.filter(o => o.id !== selectedOrder.id));
         } catch (error: any) {
             console.error("Error initiating dispute:", error);
-            alert("Failed to initiate dispute. Please try again.");
+            showToast("error", "Failed to initiate dispute. Please try again.");
         } finally {
             setActionLoading(null);
         }

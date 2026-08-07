@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, Check, Loader2 } from "lucide-react";
 import { auth } from "@/lib/firebase";
+import { showToast } from "@/lib/toast";
 
 interface UpgradeModalProps {
   onClose: () => void;
@@ -78,7 +79,7 @@ export function UpgradeModal({ onClose, preselectedPlan }: UpgradeModalProps) {
       }
     } catch (error) {
       console.error("Checkout failed:", error);
-      alert("Failed to start checkout. Please try again.");
+      showToast("error", "Failed to start checkout. Please try again.");
     } finally {
       setLoading(false);
     }

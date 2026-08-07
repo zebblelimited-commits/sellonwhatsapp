@@ -23,6 +23,31 @@ function isConnectFailure(error: unknown) {
   return ["UND_ERR_CONNECT_TIMEOUT", "ECONNREFUSED", "ENETUNREACH", "EAI_AGAIN"].includes(cause?.code || "");
 }
 
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function providerReferenceFrom(result: Record<string, unknown>, data: Record<string, unknown>) {
+  for (const value of [
+    data.reference,
+    data.transferReference,
+    data.transactionReference,
+    data.providerReference,
+    result.reference,
+    result.providerReference,
+  ]) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function providerStatusFrom(result: Record<string, unknown>, data: Record<string, unknown>) {
+  for (const value of [data.status, data.providerStatus, result.status, result.code]) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
 async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 12000) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -71,8 +96,11 @@ async function refundReservation(storeId: string, payoutRef: DocumentReference, 
       status: "refunded",
       failureReason: reason,
       refundReason: reason,
+      reconciliationReason: reason,
       balanceRestoredAt: admin.firestore.FieldValue.serverTimestamp(),
       refundedAt: admin.firestore.FieldValue.serverTimestamp(),
+      reconciledAt: admin.firestore.FieldValue.serverTimestamp(),
+      reconciledBy: "system:withdrawal-api",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     transaction.set(adminDb.collection("auditLogs").doc(), {
@@ -172,21 +200,24 @@ export async function POST(request: NextRequest) {
         availableBalance: availableBalance - requestedAmount,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-      transaction.set(payoutRef!, {
-        id: transferRef,
-        storeId,
-        vendorId: storeId,
-        grossAmount: requestedAmount,
+    transaction.set(payoutRef!, {
+      id: transferRef,
+      storeId,
+      vendorId: storeId,
+      reference: transferRef,
+      nombaReference: transferRef,
+      grossAmount: requestedAmount,
         platformFee,
         netAmount: netPayout,
         bankName: payoutSettings.bankName || "",
         accountNumber: payoutSettings.accountNumber,
         bankCode: payoutSettings.bankCode,
         accountName: payoutSettings.accountName || "",
-        status: "pending",
-        requestedAt: admin.firestore.FieldValue.serverTimestamp(),
-        balanceReservedAt: admin.firestore.FieldValue.serverTimestamp(),
-        escrowBalanceAtRequest: escrowBalance,
+      status: "pending",
+      requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+      balanceReservedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      escrowBalanceAtRequest: escrowBalance,
       });
       transaction.set(adminDb.collection("auditLogs").doc(), {
         action: "payout_requested",
@@ -220,6 +251,11 @@ export async function POST(request: NextRequest) {
     }
 
     transferAttempted = true;
+    await payoutRef.update({
+      gatewayAttemptedAt: admin.firestore.FieldValue.serverTimestamp(),
+      nombaReference: transferRef,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
     const transferResponse = await fetchWithTimeout(`${process.env.NOMBA_SANDBOX_URL}/v1/transfers`, {
       method: "POST",
       headers: {
@@ -238,15 +274,30 @@ export async function POST(request: NextRequest) {
       }),
     }, 15000);
 
-    const transferResult = await transferResponse.json();
+    const transferResult = await transferResponse.json() as Record<string, unknown>;
+    const transferData = recordValue(transferResult.data);
+    const providerReference = providerReferenceFrom(transferResult, transferData);
+    const providerStatus = providerStatusFrom(transferResult, transferData);
+    const providerMessage = typeof transferResult.description === "string"
+      ? transferResult.description
+      : typeof transferResult.message === "string"
+        ? transferResult.message
+        : "";
+    await payoutRef.update({
+      gatewaySubmittedAt: admin.firestore.FieldValue.serverTimestamp(),
+      providerStatus: providerStatus || (transferResponse.ok ? "SUBMITTED" : "REJECTED"),
+      ...(providerReference ? { providerReference } : {}),
+      ...(providerMessage ? { providerMessage } : {}),
+      ...(typeof transferResult.code === "string" ? { providerResponseCode: transferResult.code } : {}),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
     if (!transferResponse.ok) {
-      throw new WithdrawalError(transferResult?.description || "Gateway rejected transfer", 400, true);
+      throw new WithdrawalError(providerMessage || "Gateway rejected transfer", 400, true);
     }
 
     await payoutRef.update({
       status: "processing",
-      nombaReference: transferResult?.data?.reference || transferRef,
-      gatewaySubmittedAt: admin.firestore.FieldValue.serverTimestamp(),
+      nombaReference: transferRef,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -267,7 +318,7 @@ export async function POST(request: NextRequest) {
         await refundReservation(
           storeId,
           payoutRef,
-          safeTransportFailure ? "Nomba connection timed out before the transfer was submitted" : "Gateway rejected the transfer"
+          safeTransportFailure ? "Nomba connection timed out before the transfer was submitted" : error instanceof Error ? error.message : "Gateway rejected the transfer"
         );
         reservationRefunded = true;
       } catch (refundError) {
