@@ -20,6 +20,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area, PieChart, Pie, Cell, Legend, BarChart, Bar } from "recharts";
 import DisputeThread from "@/components/disputes/DisputeThread";
+import AdminUsersManagement from "@/components/admin/AdminUsersManagement";
+import AdminStoresManagement from "@/components/admin/AdminStoresManagement";
+import { adminMutation } from "@/components/admin/adminApi";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -32,20 +35,60 @@ type AdminAnalytics = {
   revenueByCategory: Array<{ category: string; revenue: number }>;
 };
 
+type AdminStats = {
+  totalUsers: number;
+  activeStores: number;
+  pendingPayouts: number;
+  pendingPayoutAmount: number;
+  openDisputes: number;
+  loading: boolean;
+};
+
+function asNumber(value: unknown): number {
+  const numberValue = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function formatNaira(value: number): string {
+  return `₦${value.toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
+}
+
+function normalizedStatus(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isActiveStore(data: Record<string, unknown>): boolean {
+  const status = normalizedStatus(data.status);
+  if (["pending", "rejected", "suspended", "banned", "inactive", "deleted"].includes(status)) return false;
+  return data.isDeleted !== true && data.isActive !== false;
+}
+
+function isPendingPayout(data: Record<string, unknown>): boolean {
+  return ["pending", "requested", "processing"].includes(normalizedStatus(data.status));
+}
+
+function payoutAmount(data: Record<string, unknown>): number {
+  return asNumber(data.amount ?? data.requestedAmount ?? data.amountNaira ?? data.totalAmount);
+}
+
+function isOpenDispute(data: Record<string, unknown>): boolean {
+  return ["open", "under_review", "disputed", "pending"].includes(normalizedStatus(data.status));
+}
+
 // ═══════════════════════════════════════════════════════════
 // 🧩 TAB COMPONENTS (All rendered in same page)
 // ═══════════════════════════════════════════════════════════
 
 // ── Dashboard Home Tab ──
-function AdminHome({ stats, onNavigate }: { stats: any; onNavigate: (tab: string) => void }) {
+function AdminHome({ stats, onNavigate }: { stats: AdminStats; onNavigate: (tab: string) => void }) {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard icon={Users} label="Total Users" value={stats.totalUsers?.toLocaleString() || "0"} trend="+12% this week" trendColor="text-green-600" onClick={() => onNavigate("users")} />
-        <KPICard icon={Store} label="Active Stores" value={stats.activeStores?.toLocaleString() || "0"} trend="+5% this week" trendColor="text-green-600" onClick={() => onNavigate("stores")} />
-        <KPICard icon={CreditCard} label="Pending Payouts" value={stats.pendingPayouts?.toLocaleString() || "0"} trend="₦2.4M pending" trendColor="text-amber-600" onClick={() => onNavigate("payouts")} />
-        <KPICard icon={AlertTriangle} label="Open Disputes" value={stats.openDisputes?.toLocaleString() || "0"} trend="-3% this week" trendColor="text-green-600" onClick={() => onNavigate("disputes")} />
+        <KPICard icon={Users} label="Total Users" value={stats.totalUsers.toLocaleString()} trend="Live count" trendColor="text-gray-500" onClick={() => onNavigate("users")} />
+        <KPICard icon={Store} label="Active Stores" value={stats.activeStores.toLocaleString()} trend="Live count" trendColor="text-gray-500" onClick={() => onNavigate("stores")} />
+        <KPICard icon={CreditCard} label="Pending Payouts" value={stats.pendingPayouts.toLocaleString()} trend={`${formatNaira(stats.pendingPayoutAmount)} pending`} trendColor="text-amber-600" onClick={() => onNavigate("payouts")} />
+        <KPICard icon={AlertTriangle} label="Open Disputes" value={stats.openDisputes.toLocaleString()} trend="Needs attention" trendColor="text-red-600" onClick={() => onNavigate("disputes")} />
       </div>
 
       {/* Quick Actions */}
@@ -114,17 +157,9 @@ function AdminUsersTab() {
 
   const handleAction = async (action: string, user: any) => {
     try {
-      const userRef = doc(db, "users", user.id);
-      const updates: any = { updatedAt: serverTimestamp() };
-      
-      if (action === "ban") { updates.isBanned = true; updates.bannedAt = new Date(); updates.banReason = modalReason; }
-      if (action === "unban") { updates.isBanned = false; updates.unbannedAt = new Date(); }
-      if (action === "verify") { updates.isVerified = true; updates.verifiedAt = new Date(); }
-      if (action === "suspend") { updates.isSuspended = true; updates.suspendedAt = new Date(); updates.suspendReason = modalReason; }
-      
-      await updateDoc(userRef, updates);
-      await addDoc(collection(db, "admin_logs"), {
-        adminId: auth.currentUser?.uid, action, targetType: "user", targetId: user.id, reason: modalReason, timestamp: serverTimestamp()
+      await adminMutation(`/api/admin/users/${user.id}`, {
+        action: action === "unban" ? "restore" : action,
+        reason: modalReason,
       });
       setActionModal(null);
       setModalReason("");
@@ -289,9 +324,12 @@ function AdminStoresTab() {
 
 // ── Orders Tab ──
 function AdminOrdersTab() {
+  const router = useRouter();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [listenerError, setListenerError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     const unsub = onSnapshot(
@@ -313,13 +351,28 @@ function AdminOrdersTab() {
     return () => unsub();
   }, []);
 
+  const visibleOrders = useMemo(() => orders.filter((order) => {
+    const status = normalizedStatus(order.status || "pending");
+    const search = searchQuery.trim().toLowerCase();
+    const matchesSearch = !search || [order.id, order.orderId, order.buyerId, order.vendorId, order.buyerEmail, order.vendorEmail, order.productName, order.storeName]
+      .some((value) => String(value || "").toLowerCase().includes(search));
+    const matchesStatus = statusFilter === "all" || (statusFilter === "escrow" ? ["paid_held", "pending", "processing"].includes(status) : status === statusFilter);
+    return matchesSearch && matchesStatus;
+  }), [orders, searchQuery, statusFilter]);
+
   if (loading) return <div className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-green-600" size={32} /></div>;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">Orders</h2>
-        <p className="text-sm text-gray-500">Monitor marketplace orders and escrow states</p>
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Orders</h2>
+          <p className="text-sm text-gray-500">Monitor marketplace orders and escrow states</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search orders…" className="w-52 rounded-xl border border-gray-200 bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-green-600" /></div>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 outline-none focus:border-green-600"><option value="all">All statuses</option><option value="escrow">Escrow</option><option value="shipped">Shipped</option><option value="disputed">Disputed</option><option value="completed">Completed</option><option value="refunded">Refunded</option><option value="cancelled">Cancelled</option></select>
+        </div>
       </div>
       {listenerError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{listenerError}</div>}
       <div className="overflow-hidden rounded-[32px] border border-gray-100 bg-white shadow-sm">
@@ -334,21 +387,21 @@ function AdminOrdersTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {orders.map((order) => (
-                <tr key={order.id} className="hover:bg-gray-50/50">
+              {visibleOrders.map((order) => (
+                <tr key={order.id} onClick={() => router.push(`/admin/orders/${order.id}`)} className="cursor-pointer hover:bg-gray-50/50">
                   <td className="px-6 py-4 font-mono text-xs font-bold text-gray-800">#{order.id.slice(-8).toUpperCase()}</td>
                   <td className="px-6 py-4 text-xs text-gray-500">
                     <p>Buyer: {order.buyerId || "—"}</p>
                     <p>Seller: {order.vendorId || "—"}</p>
                   </td>
                   <td className="px-6 py-4 text-sm font-bold text-gray-900">₦{Number(order.totalAmount || 0).toLocaleString()}</td>
-                  <td className="px-6 py-4"><StatusBadge status={order.status || "pending"} size="sm" /></td>
+                  <td className="px-6 py-4"><StatusBadge status={order.status || "pending"} size="sm" /><p className="mt-1 text-[10px] text-gray-400">{order.fundsState || "No funds marker"}</p></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        {orders.length === 0 && <div className="p-10 text-center text-sm text-gray-400">No orders found</div>}
+        {visibleOrders.length === 0 && <div className="p-10 text-center text-sm text-gray-400">No orders match the current filters</div>}
       </div>
     </div>
   );
@@ -356,13 +409,16 @@ function AdminOrdersTab() {
 
 // ── Payouts Tab (Simplified) ──
 function AdminPayoutsTab() {
+  const router = useRouter();
   const [payouts, setPayouts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [listenerError, setListenerError] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const unsub = onSnapshot(
-      query(collection(db, "payouts"), limit(100)),
+      query(collection(db, "payouts")),
       (snap) => {
         const nextPayouts = snap.docs
           .map(d => ({ id: d.id, ...d.data() } as any))
@@ -384,17 +440,27 @@ function AdminPayoutsTab() {
     return () => unsub();
   }, []);
 
+  const visiblePayouts = useMemo(() => payouts.filter((payout) => {
+    const rawStatus = normalizedStatus(payout.status || "pending");
+    const status = rawStatus === "approved" ? "processing" : rawStatus;
+    const search = searchQuery.trim().toLowerCase();
+    const matchesSearch = !search || [payout.id, payout.vendorId, payout.storeId, payout.vendorName, payout.vendorEmail, payout.nombaReference, payout.providerReference]
+      .some((value) => String(value || "").toLowerCase().includes(search));
+    return matchesSearch && (statusFilter === "all" || status === statusFilter);
+  }), [payouts, searchQuery, statusFilter]);
+
   if (loading) return <div className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-green-600" size={32} /></div>;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Payout Approvals</h2>
           <p className="text-sm text-gray-500">Monitor withdrawal reservations and gateway outcomes</p>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-xl text-[10px] font-bold">
-          <Clock size={14} /> {payouts.length} pending
+        <div className="flex flex-wrap gap-2">
+          <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search payouts…" className="w-56 rounded-xl border border-gray-200 bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-green-600" /></div>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 outline-none focus:border-green-600"><option value="all">All statuses</option><option value="pending">Pending</option><option value="processing">Processing</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="refunded">Refunded</option></select>
         </div>
       </div>
       {listenerError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{listenerError}</div>}
@@ -404,13 +470,14 @@ function AdminPayoutsTab() {
             <tr>
               <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Vendor</th>
               <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Gross / Net</th>
+              <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Provider reference</th>
               <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Requested</th>
               <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {payouts.map((payout) => (
-              <tr key={payout.id} className="hover:bg-gray-50/50">
+            {visiblePayouts.map((payout) => (
+              <tr key={payout.id} onClick={() => router.push(`/admin/payouts/${payout.id}`)} className="cursor-pointer hover:bg-gray-50/50">
                 <td className="px-6 py-4">
                   <p className="font-bold text-sm text-gray-900">{payout.vendorName || payout.vendorId || "Unknown vendor"}</p>
                   <p className="text-[10px] text-gray-400">{payout.vendorEmail || payout.id}</p>
@@ -419,15 +486,16 @@ function AdminPayoutsTab() {
                   <p>₦{Number(payout.grossAmount ?? payout.amount ?? 0).toLocaleString()}</p>
                   <p className="text-[10px] font-medium text-gray-400">Net ₦{Number(payout.netAmount ?? 0).toLocaleString()}</p>
                 </td>
+                <td className="px-6 py-4 text-xs font-mono text-gray-500">{payout.providerReference || payout.nombaReference || "—"}</td>
                 <td className="px-6 py-4 text-xs text-gray-500">{payout.requestedAt?.toDate?.()?.toLocaleDateString?.('en-NG') || "—"}</td>
                 <td className="px-6 py-4">
-                  <StatusBadge status={payout.status || "pending"} size="sm" />
+                  <StatusBadge status={normalizedStatus(payout.status) === "approved" ? "processing" : payout.status || "pending"} size="sm" />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {payouts.length === 0 && <div className="p-10 text-center text-gray-400 text-sm">No pending payouts</div>}
+        {visiblePayouts.length === 0 && <div className="p-10 text-center text-gray-400 text-sm">No payouts match the current filters</div>}
       </div>
     </div>
   );
@@ -435,6 +503,7 @@ function AdminPayoutsTab() {
 
 // ── Disputes Tab ──
 function AdminDisputesTab() {
+  const router = useRouter();
   const [disputes, setDisputes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("active");
@@ -461,8 +530,9 @@ function AdminDisputesTab() {
   }, []);
 
   const visibleDisputes = disputes.filter((dispute) => {
-    if (statusFilter === "active") return ["open", "under_review"].includes(dispute.status);
-    if (statusFilter === "resolved") return ["resolved_refund", "resolved_vendor", "closed"].includes(dispute.status);
+    const status = normalizedStatus(dispute.status);
+    if (statusFilter === "active") return ["open", "under_review"].includes(status);
+    if (statusFilter === "resolved") return ["resolved_refund", "resolved_vendor", "closed"].includes(status);
     return true;
   });
 
@@ -506,6 +576,7 @@ function AdminDisputesTab() {
                   <span>₦{dispute.amount?.toLocaleString()}</span>
                 </div>
                 </div>
+              <button onClick={() => router.push(`/admin/disputes/${dispute.id}`)} className="rounded-xl bg-gray-50 px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-gray-100">Open detail</button>
             </div>
             <DisputeThread
               key={dispute.id}
@@ -841,12 +912,7 @@ function AdminVerificationsTab() {
 
       // 2. If approved, update the store itself
       if (approved && storeId) {
-        await updateDoc(doc(db, "stores", storeId), {
-          isVerified: true,
-          verifiedAt: new Date(),
-          verificationTier: "premium",
-          updatedAt: new Date()
-        });
+        await adminMutation(`/api/admin/stores/${storeId}`, { action: "verify", reason: notes });
       }
 
       setSelectedRequest(null);
@@ -1509,7 +1575,7 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState(() => searchParams?.get("tab") || "home");
   
   // ✅ Stats state
-  const [stats, setStats] = useState({ totalUsers: 0, activeStores: 0, pendingPayouts: 0, openDisputes: 0, loading: true });
+  const [stats, setStats] = useState<AdminStats>({ totalUsers: 0, activeStores: 0, pendingPayouts: 0, pendingPayoutAmount: 0, openDisputes: 0, loading: true });
 
   // ✅ Add this with your other useState declarations in AdminDashboard
   const [chats, setChats] = useState<any[]>([]);
@@ -1566,26 +1632,44 @@ export default function AdminDashboard() {
   return () => unsub();
   }, [adminReady]);
 
-  // ✅ Load stats on mount
+  // ✅ Keep dashboard metrics live and normalize legacy status values.
   useEffect(() => {
     if (!adminReady) return;
-    async function loadStats() {
-      try {
-        const [users, stores, payouts, disputes] = await Promise.all([
-          getDocs(query(collection(db, "users"), limit(1000))),
-          getDocs(query(collection(db, "stores"), where("status", "in", ["active", "verified"]), limit(1000))),
-          getDocs(query(collection(db, "payouts"), where("status", "==", "pending"), limit(1000))),
-          getDocs(query(collection(db, "disputes"), where("status", "in", ["open", "under_review"]), limit(1000)))
-        ]);
-        setStats({ totalUsers: users.size, activeStores: stores.size, pendingPayouts: payouts.size, openDisputes: disputes.size, loading: false });
+    const latest = {
+      users: [] as Record<string, unknown>[],
+      stores: [] as Record<string, unknown>[],
+      payouts: [] as Record<string, unknown>[],
+      disputes: [] as Record<string, unknown>[],
+    };
+
+    const refreshStats = () => {
+      const payoutData = latest.payouts.filter(isPendingPayout);
+        setStats({
+          totalUsers: latest.users.length,
+          activeStores: latest.stores.filter(isActiveStore).length,
+          pendingPayouts: payoutData.length,
+          pendingPayoutAmount: payoutData.reduce((total, payout) => total + payoutAmount(payout), 0),
+          openDisputes: latest.disputes.filter(isOpenDispute).length,
+          loading: false,
+        });
+    };
+
+    const listen = (name: keyof typeof latest) => onSnapshot(
+      query(collection(db, name), limit(1000)),
+      (snapshot) => {
+        latest[name] = snapshot.docs.map((item) => item.data() as Record<string, unknown>);
+        refreshStats();
         setStatsError("");
-      } catch (e) {
-        console.error("Stats load failed:", e);
+      },
+      (error) => {
+        console.error(`Admin ${name} metrics listener error:`, error);
         setStatsError("Dashboard metrics could not be loaded. Check Firestore permissions and indexes.");
-        setStats(s => ({ ...s, loading: false }));
+        setStats((current) => ({ ...current, loading: false }));
       }
-    }
-    loadStats();
+    );
+
+    const unsubscribers = (Object.keys(latest) as Array<keyof typeof latest>).map(listen);
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }, [adminReady]);
 
   useEffect(() => {
@@ -1622,8 +1706,8 @@ export default function AdminDashboard() {
   const renderTabContent = () => {
     switch (activeTab) {
       case "home": return <AdminHome stats={stats} onNavigate={handleTabChange} />;
-      case "users": return <AdminUsersTab/>;
-      case "stores": return <AdminStoresTab/>;
+      case "users": return <AdminUsersManagement/>;
+      case "stores": return <AdminStoresManagement/>;
       case "orders": return <AdminOrdersTab/>;
       case "payouts": return <AdminPayoutsTab/>;
       case "disputes": return <AdminDisputesTab/>;

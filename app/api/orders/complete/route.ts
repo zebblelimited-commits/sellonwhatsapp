@@ -38,15 +38,19 @@ export async function POST(request: NextRequest) {
       }
 
       const normalizedStatus = String(orderData.status || "").toUpperCase();
-      if (normalizedStatus === "COMPLETED") {
+      const fundsState = String(orderData.fundsState || "").toLowerCase();
+      if (normalizedStatus === "COMPLETED" || fundsState === "released") {
         return { alreadyCompleted: true, orderAmount: Number(orderData.totalAmount || 0) };
+      }
+      if (["refunded", "refund_pending"].includes(fundsState)) {
+        throw new CompletionError("This order has already been refunded and cannot release funds", 409);
       }
 
       if (!["PENDING", "PAID_HELD", "SHIPPED", "OUT_FOR_DELIVERY"].includes(normalizedStatus)) {
         throw new CompletionError(`Order cannot be completed from status ${orderData.status || "unknown"}`, 409);
       }
 
-      const orderAmount = Number(orderData.totalAmount ?? 0);
+      const orderAmount = Number(orderData.escrowReservedAmount ?? orderData.totalAmount ?? 0);
       if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
         throw new CompletionError("Order has an invalid amount", 409);
       }
@@ -76,6 +80,9 @@ export async function POST(request: NextRequest) {
 
       transaction.update(orderRef, {
         status: "COMPLETED",
+        fundsState: "released",
+        settlementId: `order_release_${orderId}`,
+        settlementAmount: orderAmount,
         completedAt: admin.firestore.FieldValue.serverTimestamp(),
         ...(userId === orderData.buyerId ? { buyerConfirmed: true } : { vendorConfirmed: true }),
         completedBy: userId,

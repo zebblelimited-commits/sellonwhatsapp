@@ -10,6 +10,9 @@ interface PayoutRecord {
   netAmount?: number;
   grossAmount?: number;
   amount?: number;
+  providerReference?: string;
+  nombaReference?: string;
+  providerStatus?: string;
 }
 
 interface PayoutsTabProps {
@@ -30,12 +33,15 @@ export default function PayoutsTab({ payoutHistory = [] }: PayoutsTabProps) {
 
   const history = payoutHistory; 
   const getStatusBadge = (status: string) => {
+    const normalizedStatus = status.toLowerCase() === "approved" ? "processing" : status.toLowerCase();
     const config: Record<string, { label: string, icon: LucideIcon, bg: string, text: string }> = {
       completed: { label: "Completed", icon: CheckCircle2, bg: "bg-green-100", text: "text-green-700" },
-      pending: { label: "Processing", icon: Clock, bg: "bg-yellow-100", text: "text-yellow-700" },
-      failed: { label: "Failed", icon: XCircle, bg: "bg-red-100", text: "text-red-700" }
+      pending: { label: "Pending", icon: Clock, bg: "bg-yellow-100", text: "text-yellow-700" },
+      processing: { label: "Processing", icon: Clock, bg: "bg-blue-100", text: "text-blue-700" },
+      failed: { label: "Failed", icon: XCircle, bg: "bg-red-100", text: "text-red-700" },
+      refunded: { label: "Refunded", icon: CheckCircle2, bg: "bg-orange-100", text: "text-orange-700" }
     };
-    const { label, icon: Icon, bg, text } = config[status] || config.pending;
+    const { label, icon: Icon, bg, text } = config[normalizedStatus] || config.pending;
     return (
       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${bg} ${text}`}>
         <Icon size={12} /> {label}
@@ -80,7 +86,7 @@ export default function PayoutsTab({ payoutHistory = [] }: PayoutsTabProps) {
                 
                 return (
                   <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-5 py-4 font-mono text-sm font-medium text-gray-700">{shortRef}</td>
+                    <td className="px-5 py-4 font-mono text-sm font-medium text-gray-700"><p>{shortRef}</p><p className="mt-1 text-[10px] font-normal text-gray-400">Provider: {item.providerReference || item.nombaReference || '—'}</p></td>
                     <td className="px-5 py-4 text-sm text-gray-600">
                       {!isNaN(payoutDate.getTime()) 
                         ? payoutDate.toLocaleDateString('en-NG', { month: 'short', day: 'numeric', year: 'numeric' }) 

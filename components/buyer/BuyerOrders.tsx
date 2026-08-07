@@ -13,7 +13,9 @@ import {
   ShieldCheck, AlertTriangle, X, Flag, MessageSquare, Loader2
 } from "lucide-react";
 
-export function BuyerOrders({ disputes = [], onDisputeAction }) {
+type BuyerDispute = { orderId: string; status?: string; reason?: string; description?: string; vendorResponded?: boolean };
+
+export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: BuyerDispute[]; onDisputeAction?: (action: string, payload: unknown) => void }) {
     const router = useRouter(); // ✅ Initialize router
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -66,7 +68,7 @@ export function BuyerOrders({ disputes = [], onDisputeAction }) {
     const getOrderDispute = (orderId: string) => {
         return disputes?.find(d => 
             d.orderId === orderId && 
-            ["open", "under_review"].includes(d.status)
+            ["open", "under_review"].includes(String(d.status || ""))
         );
     };
 
@@ -121,35 +123,19 @@ export function BuyerOrders({ disputes = [], onDisputeAction }) {
             const order = orders.find(o => o.id === selectedOrderId);
             if (!order) throw new Error("Order not found");
 
-            // Create dispute record
-            const disputeRef = await addDoc(collection(db, "disputes"), {
-                orderId: selectedOrderId,
-                vendorId: order.vendorId,
-                buyerId: auth.currentUser.uid,
-                reason: disputeForm.reason,
-                description: disputeForm.description,
-                evidence: [],
-                status: "open",
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                read: false,
-                vendorResponded: false,
-                amount: order.totalAmount
+            const idToken = await auth.currentUser.getIdToken();
+            const response = await fetch("/api/disputes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+                body: JSON.stringify({ orderId: selectedOrderId, reason: disputeForm.reason, description: disputeForm.description, evidence: [] }),
             });
-
-            // Update order status to DISPUTED
-            const orderRef = doc(db, "orders", selectedOrderId);
-            await updateDoc(orderRef, {
-                status: "DISPUTED",
-                disputedAt: serverTimestamp(),
-                disputeId: disputeRef.id,
-                updatedAt: serverTimestamp()
-            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "Failed to create dispute");
 
             // Notify parent component
             onDisputeAction?.("dispute_opened", { 
                 orderId: selectedOrderId, 
-                disputeId: disputeRef.id 
+                disputeId: result.disputeId
             });
 
             // Reset and close

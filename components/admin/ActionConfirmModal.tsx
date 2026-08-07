@@ -46,6 +46,24 @@ export function ActionConfirmModal({
       color: "amber",
       requiresReason: true
     },
+    approve: {
+      title: "Approve Store",
+      description: "Approve this store and make it available as an active marketplace store.",
+      color: "green",
+      requiresReason: false
+    },
+    reject: {
+      title: "Reject Store",
+      description: "Reject this store application. Provide a reason for the decision.",
+      color: "red",
+      requiresReason: true
+    },
+    restore: {
+      title: "Restore Record",
+      description: "Restore this account or store to active status.",
+      color: "green",
+      requiresReason: false
+    },
     delete: {
       title: "Delete Record",
       description: "This action cannot be undone. Provide a reason for deletion.",

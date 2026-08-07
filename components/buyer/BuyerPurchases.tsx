@@ -151,27 +151,14 @@ export function BuyerPurchases() {
     
     setReportSubmitting(true);
     try {
-      // Create dispute record
-      await addDoc(collection(db, "disputes"), {
-        orderId: selectedPurchase.id,
-        buyerId: auth.currentUser.uid,
-        vendorId: selectedPurchase.vendorId,
-        reason: reportReason,
-        description: reportDescription,
-        evidence: [],
-        status: "open",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        read: false,
-        vendorResponded: false,
-        amount: selectedPurchase.totalAmount
+      const idToken = await auth.currentUser.getIdToken();
+      const response = await fetch("/api/disputes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ orderId: selectedPurchase.id, reason: reportReason, description: reportDescription, evidence: [] }),
       });
-
-      // Update order status to DISPUTED
-      await updateDoc(doc(db, "orders", selectedPurchase.id), {
-        status: "DISPUTED",
-        disputedAt: serverTimestamp()
-      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to create dispute");
 
       alert("✅ Issue reported. Our team will review shortly.");
       setShowReportModal(false);

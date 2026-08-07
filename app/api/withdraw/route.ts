@@ -51,7 +51,7 @@ async function getNombaToken() {
 async function refundReservation(storeId: string, payoutRef: DocumentReference, reason: string) {
   await adminDb.runTransaction(async (transaction) => {
     const payoutSnap = await transaction.get(payoutRef);
-    if (!payoutSnap.exists || payoutSnap.data()?.status !== "pending") return;
+    if (!payoutSnap.exists || !["pending", "processing"].includes(String(payoutSnap.data()?.status || "").toLowerCase())) return;
 
     const storeRef = adminDb.collection("stores").doc(storeId);
     const storeSnap = await transaction.get(storeRef);
@@ -60,15 +60,29 @@ async function refundReservation(storeId: string, payoutRef: DocumentReference, 
     const payout = payoutSnap.data() || {};
     const currentAvailable = Number(storeSnap.data()?.availableBalance ?? 0);
     const grossAmount = Number(payout.grossAmount ?? 0);
+    if (!Number.isFinite(currentAvailable) || currentAvailable < 0 || !Number.isFinite(grossAmount) || grossAmount <= 0) {
+      throw new Error("Invalid payout ledger values while restoring the reserved balance");
+    }
     transaction.update(storeRef, {
-      availableBalance: (Number.isFinite(currentAvailable) ? currentAvailable : 0) + (Number.isFinite(grossAmount) ? grossAmount : 0),
+      availableBalance: currentAvailable + grossAmount,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     transaction.update(payoutRef, {
-      status: "failed",
+      status: "refunded",
       failureReason: reason,
+      refundReason: reason,
+      balanceRestoredAt: admin.firestore.FieldValue.serverTimestamp(),
       refundedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    transaction.set(adminDb.collection("auditLogs").doc(), {
+      action: "payout_reservation_refunded",
+      targetType: "payout",
+      targetId: payoutRef.id,
+      performedBy: "system:withdrawal-api",
+      performedByEmail: "",
+      details: { reason, restoredAmount: grossAmount },
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
     });
   });
 }
@@ -92,13 +106,34 @@ export async function POST(request: NextRequest) {
       return jsonError("Invalid amount", 400);
     }
 
-    const transferRef = `PAYOUT_${storeId}_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const requestedIdempotencyKey = request.headers.get("Idempotency-Key") || (typeof body?.idempotencyKey === "string" ? body.idempotencyKey : "");
+    const idempotencyKey = requestedIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+    if (!idempotencyKey) return jsonError("An idempotency key is required. Please retry the withdrawal.", 400);
+    const transferRef = `PAYOUT_${storeId}_${idempotencyKey}`;
     payoutRef = adminDb.collection("payouts").doc(transferRef);
     const storeRef = adminDb.collection("stores").doc(storeId);
 
     // Reserve the gross amount and create the payout record atomically.
     // A second click cannot pass this check after the first request reserves funds.
     const reservation = await adminDb.runTransaction(async (transaction) => {
+      const existingPayoutSnap = await transaction.get(payoutRef!);
+      if (existingPayoutSnap.exists) {
+        const existingPayout = existingPayoutSnap.data() || {};
+        if (existingPayout.vendorId !== storeId && existingPayout.storeId !== storeId) {
+          throw new WithdrawalError("Invalid payout request", 403);
+        }
+        if (Number(existingPayout.grossAmount || 0) !== requestedAmount) {
+          throw new WithdrawalError("This idempotency key was already used for a different withdrawal amount", 409);
+        }
+        return {
+          existing: true,
+          payoutSettings: null,
+          platformFee: Number(existingPayout.platformFee || 0),
+          netPayout: Number(existingPayout.netAmount || 0),
+          existingStatus: String(existingPayout.status || "pending"),
+        };
+      }
+
       const storeSnap = await transaction.get(storeRef);
       if (!storeSnap.exists) throw new WithdrawalError("Store not found", 404);
 
@@ -153,9 +188,29 @@ export async function POST(request: NextRequest) {
         balanceReservedAt: admin.firestore.FieldValue.serverTimestamp(),
         escrowBalanceAtRequest: escrowBalance,
       });
+      transaction.set(adminDb.collection("auditLogs").doc(), {
+        action: "payout_requested",
+        targetType: "payout",
+        targetId: transferRef,
+        performedBy: storeId,
+        performedByEmail: decoded.email || "",
+        details: { grossAmount: requestedAmount, netAmount: netPayout, platformFee, status: "pending" },
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
-      return { payoutSettings, platformFee, netPayout };
+      return { existing: false, payoutSettings, platformFee, netPayout, existingStatus: "pending" };
     });
+
+    if (reservation.existing) {
+      const existingIsFinal = ["completed", "failed", "refunded"].includes(reservation.existingStatus);
+      return NextResponse.json({
+        success: true,
+        pending: !existingIsFinal,
+        alreadyProcessed: true,
+        reference: transferRef,
+        message: existingIsFinal ? `This withdrawal is already ${reservation.existingStatus}.` : "This withdrawal is already being processed.",
+      });
+    }
 
     let nombaToken: string;
     try {
@@ -189,6 +244,7 @@ export async function POST(request: NextRequest) {
     }
 
     await payoutRef.update({
+      status: "processing",
       nombaReference: transferResult?.data?.reference || transferRef,
       gatewaySubmittedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),

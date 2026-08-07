@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     let payload;
     try {
       payload = JSON.parse(rawBody);
-    } catch (e) {
+    } catch {
       return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
 
@@ -74,6 +74,11 @@ export async function POST(request: NextRequest) {
       payload?.event_type;
       
     const gatewayStatus = String(rawStatus || "").toUpperCase();
+    const providerReference = payload?.data?.transaction?.transactionReference ||
+      payload?.data?.transaction?.reference ||
+      payload?.data?.reference ||
+      payload?.transaction?.reference ||
+      orderRef;
     console.log(`[WEBHOOK] Extracted -> Ref: ${orderRef}, Status: ${gatewayStatus}`);
 
     if (!orderRef) {
@@ -141,11 +146,24 @@ export async function POST(request: NextRequest) {
         // ✅ HANDLE PAYOUT COMPLETION
         const successResult = await adminDb.runTransaction(async (transaction) => {
           const payoutSnap = await transaction.get(docSnap.ref);
-          if (!payoutSnap.exists || payoutSnap.data()?.status === "completed") return { transitioned: false };
+          const payoutData = payoutSnap.data() || {};
+          const currentStatus = String(payoutData.status || "").toLowerCase();
+          if (!payoutSnap.exists || ["completed", "failed", "refunded"].includes(currentStatus)) return { transitioned: false };
           transaction.update(docSnap.ref, {
             status: "completed",
+            providerReference,
+            providerStatus: gatewayStatus,
             completedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          transaction.set(adminDb.collection("auditLogs").doc(), {
+            action: "payout_provider_completed",
+            targetType: "payout",
+            targetId: docSnap.id,
+            performedBy: "system:nomba-webhook",
+            performedByEmail: "",
+            details: { providerReference, previousStatus: currentStatus },
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
           });
           return { transitioned: true };
         });
@@ -182,7 +200,7 @@ export async function POST(request: NextRequest) {
 
       } else if (isPartner) {
         const durationDays = Number(metadata?.durationDays || 30);
-        let expiryDate = new Date();
+        const expiryDate = new Date();
         expiryDate.setDate(expiryDate.getDate() + durationDays);
 
         await docSnap.ref.update({
@@ -233,20 +251,60 @@ export async function POST(request: NextRequest) {
 
         const activeDuration = Number(localData.durationDays || localData.durationMonths || 7);
         const durationUnit = localData.durationMonths ? "months" : "days";
-        
-        let expiryDate = new Date();
-        if (durationUnit === "months") {
-          expiryDate.setMonth(expiryDate.getMonth() + activeDuration);
-        } else {
-          expiryDate.setDate(expiryDate.getDate() + activeDuration);
-        }
 
-        await docSnap.ref.update({
-          status: newStatus, // ✅ Uses PAID_HELD for orders, active for others
-          startDate: new Date().toISOString(),
-          expiryDate: expiryDate.toISOString(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        if (collectionName === "orders") {
+          const holdResult = await adminDb.runTransaction(async (transaction) => {
+            const orderSnap = await transaction.get(docSnap.ref);
+            if (!orderSnap.exists) throw new Error("Order disappeared while reserving escrow");
+            const order = orderSnap.data() || {};
+            const orderAmount = Number(order.totalAmount ?? 0);
+            const vendorId = typeof order.vendorId === "string" ? order.vendorId : "";
+            if (!vendorId || !Number.isFinite(orderAmount) || orderAmount <= 0) {
+              throw new Error("Order is missing a valid vendor or amount; escrow was not reserved");
+            }
+
+            const currentFundsState = String(order.fundsState || "").toLowerCase();
+            if (["held", "released", "refunded", "refund_pending"].includes(currentFundsState) || order.escrowReservedAt) return { transitioned: false, amount: orderAmount };
+
+            const storeRef = adminDb.collection("stores").doc(vendorId);
+            const storeSnap = await transaction.get(storeRef);
+            if (!storeSnap.exists) throw new Error("Seller wallet not found; escrow was not reserved");
+            const store = storeSnap.data() || {};
+            const escrowBalance = Number(store.escrowBalance ?? 0);
+            if (!Number.isFinite(escrowBalance) || escrowBalance < 0) {
+              throw new Error("Seller escrow ledger is invalid; payment was not credited to escrow");
+            }
+
+            const now = admin.firestore.FieldValue.serverTimestamp();
+            transaction.update(storeRef, {
+              escrowBalance: escrowBalance + orderAmount,
+              updatedAt: now,
+            });
+            transaction.update(docSnap.ref, {
+              status: "PAID_HELD",
+              fundsState: "held",
+              escrowReservedAmount: orderAmount,
+              escrowReservedAt: now,
+              updatedAt: now,
+            });
+            return { transitioned: true, amount: orderAmount };
+          });
+          console.log(`✅ [ESCROW] Order ${orderRef} ${holdResult.transitioned ? `reserved ₦${holdResult.amount}` : "was already reserved"}.`);
+        } else {
+          const expiryDate = new Date();
+          if (durationUnit === "months") {
+            expiryDate.setMonth(expiryDate.getMonth() + activeDuration);
+          } else {
+            expiryDate.setDate(expiryDate.getDate() + activeDuration);
+          }
+
+          await docSnap.ref.update({
+            status: newStatus,
+            startDate: new Date().toISOString(),
+            expiryDate: expiryDate.toISOString(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
         
         console.log(`✅ [WEBHOOK SUCCESS] ${collectionName} ${orderRef} updated to '${newStatus}'!`);
 
@@ -311,7 +369,7 @@ export async function POST(request: NextRequest) {
     // ==========================================
     // 🔥 UPDATE STATUS IF FAILED
     // ==========================================
-    else if (["FAILED", "DECLINED"].includes(gatewayStatus)) {
+    else if (["FAILED", "DECLINED", "REVERSED", "REFUNDED", "CANCELLED"].includes(gatewayStatus)) {
       
       if (isPayout) {
         // ✅ HANDLE PAYOUT FAILURE & AUTOMATIC REFUND
@@ -320,7 +378,8 @@ export async function POST(request: NextRequest) {
           if (!payoutSnap.exists) return { refunded: false, alreadyFinal: true };
 
           const payoutData = payoutSnap.data() || {};
-          if (["failed", "rejected", "completed"].includes(payoutData.status)) {
+          const currentStatus = String(payoutData.status || "").toLowerCase();
+          if (["failed", "refunded", "completed"].includes(currentStatus)) {
             return { refunded: false, alreadyFinal: true };
           }
 
@@ -331,16 +390,32 @@ export async function POST(request: NextRequest) {
           if (storeRef && storeSnap) {
             const currentAvailable = Number(storeSnap.data()?.availableBalance ?? 0);
             const grossAmount = Number(payoutData.grossAmount ?? 0);
+            if (!Number.isFinite(currentAvailable) || currentAvailable < 0 || !Number.isFinite(grossAmount) || grossAmount <= 0) {
+              throw new Error("Invalid payout ledger values while restoring failed payout");
+            }
             transaction.update(storeRef, {
-              availableBalance: (Number.isFinite(currentAvailable) ? currentAvailable : 0) + (Number.isFinite(grossAmount) ? grossAmount : 0),
+              availableBalance: currentAvailable + grossAmount,
               updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
           }
 
           transaction.update(docSnap.ref, {
-            status: "failed",
+            status: "refunded",
+            providerReference,
+            providerStatus: gatewayStatus,
+            failureReason: `Provider reported ${gatewayStatus.toLowerCase()}`,
+            balanceRestoredAt: admin.firestore.FieldValue.serverTimestamp(),
             refundedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          transaction.set(adminDb.collection("auditLogs").doc(), {
+            action: "payout_provider_refunded",
+            targetType: "payout",
+            targetId: docSnap.id,
+            performedBy: "system:nomba-webhook",
+            performedByEmail: "",
+            details: { providerReference, previousStatus: currentStatus, restoredAmount: Number(payoutData.grossAmount || 0) },
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
           });
           return { refunded: true, alreadyFinal: false };
         });
@@ -444,8 +519,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ received: true }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("❌ [WEBHOOK CRITICAL ERROR]:", error);
-    return NextResponse.json({ received: true, error: error.message }, { status: 200 });
+    return NextResponse.json({ received: true, error: error instanceof Error ? error.message : "Webhook processing failed" }, { status: 200 });
   }
 }

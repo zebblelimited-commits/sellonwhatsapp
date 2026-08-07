@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
 import {
-    doc, onSnapshot, updateDoc, serverTimestamp,
-    collection, addDoc
+    doc, onSnapshot
 } from "firebase/firestore";
 import {
     ArrowLeft, ShieldCheck, Package, CheckCircle2,
@@ -93,30 +92,14 @@ export default function OrderDetailsPage() {
 
         setProcessing(true);
         try {
-            const disputeRef = await addDoc(collection(db, "disputes"), {
-                orderId: order.id,
-                buyerId: user.uid,
-                vendorId: order.vendorId,
-                reason: disputeReason,
-                description: disputeDescription,
-                evidence: [],
-                status: "open",
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                read: false,
-                vendorResponded: false,
-                amount: order.totalAmount
+            const idToken = await user.getIdToken();
+            const response = await fetch("/api/disputes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+                body: JSON.stringify({ orderId: order.id, reason: disputeReason, description: disputeDescription, evidence: [] }),
             });
-
-            const orderRef = doc(db, "orders", order.id);
-            await updateDoc(orderRef, {
-                status: "disputed", // ✅ Changed to lowercase to match OrderStatus.tsx
-                disputedAt: serverTimestamp(),
-                disputeId: disputeRef.id,
-                disputeReason: disputeReason,
-                disputeDescription: disputeDescription,
-                updatedAt: serverTimestamp()
-            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "Failed to submit dispute");
 
             alert("✅ Dispute submitted. Our team will review shortly.");
             setShowDisputeModal(false);

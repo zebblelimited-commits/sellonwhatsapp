@@ -13,6 +13,7 @@ import {
   Bug, RefreshCw, Database
 } from "lucide-react";
 import { ExternalLink } from "lucide-react";
+import { adminMutation } from "@/components/admin/adminApi";
 
 export default function AdminVerificationsTab() {
   const [requests, setRequests] = useState<any[]>([]);
@@ -162,12 +163,7 @@ export default function AdminVerificationsTab() {
       // ✅ If approved, update store with BUSINESS verification
       if (approved && storeId) {
         console.log("✅ Approving store verification:", storeId);
-        await updateDoc(doc(db, "stores", storeId), {
-          isVerified: true,
-          verifiedAt: new Date(),
-          verificationTier: "business",
-          updatedAt: new Date()
-        });
+        await adminMutation(`/api/admin/stores/${storeId}`, { action: "verify", reason: notes });
       }
 
       setSelectedRequest(null);
@@ -551,4 +547,3 @@ function DetailItem({ icon, label, value }: {
     </div>
   );
 }
-
