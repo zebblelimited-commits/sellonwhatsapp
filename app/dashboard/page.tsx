@@ -671,7 +671,7 @@ function Dashboard() {
           )}
           {activeTab === "analytics" && (
             hasProAccess("analytics")
-              ? <AnalyticsTab orders={orders} stats={stats} disputes={disputes} />
+              ? <AnalyticsTab orders={orders} stats={stats} storeId={currentUser?.uid || ""} />
               : <ProFeaturePlaceholder feature="analytics" onUpgrade={() => setShowPremiumModal({ show: true, feature: "analytics" })} />
           )}
           {activeTab === "chat" && (

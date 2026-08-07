@@ -7,6 +7,7 @@ interface TrackedLinkProps {
   children: React.ReactNode;
   className?: string;
   eventType?: AnalyticsEvent; // ✅ Allows passing 'whatsapp_click', 'click', etc.
+  productId?: string;
   onClick?: () => void;       // ✅ Allows custom click logic from parent
 }
 
@@ -16,12 +17,13 @@ export default function TrackedLink({
   children, 
   className, 
   eventType = 'click', // ✅ Defaults to singular 'click'
+  productId,
   onClick 
 }: TrackedLinkProps) {
   
   const handleClick = () => {
     // 1. Track the metric using the correct singular event type
-    trackMetric(storeId, eventType);
+    void trackMetric(storeId, eventType, productId ? { productId } : undefined);
     
     // 2. Execute any custom onClick passed from the parent
     if (onClick) {

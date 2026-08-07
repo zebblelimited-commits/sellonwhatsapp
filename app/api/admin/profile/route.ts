@@ -7,7 +7,14 @@ export async function GET(request: NextRequest) {
   const access = await requireAdmin(request);
   if (!("admin" in access)) return access;
   const snapshot = await adminDb.collection("admins").doc(access.admin.uid).get();
-  return NextResponse.json({ profile: { uid: access.admin.uid, ...(snapshot.data() || {}) } });
+  const data = snapshot.data() || {};
+  return NextResponse.json({ profile: {
+    uid: access.admin.uid,
+    email: data.email || access.admin.email || "",
+    role: data.role || access.admin.role,
+    isActive: data.isActive !== false,
+    ...data,
+  } });
 }
 
 export async function PATCH(request: NextRequest) {

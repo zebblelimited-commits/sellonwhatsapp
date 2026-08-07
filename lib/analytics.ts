@@ -16,13 +16,18 @@ import {
 // 🌟 FIX: Unified to SINGULAR form and added 'whatsapp_click' for premium analytics
 export type AnalyticsEvent = 'view' | 'click' | 'buy_now_click' | 'whatsapp_click';
 
+type AnalyticsOptions = {
+  productId?: string;
+};
+
 /**
  * Track analytics metrics for a store.
  * Creates an analytics event document (public write allowed).
  */
 export const trackMetric = async (
   storeId: string,
-  eventType: AnalyticsEvent // 🌟 Now strictly expects singular: 'view', 'click', 'buy_now_click', or 'whatsapp_click'
+  eventType: AnalyticsEvent,
+  options?: AnalyticsOptions,
 ) => {
   if (!storeId) return;
 
@@ -31,6 +36,7 @@ export const trackMetric = async (
     await addDoc(collection(db, "analytics"), {
       storeId,
       eventType: eventType, // 🌟 Saves exactly what was passed (e.g., "whatsapp_click")
+      ...(options?.productId ? { productId: options.productId } : {}),
       timestamp: serverTimestamp(),
       ...(typeof window !== 'undefined' ? {
         userAgent: navigator.userAgent.substring(0, 100),
@@ -71,7 +77,7 @@ export const trackMetric = async (
  */
 export const trackProductView = async (storeId: string, productId: string) => {
   if (!storeId || !productId) return;
-  await trackMetric(storeId, 'view'); // Singular
+  await trackMetric(storeId, 'view', { productId }); // Singular
 };
 
 /**
@@ -86,7 +92,7 @@ export const trackStoreView = async (storeId: string) => {
  */
 export const trackProductClick = async (storeId: string, productId: string) => {
   if (!storeId || !productId) return;
-  await trackMetric(storeId, 'click'); // Singular
+  await trackMetric(storeId, 'click', { productId }); // Singular
 };
 
 /**
@@ -94,7 +100,7 @@ export const trackProductClick = async (storeId: string, productId: string) => {
  */
 export const trackBuyNowClick = async (storeId: string, productId: string) => {
   if (!storeId || !productId) return;
-  await trackMetric(storeId, 'buy_now_click'); // Singular
+  await trackMetric(storeId, 'buy_now_click', { productId }); // Singular
 };
 
 /**
@@ -102,7 +108,7 @@ export const trackBuyNowClick = async (storeId: string, productId: string) => {
  */
 export const trackWhatsAppClick = async (storeId: string, productId: string) => {
   if (!storeId || !productId) return;
-  await trackMetric(storeId, 'whatsapp_click'); // Singular
+  await trackMetric(storeId, 'whatsapp_click', { productId }); // Singular
 };
 
 /**

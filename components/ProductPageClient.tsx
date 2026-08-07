@@ -49,6 +49,12 @@ export default function ProductPageClient({ product, store }: { product: any; st
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const storeId = store?.id || store?.uid;
+    const productId = product?.id || product?.uid;
+    if (storeId && productId) void trackMetric(storeId, "view", { productId });
+  }, [product?.id, product?.uid, store?.id, store?.uid]);
+
   // HYBRID PRODUCT / SERVICE / BOOKING LOGIC HELPERS
   const isBooking = product?.productType === 'booking';
   const isServiceOrUtility = product?.productType === 'service' || product?.productType === 'utility';
@@ -129,13 +135,13 @@ export default function ProductPageClient({ product, store }: { product: any; st
   // 🌟 FIX: Unified to singular 'click' to match the new analytics.ts standard
   const handleTrackClick = () => {
     const storeId = store?.id || store?.uid;
-    if (storeId) trackMetric(storeId, 'click'); 
+    if (storeId) void trackMetric(storeId, "click", { productId: product?.id || product?.uid });
   };
 
   // 🌟 NEW: Dedicated handler for WhatsApp premium analytics
   const handleTrackWhatsApp = () => {
     const storeId = store?.id || store?.uid;
-    if (storeId) trackMetric(storeId, 'whatsapp_click'); 
+    if (storeId) void trackMetric(storeId, "whatsapp_click", { productId: product?.id || product?.uid });
   };
 
   const whatsappUrl = `https://wa.me/${store?.phone?.replace(/\s/g, "")}?text=${encodeURIComponent(
@@ -342,7 +348,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
                   // 🌟 FIX: Track the specific click event that OverviewTab.tsx is looking for
                   const storeId = store?.id || store?.uid;
                   if (storeId) {
-                    trackMetric(storeId, "buy_now_click"); 
+                    void trackMetric(storeId, "buy_now_click", { productId: product?.id || product?.uid });
                   }
                   
                   // Continue with your existing checkout drawer state opening mechanism

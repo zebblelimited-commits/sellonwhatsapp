@@ -6,7 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import {
-  MapPin, Clock, Search, Share2, Package, Users, Phone, Calendar, CheckCircle2
+  MapPin, Clock, Search, Share2, Package, Users, Phone, Calendar, CheckCircle2, ShieldCheck
 } from "lucide-react";
 
 // Firebase/Analytics
@@ -56,37 +56,42 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
   const [shareData, setShareData] = useState({ isOpen: false, url: "", title: "" });
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setSearchQuery(urlQuery), 0);
+    return () => window.clearTimeout(timer);
+  }, [urlQuery]);
+
+  useEffect(() => {
     async function fetchData() {
       if (!username) return;
 
-      // Sync local search box with URL query parameter immediately
-      if (urlQuery) {
-        setSearchQuery(urlQuery);
-      }
-
       const { collection, query, where, getDocs, orderBy } = await import("firebase/firestore");
 
-      const storesRef = collection(db, "stores");
-      const qStore = query(storesRef, where("username", "==", username.toLowerCase()));
-      const storeSnap = await getDocs(qStore);
+      try {
+        const storesRef = collection(db, "stores");
+        const qStore = query(storesRef, where("username", "==", username.toLowerCase()));
+        const storeSnap = await getDocs(qStore);
 
-      if (!storeSnap.empty) {
-        const storeDoc = storeSnap.docs[0];
-        const data = toPlainObject({ id: storeDoc.id, ...storeDoc.data() });
-        setStoreData(data);
-        setVendorId(storeDoc.id);
-        setFollowerCount(data.followerCount || 0); // <-- Sync initial count
-        trackMetric(storeDoc.id, 'view');
+        if (!storeSnap.empty) {
+          const storeDoc = storeSnap.docs[0];
+          const data = toPlainObject({ id: storeDoc.id, ...storeDoc.data() });
+          setStoreData(data);
+          setVendorId(storeDoc.id);
+          setFollowerCount(data.followerCount || 0);
+          void trackMetric(storeDoc.id, "view");
 
-        const productsRef = collection(db, "products");
-        const qProducts = query(productsRef, where("storeId", "==", storeDoc.id), orderBy("createdAt", "desc"));
-        const productSnap = await getDocs(qProducts);
-        setProducts(productSnap.docs.map(doc => toPlainObject({ id: doc.id, ...doc.data() })));
+          const productsRef = collection(db, "products");
+          const qProducts = query(productsRef, where("storeId", "==", storeDoc.id), orderBy("createdAt", "desc"));
+          const productSnap = await getDocs(qProducts);
+          setProducts(productSnap.docs.map(doc => toPlainObject({ id: doc.id, ...doc.data() })));
+        }
+      } catch (error) {
+        console.error("Public store loading failed:", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
-    fetchData();
-  }, [username, urlQuery]); // Re-run if username or search param changes
+    void fetchData();
+  }, [username]);
 
   // Filter products based on search
   const filteredProducts = useMemo(() => {
@@ -98,6 +103,19 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
 
   if (loading) return null;
   if (!storeData) return <div className="h-screen flex items-center justify-center font-bold">Store not found</div>;
+
+  const isVerifiedStore = Boolean(
+    storeData.isVerified === true && (
+      storeData.verificationTier === "business" ||
+      storeData.verificationStatus === "approved" ||
+      storeData.status === "verified"
+    )
+  );
+  const normalizedPhone = String(storeData.phone || "").replace(/\D/g, "");
+  const whatsappUrl = normalizedPhone ? `https://wa.me/${normalizedPhone}` : "#";
+  const trackStoreClick = () => {
+    if (vendorId) void trackMetric(vendorId, "click");
+  };
 
   return (
     <div className={`${font.className} min-h-screen bg-[#fafafa] flex flex-col text-gray-900`}>
@@ -126,7 +144,7 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
                 <div className="flex flex-col md:mt-1">
                   <div className="flex items-center gap-1.5 justify-center md:justify-start">
                     <h1 className="text-xl font-extrabold tracking-tight text-gray-900">{storeData?.storeName}</h1>
-                    <Image src="/icons/badge.svg" width={18} height={18} alt="verified" style={{ filter: 'invert(48%) sepia(79%) saturate(2476%) hue-rotate(190deg) brightness(100%) contrast(105%)' }} />
+                    {isVerifiedStore && <span title="Verified Business" className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-1 text-[10px] font-black text-green-700"><ShieldCheck size={13} /> Verified</span>}
                   </div>
                   <p className="text-[#00a63e] font-bold text-xs">@{storeData?.username}</p>
                 </div>
@@ -153,6 +171,7 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
                   <SocialIcon
                     key={s}
                     href={storeData.socials[s]}
+                    onClick={trackStoreClick}
                     Icon={
                       s === 'instagram' ? InstagramIcon :
                         (s === 'twitter' || s === 'x') ? TwitterIcon :
@@ -175,21 +194,27 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
                       <FollowButton 
                         vendorId={vendorId} 
                         currentCount={followerCount}
-                        onFollowChange={setFollowerCount} 
+                        onFollowChange={(nextCount) => {
+                          setFollowerCount(nextCount);
+                          trackStoreClick();
+                        }}
                       />
                     )}
                   {/* ✅ FIXED: Added onClick to track the WhatsApp click */}
                   <TrackedLink
-                    href={`https://wa.me/${storeData.phone?.replace(/\s/g, "")}`}
+                    href={whatsappUrl}
                     storeId={vendorId!}
                     eventType="whatsapp_click" // ✅ Automatically tracks WhatsApp click!
-                    className="flex items-center gap-2 bg-[#00a63e] text-white px-4 py-2 rounded-xl text-[11px] font-extrabold hover:bg-[#008c34] active:scale-95 shadow-sm"
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#00a63e] px-4 py-2.5 text-[11px] font-extrabold text-white shadow-sm transition-all hover:bg-[#008c34] active:scale-95"
                   >
                     <Image src="/icons/whatsapplogo.svg" width={14} height={14} alt="wa" className="brightness-0 invert" />
                     WhatsApp
                   </TrackedLink>
                   <button 
-                    onClick={() => setShareData({ isOpen: true, title: storeData.storeName, url: window.location.href })} 
+                    onClick={() => {
+                      trackStoreClick();
+                      setShareData({ isOpen: true, title: storeData.storeName, url: window.location.href });
+                    }}
                     className="p-2 border border-gray-100 rounded-xl hover:bg-gray-50 text-gray-600"
                   >
                     <Share2 size={16} />
@@ -211,7 +236,7 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
       </div>
 
       {/* 3. PRODUCT CATALOG */}
-      <section className="max-w-6xl mx-auto px-4 py-10 flex-1 w-full">
+      <section className="mx-auto w-full max-w-none flex-1 px-4 py-10 sm:px-6 lg:px-10 xl:px-14">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
           <h2 className="text-lg font-extrabold tracking-tight">Store Catalog</h2>
           <div className="flex gap-2 w-full sm:w-auto">
@@ -229,7 +254,7 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
         </div>
 
         {filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:gap-6 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
             {filteredProducts.map((p) => {
               const productPath = `/${storeData.username}/${p.id}`;
               const productFullUrl = typeof window !== "undefined" ? `${window.location.origin}${productPath}` : "";
@@ -239,20 +264,23 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
               const stockVal = p.stockCount ?? p.stock ?? 0;
               const isOutOfStock = stockVal <= 0;
 
-              const waLink = `https://wa.me/${storeData.phone?.replace(/\s/g, "")}?text=${encodeURIComponent(
+              const waLink = normalizedPhone ? `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(
                 `Hello ${storeData.storeName}, I'm interested in "${p.name}"`
-              )}`;
+              )}` : "#";
 
               return (
                 <div key={p.id} className="group flex flex-col h-full bg-white rounded-[24px] border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden relative">
                   <button
-                    onClick={() => setShareData({ isOpen: true, title: p.name, url: productFullUrl })}
+                    onClick={() => {
+                      if (vendorId) void trackMetric(vendorId, "click", { productId: p.id });
+                      setShareData({ isOpen: true, title: p.name, url: productFullUrl });
+                    }}
                     className="absolute top-3 right-3 z-20 p-2 bg-white/90 backdrop-blur rounded-full text-gray-500 hover:text-gray-900 shadow-sm transition-all active:scale-90"
                   >
                     <Share2 size={14} />
                   </button>
 
-                  <Link href={productPath} className="relative aspect-square overflow-hidden bg-gray-50">
+                  <Link href={productPath} onClick={() => vendorId && void trackMetric(vendorId, "click", { productId: p.id })} className="relative aspect-square overflow-hidden bg-gray-50">
                     <Image 
                       src={p.images?.[0] || p.image || "/placeholder.png"} 
                       alt={p.name} 
@@ -281,8 +309,8 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
                     {/* ✅ FIXED: Buy Now / Book Now Button */}
                     <Link
                       href={productPath}
-                      onClick={() => trackMetric(vendorId!, 'buy_now_click')} // ✅ Singular string, correct Store ID
-                      className={`w-full flex items-center justify-center py-2.5 rounded-xl text-[11px] font-extrabold transition-all active:scale-95 ${
+                      onClick={() => !isOutOfStock && vendorId && void trackMetric(vendorId, "buy_now_click", { productId: p.id })}
+                      className={`flex min-h-10 w-full items-center justify-center rounded-xl px-4 py-2.5 text-[11px] font-extrabold transition-all active:scale-95 ${
                         isOutOfStock 
                         ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
                         : "bg-black text-white hover:bg-gray-800"
@@ -295,8 +323,9 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
                     <TrackedLink
                       href={waLink}
                       storeId={vendorId!}
+                      productId={p.id}
                       eventType="whatsapp_click" // ✅ Automatically tracks WhatsApp click!
-                      className="w-full flex items-center justify-center gap-2 bg-[#00a63e] text-white py-2.5 rounded-xl text-[11px] font-extrabold hover:bg-[#008c34] transition-all active:scale-95"
+                      className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#00a63e] px-4 py-2.5 text-[11px] font-extrabold text-white transition-all hover:bg-[#008c34] active:scale-95"
                     >
                       <Image src="/icons/whatsapplogo.svg" width={14} height={14} alt="wa" className="brightness-0 invert" />
                       WhatsApp Shop
@@ -328,8 +357,8 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
   );
 }
 
-const SocialIcon = ({ href, Icon }: { href: string, Icon: any }) => (
-  <a href={href} target="_blank" rel="noopener noreferrer" className="w-8 h-8 flex items-center justify-center rounded-xl border border-green-50 bg-[#f0fff4] text-[#00a63e] hover:bg-[#00a63e] hover:text-white transition-all active:scale-90 shadow-sm">
+const SocialIcon = ({ href, Icon, onClick }: { href: string, Icon: any, onClick?: () => void }) => (
+  <a href={href} target="_blank" rel="noopener noreferrer" onClick={onClick} className="w-8 h-8 flex items-center justify-center rounded-xl border border-green-50 bg-[#f0fff4] text-[#00a63e] hover:bg-[#00a63e] hover:text-white transition-all active:scale-90 shadow-sm">
     <Icon size={16} />
   </a>
 );
