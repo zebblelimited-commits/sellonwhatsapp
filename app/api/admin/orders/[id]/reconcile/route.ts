@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { requireAdmin } from "@/lib/admin-auth";
+import { inventoryAdjustment } from "@/lib/inventory";
 
 class OrderReconciliationError extends Error {
   status: number;
@@ -102,6 +103,13 @@ export async function PATCH(
       const storeSnap = await transaction.get(storeRef);
       if (!storeSnap.exists) throw new OrderReconciliationError("Seller wallet not found", 404);
 
+      const productId = typeof order.productId === "string" ? order.productId.trim() : "";
+      const productRef = productId ? adminDb.collection("products").doc(productId) : null;
+      const productSnap = productRef ? await transaction.get(productRef) : null;
+      if (!productRef || !productSnap?.exists) {
+        throw new OrderReconciliationError("Product inventory record not found", 409);
+      }
+
       const store = storeSnap.data() || {};
       const rawEscrowBalance = Number(store.escrowBalance ?? 0);
       if (!Number.isFinite(rawEscrowBalance)) {
@@ -128,6 +136,9 @@ export async function PATCH(
       }
 
       const now = FieldValue.serverTimestamp();
+      const inventory = inventoryAdjustment(productSnap.data() || {}, order, now, orderRef.id);
+      if (inventory.error) throw new OrderReconciliationError(inventory.error, 409);
+      if (inventory.tracked) transaction.update(productRef, inventory.productUpdate);
       const nextStatus = orderStatus === "PENDING_PAYMENT" || orderStatus === "PAID_HELD"
         ? "PAID_HELD"
         : orderStatus === "SHIPPED"
@@ -138,6 +149,7 @@ export async function PATCH(
         updatedAt: now,
       });
       transaction.update(orderRef, {
+        ...inventory.orderUpdate,
         status: nextStatus,
         paymentStatus: "paid",
         paymentReference: providerReference,

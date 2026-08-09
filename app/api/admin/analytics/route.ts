@@ -42,6 +42,31 @@ function orderAmount(data: Record<string, any>): number {
   return asNumber(data.totalAmount ?? data.amount ?? data.total ?? data.subtotal);
 }
 
+const categoryLabels: Record<string, string> = {
+  "physical-products": "Physical Products",
+  "freelance-services": "Freelance Services",
+  "bookable-services": "Bookable Services",
+  "events-tickets": "Events & Tickets",
+  "digital-products": "Digital Products",
+  vehicles: "Vehicles",
+  property: "Property",
+};
+
+function normalizedCategory(value: unknown): string {
+  const category = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!category || ["uncategorized", "unknown", "n/a", "none", "null"].includes(category)) return "";
+  if (categoryLabels[category]) return categoryLabels[category];
+  return category
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function productCategory(data: Record<string, any>): string {
+  return normalizedCategory(data.subCategory || data.category || data.mainCategory);
+}
+
 export async function GET(request: NextRequest) {
   const access = await requireAdmin(request);
   if (!("admin" in access)) return access;
@@ -55,11 +80,18 @@ export async function GET(request: NextRequest) {
     const start = new Date(end.getTime() - (days - 1) * DAY_MS);
     start.setHours(0, 0, 0, 0);
 
-    const [ordersSnapshot, usersSnapshot, storesSnapshot] = await Promise.all([
+    const [ordersSnapshot, usersSnapshot, storesSnapshot, productsSnapshot] = await Promise.all([
       adminDb.collection("orders").limit(10000).get(),
       adminDb.collection("users").limit(10000).get(),
       adminDb.collection("stores").limit(10000).get(),
+      adminDb.collection("products").limit(10000).get(),
     ]);
+
+    const productCategories = new Map<string, string>();
+    productsSnapshot.docs.forEach((snapshot) => {
+      const category = productCategory(snapshot.data() as Record<string, any>);
+      if (category) productCategories.set(snapshot.id, category);
+    });
 
     const dayKeys = Array.from({ length: days }, (_, index) => {
       const date = new Date(start.getTime() + index * DAY_MS);
@@ -110,12 +142,16 @@ export async function GET(request: NextRequest) {
       const items = Array.isArray(data.items) ? data.items : [];
       if (items.length) {
         items.forEach((item: Record<string, any>) => {
-          const category = String(item.category || data.category || "Uncategorized");
+          const productId = String(item.productId || item.id || item.product?.id || data.productId || "");
+          const category = normalizedCategory(item.subCategory || item.category || item.mainCategory) ||
+            productCategories.get(productId) ||
+            productCategory(data) ||
+            "Other";
           const itemAmount = asNumber(item.total ?? item.price) * Math.max(1, asNumber(item.quantity ?? item.qty) || 1);
           categoryTotals.set(category, (categoryTotals.get(category) || 0) + (itemAmount || amount / items.length));
         });
       } else {
-        const category = String(data.category || "Uncategorized");
+        const category = productCategories.get(String(data.productId || "")) || productCategory(data) || "Other";
         categoryTotals.set(category, (categoryTotals.get(category) || 0) + amount);
       }
     });

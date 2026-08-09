@@ -59,7 +59,10 @@ export default function ProductPageClient({ product, store }: { product: any; st
   const isBooking = product?.productType === 'booking';
   const isServiceOrUtility = product?.productType === 'service' || product?.productType === 'utility';
   const hideQuantity = isBooking || isServiceOrUtility;
-  const isOutOfStock = (product?.stockCount || 0) <= 0 || product?.availability === "out_of_stock";
+  const stockCount = Number(product?.stockCount ?? product?.stock ?? 0);
+  const isOutOfStock = isServiceOrUtility
+    ? product?.availability === "out_of_stock"
+    : !Number.isFinite(stockCount) || stockCount <= 0 || product?.availability === "out_of_stock";
   const images = product?.images || [product?.image || "/placeholder.png"];
   const activeQuantity = hideQuantity ? 1 : quantity;
 
@@ -254,10 +257,10 @@ export default function ProductPageClient({ product, store }: { product: any; st
                     {isOutOfStock
                       ? (isBooking ? "No Slots" : isServiceOrUtility ? "Fully Committed" : "Sold Out")
                       : isBooking
-                        ? `${product?.stockCount || 0} Slots`
+                        ? `${stockCount || 0} Slots`
                         : isServiceOrUtility
                           ? "Available"
-                          : `${product?.stockCount || 0} In Stock`}
+                          : `${stockCount || 0} In Stock`}
                   </span>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { MapPin, Phone, Mail } from "lucide-react";
 
@@ -14,28 +15,38 @@ export default function Footer() {
 
         {/* Section 1: Logo & About - Balanced and Enlarged */}
         <div className="flex flex-col gap-4">
-          <div className="flex items-center px-2">
-            <img 
-              src="/icons/sowa.png" 
-              alt="Sowa Logo" 
-              className="h-11 w-auto object-contain" 
+          <Link href="/" className="flex items-center px-2">
+            <img
+              src="/icons/sowa.png"
+              alt="Sowa Logo"
+              className="h-8 md:h-9 w-auto object-contain"
             />
-          </div>
+          </Link>
           <p className="leading-relaxed">
             Empowering small businesses to sell smarter and faster by turning WhatsApp into a professional storefront.
           </p>
         </div>
 
-        {/* Section 2: Quick Links */}
+        {/* Section 2: Quick Links (Single Column Vertical List) */}
         <div>
           <h4 className={`${headingFont.className} font-bold text-gray-900 mb-4`}>
             Quick Links
           </h4>
           <ul className="flex flex-col gap-2">
-            <li><a href="#how" className="hover:text-green-600 transition-colors">How it works</a></li>
-            <li><a href="#pricing" className="hover:text-green-600 transition-colors">Pricing</a></li>
-            <li><a href="/login" className="hover:text-green-600 transition-colors">Login</a></li>
-            <li><a href="/dashboard" className="hover:text-green-600 transition-colors">Create Store</a></li>
+            <li><Link href="/explore" className="hover:text-green-600 transition-colors">Explore</Link></li>
+            <li><Link href="/search" className="hover:text-green-600 transition-colors">Search</Link></li>
+            <li><Link href="/categories" className="hover:text-green-600 transition-colors">Categories</Link></li>
+            <li><Link href="/products" className="hover:text-green-600 transition-colors">Products</Link></li>
+            <li><Link href="/stores" className="hover:text-green-600 transition-colors">Stores</Link></li>
+            <li><Link href="/verified-stores" className="hover:text-green-600 transition-colors">Verified Stores</Link></li>
+            <li><Link href="/sponsored-stores" className="hover:text-green-600 transition-colors">Sponsored Stores</Link></li>
+            <li><Link href="/sponsored-products" className="hover:text-green-600 transition-colors">Sponsored Products</Link></li>
+            <li><Link href="/how-it-works" className="hover:text-green-600 transition-colors">How it works</Link></li>
+            <li><Link href="/pricing" className="hover:text-green-600 transition-colors">Pricing</Link></li>
+            <li><Link href="/boost-store" className="hover:text-green-600 transition-colors">Boost Store</Link></li>
+            <li><Link href="/faq" className="hover:text-green-600 transition-colors">FAQ</Link></li>
+            <li><Link href="/login" className="hover:text-green-600 transition-colors">Login</Link></li>
+            <li><Link href="/register" className="hover:text-green-600 transition-colors">Create Store</Link></li>
           </ul>
         </div>
 
@@ -45,9 +56,9 @@ export default function Footer() {
             Legal
           </h4>
           <ul className="flex flex-col gap-2">
-            <li><a href="#" className="hover:text-green-600 transition-colors">Privacy Policy</a></li>
-            <li><a href="#" className="hover:text-green-600 transition-colors">Terms of Service</a></li>
-            <li><a href="#" className="hover:text-green-600 transition-colors">Cookie Policy</a></li>
+            <li><Link href="/privacy" className="hover:text-green-600 transition-colors">Privacy Policy</Link></li>
+            <li><Link href="/terms" className="hover:text-green-600 transition-colors">Terms of Service</Link></li>
+            <li><Link href="/cookies" className="hover:text-green-600 transition-colors">Cookie Policy</Link></li>
           </ul>
         </div>
 
@@ -60,13 +71,13 @@ export default function Footer() {
           {/* Contact Info */}
           <ul className="flex flex-col gap-3 mb-6 text-xs font-medium text-gray-500">
             <li className="flex items-center gap-2 transition-colors hover:text-green-600 group">
-               <MapPin size={14} className="text-gray-400 group-hover:text-green-600" /> Lagos, Nigeria
+              <MapPin size={14} className="text-gray-400 group-hover:text-green-600" /> Lagos, Nigeria
             </li>
             <li className="flex items-center gap-2 transition-colors hover:text-green-600 group">
-               <Phone size={14} className="text-gray-400 group-hover:text-green-600" /> +234 800 000 0000
+              <Phone size={14} className="text-gray-400 group-hover:text-green-600" /> +234 800 000 0000
             </li>
             <li className="flex items-center gap-2 transition-colors hover:text-green-600 group">
-               <Mail size={14} className="text-gray-400 group-hover:text-green-600" /> support@sellonwhatsapp.com
+              <Mail size={14} className="text-gray-400 group-hover:text-green-600" /> support@sellonwhatsapp.com
             </li>
           </ul>
 
@@ -84,22 +95,22 @@ export default function Footer() {
 
             {/* X (Twitter) */}
             <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-black transition-all">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z"/><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z" /><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772" /></svg>
             </a>
 
             {/* Instagram */}
             <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-pink-600 transition-all">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
             </a>
 
             {/* Facebook */}
             <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-blue-600 transition-all">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
             </a>
 
             {/* YouTube */}
             <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-red-600 transition-all">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 2-2 68.4 68.4 0 0 1 15 0 2 2 0 0 1 2 2 24.12 24.12 0 0 1 0 10 2 2 0 0 1-2 2 68.4 68.4 0 0 1-15 0 2 2 0 0 1-2-2Z"/><path d="m10 15 5-3-5-3z"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 2-2 68.4 68.4 0 0 1 15 0 2 2 0 0 1 2 2 24.12 24.12 0 0 1 0 10 2 2 0 0 1-2 2 68.4 68.4 0 0 1-15 0 2 2 0 0 1-2-2Z" /><path d="m10 15 5-3-5-3z" /></svg>
             </a>
           </div>
         </div>

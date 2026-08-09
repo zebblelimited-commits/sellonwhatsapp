@@ -202,6 +202,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
         subCategory: formData.subCategory,
         category: formData.subCategory, // Kept for backward compatibility with older queries
         productType,
+        trackInventory: productType === 'physical',
         images: imageUrls.filter(url => url !== null),
         features: features.filter(f => f.trim() !== ""),
         variants: variants.filter(v => v.value.trim() !== ""),

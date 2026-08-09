@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
+import { inventoryAdjustment } from "@/lib/inventory";
 
 class PaymentConfirmationError extends Error {
   status: number;
@@ -163,6 +164,10 @@ export async function POST(request: NextRequest) {
       const storeRef = adminDb.collection("stores").doc(vendorId);
       const storeSnap = await transaction.get(storeRef);
       if (!storeSnap.exists) throw new PaymentConfirmationError("Seller wallet not found", 404);
+      const productId = typeof order.productId === "string" ? order.productId.trim() : "";
+      const productRef = productId ? adminDb.collection("products").doc(productId) : null;
+      const productSnap = productRef ? await transaction.get(productRef) : null;
+      if (!productRef || !productSnap?.exists) throw new PaymentConfirmationError("Product inventory record not found", 409);
       const store = storeSnap.data() || {};
       const rawEscrowBalance = Number(store.escrowBalance ?? 0);
       if (!Number.isFinite(rawEscrowBalance)) throw new PaymentConfirmationError("Seller escrow ledger is invalid", 409);
@@ -183,8 +188,12 @@ export async function POST(request: NextRequest) {
       const now = admin.firestore.FieldValue.serverTimestamp();
       const currentStatus = statusOf(order.status);
       const nextStatus = ["SHIPPED", "DISPUTED"].includes(currentStatus) ? order.status : "PAID_HELD";
+      const inventory = inventoryAdjustment(productSnap.data() || {}, order, now, orderRef.id);
+      if (inventory.error) throw new PaymentConfirmationError(inventory.error, 409);
+      if (inventory.tracked) transaction.update(productRef, inventory.productUpdate);
       transaction.update(storeRef, { escrowBalance: escrowBalance + orderAmount, updatedAt: now });
       transaction.update(orderRef, {
+        ...inventory.orderUpdate,
         status: nextStatus,
         paymentStatus: "paid",
         paymentReference: providerReference,

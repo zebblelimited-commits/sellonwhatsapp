@@ -146,6 +146,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             return NextResponse.json({ error: "Booking date and slot are required" }, { status: 400 });
         }
 
+        const requestedQuantity = isBooking ? 1 : Math.floor(Number(quantity ?? 1));
+        if (!Number.isInteger(requestedQuantity) || requestedQuantity < 1 || requestedQuantity > 10000) {
+            return NextResponse.json({ error: "Quantity must be a whole number greater than zero" }, { status: 400 });
+        }
+
+        // Give the buyer an immediate availability response. The payment
+        // confirmation transaction performs the authoritative race-safe check.
+        const productRef = adminDb.collection("products").doc(productId);
+        const productSnapshot = await productRef.get();
+        if (!productSnapshot.exists) {
+            return NextResponse.json({ error: "Product not found" }, { status: 404 });
+        }
+        const productData = productSnapshot.data() || {};
+        const productType = String(productData.productType || "physical").toLowerCase();
+        const tracksInventory = !["service", "utility", "booking"].includes(productType) && productData.trackInventory !== false;
+        if (tracksInventory) {
+            const availableStock = Number(productData.stockCount ?? productData.stock ?? 0);
+            if (!Number.isFinite(availableStock) || availableStock < requestedQuantity) {
+                return NextResponse.json({ error: `Only ${Math.max(0, availableStock || 0)} item${availableStock === 1 ? "" : "s"} remaining.` }, { status: 409 });
+            }
+        }
+
         // Safe slotId generation
         const slotId: string | null = isBooking && bookingDate && bookingSlot
             ? `${bookingDate}_${(bookingSlot || "").replace(':', '-')}`
@@ -228,7 +250,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         console.log('✅ Nomba token obtained');
 
         // --- STAGE 4: CALCULATION & REFERENCE ---
-        const productTotal: number = Number(price || 0) * Number(quantity || 1);
+        const productTotal: number = Number(price || 0) * requestedQuantity;
         const totalAmount: number = productTotal + Number(deliveryFee || 0);
         const orderReference: string = `ZEBBLE_${isBooking ? 'BK' : 'ORD'}_${Date.now()}`;
 
@@ -344,7 +366,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     paymentStatus: "pending",
                     totalAmount: totalAmount,
                     deliveryFee: Number(deliveryFee || 0),
-                    quantity: Number(quantity || 1),
+                    quantity: requestedQuantity,
                     isBooking: !!isBooking,
                     slotId: slotId || null,
                     bookingDate: bookingDate || null,

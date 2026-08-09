@@ -10,6 +10,8 @@ import Popular from "@/components/sections/Popular";
 import NewStores from "@/components/sections/NewStores";
 import Features from "@/components/sections/Features";
 import Testimonials from "@/components/sections/Testimonials";
+import SponsoredStores from "@/components/sections/SponsoredStores";
+import SponsoredProducts from "@/components/sections/SponsoredProducts";
 import CTA from "@/components/sections/CTA";
 
 export default function Page() {
@@ -21,6 +23,8 @@ export default function Page() {
       <Popular />
       <TrendingStores />
       <NewStores />
+      <SponsoredStores />
+      <SponsoredProducts />
       <Features />
       <Testimonials />
       <CTA />

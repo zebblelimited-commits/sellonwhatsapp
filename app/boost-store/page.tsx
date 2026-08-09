@@ -8,11 +8,20 @@ import {
   Crown, ChevronDown, Loader2,
   BarChart, MessageSquare, TrendingUp, Users, Star
 } from "lucide-react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"] });
 
@@ -109,12 +118,52 @@ interface NotificationState {
   message: string;
 }
 
+interface ActiveBoost {
+  id: string;
+  status?: string;
+  startDate?: string;
+  expiryDate?: string;
+  expiresAt?: string;
+  packageName?: string;
+}
+
+interface BoostMetricPoint {
+  date: string;
+  label: string;
+  views: number;
+  clicks: number;
+  inquiries: number;
+}
+
+function dateValue(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "object" && value !== null && "toDate" in value && typeof value.toDate === "function") {
+    const date = value.toDate();
+    return date instanceof Date && !Number.isNaN(date.getTime()) ? date : null;
+  }
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function dayKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function displayDay(date: Date) {
+  return date.toLocaleDateString("en-NG", { day: "numeric", month: "short" });
+}
+
 export default function BoostPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingBoost, setLoadingBoost] = useState<string | null>(null);
   const [notification, setNotification] = useState<NotificationState | null>(null);
+  const [activeBoost, setActiveBoost] = useState<ActiveBoost | null>(null);
+  const [boostMetrics, setBoostMetrics] = useState<BoostMetricPoint[]>([]);
+  const [boostMetricsLoading, setBoostMetricsLoading] = useState(false);
+  const [boostMetricsError, setBoostMetricsError] = useState("");
   
   const [selectedDurations, setSelectedDurations] = useState<Record<string, BoostDuration>>({
     micro: BOOST_DURATIONS[2],
@@ -211,6 +260,91 @@ export default function BoostPage() {
     setNotification({ show: true, type, title, message });
     setTimeout(() => setNotification(null), 5000);
   };
+
+  // Load the vendor's current boost so the metrics section only exposes
+  // performance data while a paid boost is active.
+  useEffect(() => {
+    if (!currentUser) {
+      setActiveBoost(null);
+      return;
+    }
+
+    const boostsQuery = query(collection(db, "boosts"), where("storeId", "==", currentUser.uid));
+    return onSnapshot(
+      boostsQuery,
+      (snapshot) => {
+        const now = Date.now();
+        const active = snapshot.docs
+          .map((item) => ({ id: item.id, ...(item.data() as Omit<ActiveBoost, "id">) }))
+          .filter((boost) => {
+            const status = String(boost.status || "").toLowerCase();
+            const expiry = dateValue(boost.expiryDate || boost.expiresAt);
+            return status === "active" && (!expiry || expiry.getTime() > now);
+          })
+          .sort((left, right) => (dateValue(right.startDate)?.getTime() || 0) - (dateValue(left.startDate)?.getTime() || 0));
+
+        setActiveBoost(active[0] || null);
+      },
+      (error) => {
+        console.error("Active boost listener error:", error);
+        setActiveBoost(null);
+        setBoostMetricsError("Boost performance data could not be loaded.");
+      },
+    );
+  }, [currentUser]);
+
+  // Aggregate the store's immutable analytics events into daily chart points
+  // for the currently active boost period.
+  useEffect(() => {
+    if (!currentUser || !activeBoost) {
+      setBoostMetrics([]);
+      setBoostMetricsLoading(false);
+      return;
+    }
+
+    setBoostMetricsLoading(true);
+    setBoostMetricsError("");
+    const start = dateValue(activeBoost.startDate) || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const configuredEnd = dateValue(activeBoost.expiryDate || activeBoost.expiresAt);
+    const end = configuredEnd && configuredEnd.getTime() < Date.now() ? configuredEnd : new Date();
+    const chartStart = new Date(start);
+    chartStart.setUTCHours(0, 0, 0, 0);
+    const chartEnd = new Date(Math.max(chartStart.getTime(), end.getTime()));
+    chartEnd.setUTCHours(0, 0, 0, 0);
+
+    const points = new Map<string, BoostMetricPoint>();
+    for (let cursor = new Date(chartStart); cursor <= chartEnd; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      const date = new Date(cursor);
+      points.set(dayKey(date), { date: dayKey(date), label: displayDay(date), views: 0, clicks: 0, inquiries: 0 });
+    }
+
+    const analyticsQuery = query(collection(db, "analytics"), where("storeId", "==", currentUser.uid));
+    return onSnapshot(
+      analyticsQuery,
+      (snapshot) => {
+        snapshot.docs.forEach((item) => {
+          const data = item.data();
+          const timestamp = dateValue(data.timestamp);
+          if (!timestamp || timestamp < start || timestamp > end) return;
+          const point = points.get(dayKey(timestamp));
+          if (!point) return;
+
+          if (data.eventType === "view") point.views += 1;
+          if (data.eventType === "click" || data.eventType === "buy_now_click") point.clicks += 1;
+          if (data.eventType === "whatsapp_click") point.inquiries += 1;
+        });
+
+        setBoostMetrics(Array.from(points.values()));
+        setBoostMetricsLoading(false);
+      },
+      (error) => {
+        console.error("Boost analytics listener error:", error);
+        setBoostMetrics([]);
+        setBoostMetricsLoading(false);
+        setBoostMetricsError("Boost performance data could not be loaded.");
+      },
+    );
+  }, [currentUser, activeBoost]);
 
   const handleDurationSelect = (packageId: string, duration: BoostDuration) => {
     setSelectedDurations(prev => ({ ...prev, [packageId]: duration }));
@@ -348,25 +482,6 @@ export default function BoostPage() {
           </div>
         </section>
 
-        {/* Value Props */}
-        <section className="max-w-5xl mx-auto px-4 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { icon: TrendingUp, title: "More Visibility", desc: "Appear in trending stores & category top lists" },
-              { icon: Users, title: "More Buyers", desc: "Reach nearby customers via push notifications" },
-              { icon: Star, title: "More Trust", desc: "Featured stores get 3.2x more inquiries" }
-            ].map((prop, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-100 p-6 text-center shadow-sm">
-                <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <prop.icon size={20} />
-                </div>
-                <h3 className="font-bold text-gray-900 mb-2">{prop.title}</h3>
-                <p className="text-sm text-gray-500">{prop.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
         {/* Boost Packages */}
         <section className="max-w-7xl mx-auto px-4 pb-20">
           <div className="text-center mb-12">
@@ -489,35 +604,82 @@ export default function BoostPage() {
           </div>
         </section>
 
-        {/* Analytics Preview */}
-        <section className="bg-gray-50 py-20 px-4">
-          <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-black text-gray-900 mb-3">Track Your Results</h2>
+        {/* Value Props */}
+        <section className="max-w-5xl mx-auto px-4 pb-20">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            {[
+              { icon: TrendingUp, title: "More Visibility", desc: "Appear in trending stores & category top lists" },
+              { icon: Users, title: "More Buyers", desc: "Reach nearby customers via push notifications" },
+              { icon: Star, title: "More Trust", desc: "Featured stores get 3.2x more inquiries" }
+            ].map((prop, i) => (
+              <div key={i} className="rounded-2xl border border-gray-100 bg-white p-6 text-center shadow-sm">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-green-50 text-green-600">
+                  <prop.icon size={20} />
+                </div>
+                <h3 className="mb-2 font-bold text-gray-900">{prop.title}</h3>
+                <p className="text-sm text-gray-500">{prop.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Live Analytics */}
+        <section className="bg-gray-50 px-4 py-20">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-12 text-center">
+              <h2 className="mb-3 text-3xl font-black text-gray-900">Track Your Results</h2>
               <p className="text-gray-500">Monitor your boost performance in real-time</p>
             </div>
-            
-            <div className="bg-white rounded-[32px] border border-gray-100 p-8 shadow-sm">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                {[
-                  { label: "Views", value: "2,341", icon: BarChart, trend: "+18%" },
-                  { label: "Clicks", value: "187", icon: ArrowRight, trend: "+24%" },
-                  { label: "Inquiries", value: "43", icon: MessageSquare, trend: "+31%" }
-                ].map((stat, i) => (
-                  <div key={i} className="text-center p-4 bg-gray-50 rounded-2xl">
-                    <stat.icon size={20} className="text-gray-400 mx-auto mb-2" />
-                    <p className="text-2xl font-black text-gray-900">{stat.value}</p>
-                    <p className="text-sm text-gray-500">{stat.label}</p>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-600 mt-1">
-                      <ArrowRight size={10} className="-rotate-45" /> {stat.trend}
-                    </span>
+
+            <div className="rounded-[32px] border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
+              {!currentUser ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-10 text-center">
+                  <ShieldCheck className="mx-auto text-gray-300" size={30} />
+                  <p className="mt-3 text-sm font-bold text-gray-700">Sign in to view boost performance</p>
+                  <p className="mt-1 text-xs text-gray-500">Your live views, clicks, and inquiries appear here after activation.</p>
+                </div>
+              ) : !activeBoost ? (
+                <div className="rounded-2xl border border-dashed border-green-200 bg-green-50/50 p-10 text-center">
+                  <Zap className="mx-auto text-green-500" size={30} />
+                  <p className="mt-3 text-sm font-bold text-gray-800">Activate a boost plan to unlock live metrics</p>
+                  <p className="mt-1 text-xs text-gray-500">Once payment is confirmed, your boost performance chart will appear here.</p>
+                </div>
+              ) : boostMetricsLoading ? (
+                <div className="flex min-h-64 items-center justify-center"><Loader2 className="animate-spin text-green-600" size={30} /></div>
+              ) : (
+                <>
+                  <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+                    <div><p className="text-xs font-bold uppercase tracking-widest text-green-600">{activeBoost.packageName || "Active boost"}</p><p className="mt-1 text-xs text-gray-500">Live data since {dateValue(activeBoost.startDate)?.toLocaleDateString("en-NG") || "activation"}</p></div>
+                    <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1.5 text-[10px] font-black uppercase text-green-700"><span className="h-2 w-2 animate-pulse rounded-full bg-green-600" /> Active</span>
                   </div>
-                ))}
-              </div>
-              
-              <div className="h-48 bg-gray-50 rounded-2xl flex items-center justify-center border border-dashed border-gray-200">
-                <p className="text-sm text-gray-400">Performance chart will appear here after boost activation</p>
-              </div>
+
+                  {boostMetricsError && <div className="mb-4 rounded-2xl bg-amber-50 p-3 text-xs font-medium text-amber-700">{boostMetricsError}</div>}
+
+                  <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    {[{ label: "Views", value: boostMetrics.reduce((total, point) => total + point.views, 0), icon: BarChart }, { label: "Clicks", value: boostMetrics.reduce((total, point) => total + point.clicks, 0), icon: ArrowRight }, { label: "Inquiries", value: boostMetrics.reduce((total, point) => total + point.inquiries, 0), icon: MessageSquare }].map((stat) => (
+                      <div key={stat.label} className="rounded-2xl bg-gray-50 p-4 text-center"><stat.icon size={20} className="mx-auto mb-2 text-gray-400" /><p className="text-2xl font-black text-gray-900">{stat.value.toLocaleString()}</p><p className="text-sm text-gray-500">{stat.label}</p></div>
+                    ))}
+                  </div>
+
+                  {boostMetrics.length === 0 ? (
+                    <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50 text-center"><p className="text-sm text-gray-400">No performance events have been recorded yet.</p></div>
+                  ) : (
+                    <div className="h-72 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={boostMetrics} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                          <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9ca3af" }} />
+                          <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#9ca3af" }} />
+                          <Tooltip contentStyle={{ borderRadius: "16px", border: "1px solid #e5e7eb", fontSize: "11px" }} />
+                          <Line type="monotone" dataKey="views" name="Views" stroke="#22c55e" strokeWidth={3} dot={{ r: 3 }} />
+                          <Line type="monotone" dataKey="clicks" name="Clicks" stroke="#3b82f6" strokeWidth={3} dot={{ r: 3 }} />
+                          <Line type="monotone" dataKey="inquiries" name="Inquiries" stroke="#f59e0b" strokeWidth={3} dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </section>

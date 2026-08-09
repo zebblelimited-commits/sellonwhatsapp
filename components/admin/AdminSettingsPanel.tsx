@@ -6,6 +6,7 @@ import { EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail
 import { auth } from "@/lib/firebase";
 import { adminMutation } from "@/components/admin/adminApi";
 import AdminHeroSlidesPanel from "@/components/admin/AdminHeroSlidesPanel";
+import AdminSponsoredStoresPanel from "@/components/admin/AdminSponsoredStoresPanel";
 
 const permissionGroups = [
   ["users", ["read", "write", "delete"]], ["stores", ["read", "write", "delete", "ban"]],
@@ -152,6 +153,7 @@ export default function AdminSettingsPanel() {
       </section>
     </div>
     <AdminHeroSlidesPanel />
+    <AdminSponsoredStoresPanel />
     {isSuperAdmin && <section className="space-y-4 rounded-[28px] border border-gray-100 bg-white p-6 shadow-sm"><div><h3 className="font-bold text-gray-900">Admin roles and permissions</h3><p className="text-xs text-gray-500">Only super admins can change access. Changes are written through the protected admin API and audited.</p></div>{adminsError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{adminsError}</div>}{admins.length === 0 && !adminsError && <p className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-500">No additional admin accounts found.</p>}{admins.map((admin) => <div key={admin.uid} className="rounded-2xl border border-gray-100 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-bold text-sm text-gray-900">{admin.displayName || admin.email || admin.uid}</p><p className="text-xs text-gray-400">{admin.email || admin.uid}</p></div><div className="flex items-center gap-2"><select value={admin.role || "admin"} onChange={(event) => void updateManagedAdmin(admin, { role: event.target.value })} className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-bold"><option value="super_admin">Super admin</option><option value="admin">Admin</option><option value="support">Support</option><option value="finance">Finance</option><option value="moderator">Moderator</option></select><button onClick={() => void updateManagedAdmin(admin, { isActive: admin.isActive === false })} className={`rounded-xl px-3 py-2 text-xs font-bold ${admin.isActive === false ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{admin.isActive === false ? "Inactive" : "Active"}</button></div></div><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{permissionGroups.map(([group, permissions]) => <div key={group} className="rounded-xl bg-gray-50 p-3"><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">{group}</p>{permissions.map((permission) => <label key={permission} className="flex items-center gap-2 text-xs text-gray-700"><input type="checkbox" checked={admin.permissions?.[group]?.[permission] === true} onChange={() => togglePermission(admin, group, permission)} /><span>{permission}</span></label>)}</div>)}</div></div>)}</section>}
   </div>;
 }

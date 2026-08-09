@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 import { Novu } from "@novu/node"; 
+import { inventoryAdjustment } from "@/lib/inventory";
 
 // ✅ 1. SAFELY Initialize Novu (Prevents entire webhook from crashing if key is missing)
 const novuApiKey = process.env.NOVU_API_KEY || process.env.NOVU_SECRET_KEY;
@@ -277,6 +278,10 @@ export async function POST(request: NextRequest) {
             const storeRef = adminDb.collection("stores").doc(vendorId);
             const storeSnap = await transaction.get(storeRef);
             if (!storeSnap.exists) throw new Error("Seller wallet not found; escrow was not reserved");
+            const productId = typeof order.productId === "string" ? order.productId.trim() : "";
+            const productRef = productId ? adminDb.collection("products").doc(productId) : null;
+            const productSnap = productRef ? await transaction.get(productRef) : null;
+            if (!productRef || !productSnap?.exists) throw new Error("Product inventory record not found; escrow was not reserved");
             const store = storeSnap.data() || {};
             const rawEscrowBalance = Number(store.escrowBalance ?? 0);
             if (!Number.isFinite(rawEscrowBalance)) {
@@ -305,6 +310,9 @@ export async function POST(request: NextRequest) {
             }
 
             const now = admin.firestore.FieldValue.serverTimestamp();
+            const inventory = inventoryAdjustment(productSnap.data() || {}, order, now, docSnap.id);
+            if (inventory.error) throw new Error(`${inventory.error} Escrow was not reserved.`);
+            if (inventory.tracked) transaction.update(productRef, inventory.productUpdate);
             transaction.update(storeRef, {
               escrowBalance: escrowBalance + orderAmount,
               updatedAt: now,
@@ -327,6 +335,7 @@ export async function POST(request: NextRequest) {
               });
             }
             transaction.update(docSnap.ref, {
+              ...inventory.orderUpdate,
               status: "PAID_HELD",
               paymentStatus: "paid",
               fundsState: "held",

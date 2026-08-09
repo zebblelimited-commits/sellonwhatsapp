@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { collection, onSnapshot } from "firebase/firestore";
-import { ChevronLeft, ChevronRight, ShieldCheck, Store as StoreIcon } from "lucide-react";
+import { ShieldCheck, Store as StoreIcon } from "lucide-react";
 import { db } from "@/lib/firebase";
 
 const font = Plus_Jakarta_Sans({
@@ -96,7 +96,6 @@ function StorePlaceholder() {
 }
 
 export default function NewStores({ fullPage = false }: { fullPage?: boolean }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -119,30 +118,20 @@ export default function NewStores({ fullPage = false }: { fullPage?: boolean }) 
     );
   }, [fullPage]);
 
-  const scroll = (direction: "left" | "right") => {
-    if (!scrollRef.current) return;
-    const { scrollLeft, clientWidth } = scrollRef.current;
-    scrollRef.current.scrollTo({ left: direction === "left" ? scrollLeft - clientWidth : scrollLeft + clientWidth, behavior: "smooth" });
-  };
-
   return (
     <section className={`${font.className} mx-auto w-full max-w-[1800px] px-6 py-10`} id="new-stores">
       <div className="mb-6 flex items-center justify-between">
         <div>
           {fullPage && <Link href="/" className="mb-2 inline-flex text-xs font-bold text-gray-500 hover:text-green-600">← Back to home</Link>}
-          <h2 className="text-xl font-bold text-gray-900">New Verified Stores</h2>
+          <h2 className="text-xl font-bold text-gray-900">Verified Stores</h2>
           {fullPage && <p className="mt-1 text-sm font-medium text-gray-500">Discover the newest verified vendors on the marketplace.</p>}
         </div>
         <div className="flex items-center gap-3">
           {!fullPage && <Link href="/verified-stores" className="text-xs font-semibold text-[#00d95f] transition-colors hover:text-[#00a63e] sm:text-sm">View all <span className="text-sm">›</span></Link>}
-          {!fullPage && <div className="flex gap-2">
-            <button type="button" onClick={() => scroll("left")} aria-label="Previous new stores" className="rounded-full border border-gray-200 p-2 text-gray-400 transition-all hover:bg-gray-50 active:scale-90"><ChevronLeft size={20} /></button>
-            <button type="button" onClick={() => scroll("right")} aria-label="Next new stores" className="rounded-full border border-gray-200 p-2 text-gray-400 transition-all hover:bg-gray-50 active:scale-90"><ChevronRight size={20} /></button>
-          </div>}
         </div>
       </div>
 
-      <div ref={scrollRef} className={fullPage ? "grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5" : "no-scrollbar flex gap-5 overflow-x-auto pb-4 scroll-smooth md:grid md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5"}>
+      <div className={fullPage ? "grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5" : "no-scrollbar flex gap-5 overflow-x-auto pb-4 scroll-smooth md:grid md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5"}>
         {loading ? [1, 2, 3, 4, 5].map((item) => <div key={item} className="h-52 min-w-[280px] animate-pulse rounded-[24px] bg-gray-100 md:min-w-0" />) : stores.length > 0 ? stores.map((store) => <MiniStoreCard key={store.id} store={store} />) : <StorePlaceholder />}
       </div>
 

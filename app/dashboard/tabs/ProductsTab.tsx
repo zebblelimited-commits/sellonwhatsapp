@@ -8,7 +8,7 @@ import {
 import { db, auth } from "@/lib/firebase";
 import { 
   collection, query, where, onSnapshot, orderBy, 
-  doc, deleteDoc, updateDoc 
+  doc, deleteDoc, updateDoc, increment, serverTimestamp
 } from "firebase/firestore";
 
 export default function ProductsTab({ onOpenModal, storeSlug, onEditProduct, onShareProduct }) {
@@ -54,7 +54,7 @@ export default function ProductsTab({ onOpenModal, storeSlug, onEditProduct, onS
 };
 
   const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase())
+    String(p.name || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -134,7 +134,10 @@ function ProductItem({ item, storeSlug, onEdit, onDeleteClick, onShare }) {
   // Logic Variables
   const isBooking = item.productType === "booking";
   const isServiceOrUtility = item.productType === "service" || item.productType === "utility";
-  const isOutOfStock = (item.stockCount || 0) <= 0 || item.availability === "out_of_stock";
+  const stockCount = Number(item.stockCount ?? item.stock ?? 0);
+  const isOutOfStock = isServiceOrUtility
+    ? item.availability === "out_of_stock"
+    : !Number.isFinite(stockCount) || stockCount <= 0 || item.availability === "out_of_stock";
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -154,7 +157,9 @@ function ProductItem({ item, storeSlug, onEdit, onDeleteClick, onShare }) {
       
       await updateDoc(doc(db, "products", item.id), {
         availability: newStatus,
-        stockCount: newCount
+        stockCount: newCount,
+        stock: newCount,
+        updatedAt: serverTimestamp(),
       });
     } catch (err) {
       console.error("Stock update error:", err);
@@ -171,7 +176,7 @@ function ProductItem({ item, storeSlug, onEdit, onDeleteClick, onShare }) {
     }
     
     if (isServiceOrUtility) return "Available";
-    return `${item.stockCount || 0} ${isBooking ? 'Slots' : 'Left'}`;
+    return `${stockCount || 0} ${isBooking ? 'Slots' : 'Left'}`;
   };
 
   return (

@@ -14,7 +14,7 @@ import {
   Users, Store, CreditCard, AlertTriangle, TrendingUp, Clock, 
   CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight, Loader2,
   Search, Bell, ShieldCheck, ChevronRight, Eye, Flag, MessageSquare,
-  LayoutDashboard, Settings, LogOut, SlidersHorizontal,ClipboardList, Send, ArrowLeft, MoreVertical, User, Phone,FileText, X, Menu
+  LayoutDashboard, Settings, LogOut, SlidersHorizontal,ClipboardList, Send, ArrowLeft, MoreVertical, User, Phone,FileText, X, Menu, Package
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -25,6 +25,7 @@ import AdminStoresManagement from "@/components/admin/AdminStoresManagement";
 import AdminSettingsPanel from "@/components/admin/AdminSettingsPanel";
 import AdminAuditLogsTab from "@/components/admin/AdminAuditLogsTab";
 import AdminVerificationsPanel from "@/components/admin/AdminVerificationsTab";
+import AdminProductsTab from "@/components/admin/AdminProductsTab";
 import { adminMutation } from "@/components/admin/adminApi";
 import { supportChatRequest } from "@/components/chat/chatApi";
 import { showToast } from "@/lib/toast";
@@ -1645,6 +1646,7 @@ export default function AdminDashboard() {
       case "home": return <AdminHome stats={stats} onNavigate={handleTabChange} />;
       case "users": return <AdminUsersManagement/>;
       case "stores": return <AdminStoresManagement/>;
+      case "products": return <AdminProductsTab />;
       case "orders": return <AdminOrdersTab/>;
       case "payouts": return <AdminPayoutsTab/>;
       case "disputes": return <AdminDisputesTab/>;
@@ -1689,6 +1691,7 @@ export default function AdminDashboard() {
               <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard" active={activeTab === "home"} onClick={() => handleTabChange("home")} />
               <NavItem icon={<Users size={18} />} label="Users" active={activeTab === "users"} onClick={() => handleTabChange("users")} badge={stats.totalUsers > 1000 ? "1k+" : null} />
               <NavItem icon={<Store size={18} />} label="Stores" active={activeTab === "stores"} onClick={() => handleTabChange("stores")} badge={stats.activeStores > 100 ? "100+" : null} />
+              <NavItem icon={<Package size={18} />} label="Products" active={activeTab === "products"} onClick={() => handleTabChange("products")} />
               <NavItem icon={<ClipboardList size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => handleTabChange("orders")} />
               <NavItem icon={<CreditCard size={18} />} label="Payouts" active={activeTab === "payouts"} onClick={() => handleTabChange("payouts")} badge={stats.pendingPayouts > 0 ? stats.pendingPayouts : null} />
               <NavItem icon={<AlertTriangle size={18} />} label="Disputes" active={activeTab === "disputes"} onClick={() => handleTabChange("disputes")} badge={stats.openDisputes > 0 ? stats.openDisputes : null} />
@@ -1718,6 +1721,7 @@ export default function AdminDashboard() {
           <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard" active={activeTab === "home"} onClick={() => handleTabChange("home")} />
           <NavItem icon={<Users size={18} />} label="Users" active={activeTab === "users"} onClick={() => handleTabChange("users")} badge={stats.totalUsers > 1000 ? "1k+" : null} />
           <NavItem icon={<Store size={18} />} label="Stores" active={activeTab === "stores"} onClick={() => handleTabChange("stores")} badge={stats.activeStores > 100 ? "100+" : null} />
+          <NavItem icon={<Package size={18} />} label="Products" active={activeTab === "products"} onClick={() => handleTabChange("products")} />
           <NavItem icon={<ClipboardList size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => handleTabChange("orders")} />
           <NavItem icon={<CreditCard size={18} />} label="Payouts" active={activeTab === "payouts"} onClick={() => handleTabChange("payouts")} badge={stats.pendingPayouts > 0 ? stats.pendingPayouts : null} />
           <NavItem icon={<AlertTriangle size={18} />} label="Disputes" active={activeTab === "disputes"} onClick={() => handleTabChange("disputes")} badge={stats.openDisputes > 0 ? stats.openDisputes : null} />

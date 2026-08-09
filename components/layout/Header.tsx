@@ -13,7 +13,7 @@ const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
 export default function Header({ isStorePage = false, storeName = "" }) {
   const router = useRouter();
-  
+
   // ✅ FIX 1: Removed useSearchParams() to prevent Next.js Suspense boundary errors
   const [query, setQuery] = useState("");
   const [user, setUser] = useState<User | null>(null);
@@ -88,7 +88,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
       setIsSearching(true);
       try {
         const cleanQuery = query.toLowerCase().replace("@", "");
-        
+
         // Fetch Stores and Products in parallel
         const [storeSnap, prodSnap] = await Promise.all([
           getDocs(firestoreQuery(collection(db, "stores"), limit(10))),
@@ -167,13 +167,13 @@ export default function Header({ isStorePage = false, storeName = "" }) {
             {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
           <Link href="/" onClick={() => setIsMobileMenuOpen(false)}>
-          <div className="flex items-center px-2">
-            <img 
-              src="/icons/sowa.png" 
-              alt="Sowa Logo" 
-              className="h-11 w-auto object-contain"
-            />
-          </div>
+            <div className="flex items-center px-2">
+              <img
+                src="/icons/sowa.png"
+                alt="Sowa Logo"
+                className="h-8 md:h-9 w-auto object-contain"
+              />
+            </div>
           </Link>
         </div>
 
@@ -201,6 +201,8 @@ export default function Header({ isStorePage = false, storeName = "" }) {
           {!isStorePage && (
             <>
               <Link href="/explore" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Explore</Link>
+              <Link href="/categories" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Categories</Link>
+              <Link href="/search" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Search</Link>
               <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Pricing</Link>
               <Link href="/boost-store" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Boost Store</Link>
               <Link href="/faq" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">FAQ</Link>
@@ -264,7 +266,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
                   <>
                     <div className="px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Products</div>
                     {results.products.map(p => (
-                      <Link key={p.id} href={`/product/${p.id}`} onClick={() => setIsFocused(false)} className="flex items-center gap-3 p-3 hover:bg-green-50 transition-colors border-b border-gray-50 last:border-0">
+                      <Link key={p.id} href={`/products/${p.id}`} onClick={() => setIsFocused(false)} className="flex items-center gap-3 p-3 hover:bg-green-50 transition-colors border-b border-gray-50 last:border-0">
                         <div className="w-8 h-8 rounded-lg bg-gray-100 overflow-hidden shrink-0">
                           <img src={p.images?.[0] || p.image || "/placeholder.png"} className="w-full h-full object-cover" alt="" />
                         </div>
@@ -290,6 +292,8 @@ export default function Header({ isStorePage = false, storeName = "" }) {
       {!isStorePage && (
         <nav className="hidden md:flex gap-6 text-sm font-medium text-gray-600">
           <Link href="/explore" className="hover:text-green-600">Explore</Link>
+          <Link href="/categories" className="hover:text-green-600">Categories</Link>
+          <Link href="/search" className="hover:text-green-600">Search</Link>
           <a href="/pricing" className="hover:text-green-600">Pricing</a>
           <a href="/boost-store" className="hover:text-green-600">Boost Store</a>
           <a href="/faq" className="hover:text-green-600">FAQ</a>

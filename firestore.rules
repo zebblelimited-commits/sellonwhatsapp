@@ -58,6 +58,14 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // 📣 SPONSORED STORES: Public display, protected admin management
+    // ═══════════════════════════════════════════════════════════
+    match /sponsored_stores/{cardId} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // ✅ STORE VERIFICATIONS: Admin review queue + owner access
     // ═══════════════════════════════════════════════════════════
     match /store_verifications/{docId} {
