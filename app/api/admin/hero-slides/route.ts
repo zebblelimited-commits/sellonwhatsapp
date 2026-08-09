@@ -4,6 +4,10 @@ import { adminDb } from "@/lib/firebase-admin";
 import { requireAdmin } from "@/lib/admin-auth";
 
 const stringField = (value: unknown, fallback = "", max = 500) => typeof value === "string" ? value.trim().slice(0, max) : fallback;
+const colorField = (value: unknown, fallback: string) => {
+  const color = stringField(value, fallback, 7);
+  return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
+};
 
 function slideFields(body: Record<string, unknown>) {
   return {
@@ -12,7 +16,14 @@ function slideFields(body: Record<string, unknown>) {
     highlight: stringField(body.highlight, "WhatsApp", 150),
     titleAfter: stringField(body.titleAfter, "like a real online store", 200),
     description: stringField(body.description, "", 500),
+    backgroundImageUrl: stringField(body.backgroundImageUrl, "/images/hero/sellon-hero-bg.webp", 1000),
     imageUrl: stringField(body.imageUrl, "", 1000),
+    eyebrowColor: colorField(body.eyebrowColor, "#39e878"),
+    titleColor: colorField(body.titleColor, "#ffffff"),
+    highlightColor: colorField(body.highlightColor, "#00d95f"),
+    descriptionColor: colorField(body.descriptionColor, "#d7fbe4"),
+    primaryButtonTextColor: colorField(body.primaryButtonTextColor, "#00a63e"),
+    featureTextColor: colorField(body.featureTextColor, "#6b7280"),
     primaryLabel: stringField(body.primaryLabel, "Start Selling", 80),
     primaryUrl: stringField(body.primaryUrl, "/register", 500),
     secondaryLabel: stringField(body.secondaryLabel, "See Demo", 80),

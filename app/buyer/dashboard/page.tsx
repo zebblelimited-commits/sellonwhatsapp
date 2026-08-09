@@ -13,7 +13,7 @@ import {
   Settings, Loader2, User, CreditCard,
   ShieldCheck, Bell, ClipboardList, SlidersHorizontal,
   ShieldAlert, ArrowRight, Clock, Truck,
-  CheckCircle2, AlertTriangle, TrendingUp, Star, MessageCircle, Store as StoreIcon, IdCard
+  CheckCircle2, AlertTriangle, TrendingUp, Star, MessageCircle, Store as StoreIcon, IdCard, Menu, X
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -36,6 +36,7 @@ const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600
 export default function BuyerDashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("home");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -62,6 +63,11 @@ export default function BuyerDashboard() {
       await fetch('/api/session', { method: 'DELETE' }).catch(() => undefined);
       router.replace('/login');
     }
+  };
+
+  const selectTab = (tab: string) => {
+    setActiveTab(tab);
+    setIsMobileMenuOpen(false);
   };
 
   useEffect(() => {
@@ -295,14 +301,39 @@ export default function BuyerDashboard() {
   );
 
   return (
-    <div className={`${font.className} flex h-screen overflow-hidden bg-gray-50/50 text-gray-900`}>
+    <div className={`${font.className} flex min-h-screen md:h-screen md:overflow-hidden bg-gray-50/50 text-gray-900`}>
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/30 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
+          <aside className="flex h-full w-72 max-w-[86vw] flex-col overflow-y-auto bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
+              <img src="/icons/sowa.png" alt="Sowa Logo" className="h-10 w-auto object-contain" />
+              <button type="button" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>
+            </div>
+            <nav className="space-y-1 overflow-y-auto no-scrollbar">
+              <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard" active={activeTab === "home"} onClick={() => selectTab("home")} />
+              <NavItem icon={<Search size={18} />} label="Explore" active={activeTab === "explore"} onClick={() => selectTab("explore")} />
+              <NavItem icon={<ShoppingBag size={18} />} label="My Purchases" active={activeTab === "purchases"} onClick={() => selectTab("purchases")} />
+              <NavItem icon={<ClipboardList size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => selectTab("orders")} />
+              <NavItem icon={<ShieldAlert size={18} />} label="Disputes" active={activeTab === "disputes"} onClick={() => selectTab("disputes")} badge={buyerDisputeStats.open > 0 ? buyerDisputeStats.open : null} />
+              <NavItem icon={<Bell size={18} />} label="Notifications" active={activeTab === "notifications"} onClick={() => selectTab("notifications")} badge={notificationStats.unread > 0 ? notificationStats.unread : null} />
+              <NavItem icon={<MessageCircle size={18} />} label="Support Chat" active={activeTab === "support-chat"} onClick={() => selectTab("support-chat")} badge={chatStats.unread > 0 ? chatStats.unread : null} />
+              <NavItem icon={<IdCard size={18} />} label="Profile" active={activeTab === "profile"} onClick={() => selectTab("profile")} />
+            </nav>
+            <div className="border-t border-gray-100 pt-4">
+              <NavItem icon={<Settings size={18} />} label="Settings" active={activeTab === "settings"} onClick={() => selectTab("settings")} />
+              <NavItem icon={<User size={18} />} label="Account" active={activeTab === "account"} onClick={() => selectTab("account")} />
+              <button type="button" onClick={() => { setIsMobileMenuOpen(false); void handleLogout(); }} className="mt-1 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-red-500 transition-colors hover:bg-red-50"><LogOut size={18} /> Logout</button>
+            </div>
+          </aside>
+        </div>
+      )}
       {/* Sidebar */}
-      <aside className="w-64 flex-shrink-0 bg-white border-r border-gray-100 hidden md:flex flex-col p-6 h-full">
+      <aside className="hidden h-full w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
         <div className="flex items-center px-2 py-2 mb-6">
           <img src="/icons/sowa.png" alt="Sowa Logo" className="h-11 w-auto object-contain" />
         </div>
 
-        <nav className="space-y-1 flex-1 overflow-y-auto no-scrollbar">
+        <nav className="space-y-1 overflow-y-auto no-scrollbar">
           <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard" active={activeTab === "home"} onClick={() => setActiveTab("home")} />
           <NavItem icon={<Search size={18} />} label="Explore" active={activeTab === "explore"} onClick={() => setActiveTab("explore")} />
           <NavItem icon={<ShoppingBag size={18} />} label="My Purchases" active={activeTab === "purchases"} onClick={() => setActiveTab("purchases")} />
@@ -350,21 +381,26 @@ export default function BuyerDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4 md:p-10 no-scrollbar">
-          <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
-            <div>
-              <h1 className="text-2xl font-extrabold capitalize tracking-tight">
-                {activeTab === "explore" ? "Discover Stores" :
-                  activeTab === "disputes" ? "Dispute Center" :
-                    activeTab.replace("-", " ")}
-              </h1>
-              <p className="text-gray-400 text-sm font-bold">
-                {activeTab === "disputes"
-                  ? "Track and manage your order disputes"
-                  : `Welcome back, ${userData?.displayName || userData?.firstName || "Buyer"}`
-                }
-              </p>
+      <main className="flex min-h-screen flex-1 flex-col min-w-0 md:h-full md:overflow-hidden">
+        <div className="p-4 no-scrollbar md:flex-1 md:min-h-0 md:overflow-y-auto md:p-10">
+          <header className="mb-10 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+            <div className="flex items-center gap-3">
+              <button type="button" aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((open) => !open)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 shadow-sm md:hidden">
+                {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+              </button>
+              <div>
+                <h1 className="text-2xl font-extrabold capitalize tracking-tight">
+                  {activeTab === "explore" ? "Discover Stores" :
+                    activeTab === "disputes" ? "Dispute Center" :
+                      activeTab.replace("-", " ")}
+                </h1>
+                <p className="text-gray-400 text-sm font-bold">
+                  {activeTab === "disputes"
+                    ? "Track and manage your order disputes"
+                    : `Welcome back, ${userData?.displayName || userData?.firstName || "Buyer"}`
+                  }
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center gap-3">
@@ -436,7 +472,7 @@ export default function BuyerDashboard() {
             onSubmit={submitDisputeResponse}
           />
 
-          <footer className="py-8 text-center border-t border-gray-100 mt-auto">
+          <footer className="border-t border-gray-100 py-8 text-center">
             <p className="text-[9px] uppercase tracking-[0.3em] font-black text-gray-600">
               Powered by Zebble Quantum Technologies LTD
             </p>
@@ -633,7 +669,7 @@ function BuyerHome({ userData, stats, buyerDisputeStats, onExploreClick, onViewO
               Welcome back, {userData?.displayName?.split(' ')[0] || userData?.firstName || "Buyer"}! 👋
             </h2>
             <p className="text-green-50 font-medium opacity-90 max-w-lg">
-              Your payments are protected with escrow. Shop with confidence on Sowa.
+              Your payments are protected with escrow. Shop with confidence on SellOnWhatsapp.
             </p>
           </div>
           <button onClick={onExploreClick} className="flex items-center gap-2 px-5 py-3 bg-white text-green-700 rounded-2xl font-bold text-sm hover:scale-105 transition-transform whitespace-nowrap">

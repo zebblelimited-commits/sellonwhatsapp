@@ -18,7 +18,8 @@ import {
   ShieldAlert,
   Crown, 
   MessageSquare,
-  CreditCard
+  CreditCard,
+  Menu
 } from "lucide-react";
 import {
   doc, getDoc, getDocs, collection, query, where, onSnapshot,
@@ -67,6 +68,7 @@ function Dashboard() {
 
   // 🌟 FIX: Use local state for activeTab to guarantee instant UI updates without waiting for URL parsing
   const [activeTab, setActiveTabState] = useState(searchParams.get("tab") || "overview");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const tabFromUrl = searchParams.get("tab");
@@ -378,6 +380,12 @@ function Dashboard() {
     }
   };
 
+  const selectSellerTab = (tab: string, feature?: ProFeature) => {
+    setIsMobileMenuOpen(false);
+    if (feature) handleProTabClick(tab, feature);
+    else setActiveTab(tab);
+  };
+
   const openDisputeResponseModal = (dispute: any) => {
     setDisputeResponseModal({ dispute });
     setDisputeResponse("");
@@ -517,6 +525,33 @@ function Dashboard() {
 
   return (
     <div className={`${font.className} flex min-h-screen bg-gray-50/50 text-gray-900`}>
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/30 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
+          <aside className="flex h-full w-72 max-w-[86vw] flex-col overflow-y-auto bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-2"><img src="/icons/sowa.png" alt="Sowa Logo" className="h-10 w-auto object-contain" /><span className="text-xs font-black text-gray-900">Seller Dashboard</span></div>
+              <button type="button" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>
+            </div>
+            <nav className="space-y-1 overflow-y-auto no-scrollbar">
+              <NavItem icon={<LayoutDashboard size={18} />} label="Overview" active={activeTab === "overview"} onClick={() => selectSellerTab("overview")} />
+              <NavItem icon={<ShoppingCart size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => selectSellerTab("orders")} />
+              <NavItem icon={<Store size={18} />} label="My Store" active={activeTab === "store"} onClick={() => selectSellerTab("store")} />
+              <NavItem icon={<Wallet size={18} />} label="Withdraw" active={activeTab === "withdraw"} onClick={() => selectSellerTab("withdraw")} />
+              <NavItem icon={<CreditCard size={18} />} label="Payouts" active={activeTab === "payouts"} onClick={() => selectSellerTab("payouts")} />
+              <NavItem icon={<ShieldAlert size={18} />} label="Disputes" active={activeTab === "disputes"} onClick={() => selectSellerTab("disputes")} badge={disputeStats.open > 0 ? disputeStats.open : null} />
+              <NavItem icon={<Package size={18} />} label="Products" active={activeTab === "products"} onClick={() => selectSellerTab("products")} />
+              <NavItem icon={<TrendingUp size={18} />} label="Analytics" active={activeTab === "analytics"} onClick={() => selectSellerTab("analytics", "analytics")} isPro={!hasProAccess("analytics")} />
+              <NavItem icon={<MessageSquare size={18} />} label="Chat" active={activeTab === "chat"} onClick={() => selectSellerTab("chat", "chat")} isPro={!hasProAccess("chat")} badge={chatStats.unread > 0 ? chatStats.unread : null} />
+              <NavItem icon={<Bell size={18} />} label="Notifications" active={activeTab === "notifications"} onClick={() => selectSellerTab("notifications")} badge={notificationStats.unread > 0 ? notificationStats.unread : null} />
+              <NavItem icon={<Crown size={18} />} label="Partner" active={activeTab === "partner"} onClick={() => selectSellerTab("partner")} />
+            </nav>
+            <div className="border-t border-gray-100 pt-4">
+              <NavItem icon={<Settings size={18} />} label="Settings" active={activeTab === "settings"} onClick={() => selectSellerTab("settings")} />
+              <button type="button" onClick={() => { setIsMobileMenuOpen(false); void handleLogout(); }} className="mt-1 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50"><LogOut size={18} /> Logout</button>
+            </div>
+          </aside>
+        </div>
+      )}
       {notification && (
         <div className={`fixed top-4 right-4 z-50 p-4 rounded-2xl shadow-lg flex items-center gap-3 text-sm font-medium animate-in slide-in-from-top-2 ${notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
           {notification.type === 'success' ? <CheckCircle2 size={18} /> : <X size={18} />}
@@ -539,11 +574,11 @@ function Dashboard() {
         onSubmit={submitDisputeResponse}
       />
 
-      <aside className="w-64 bg-white border-r border-gray-100 hidden md:flex flex-col p-6 sticky top-0 h-screen">
+      <aside className="sticky top-0 hidden h-screen w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
         <div className="flex items-center px-2 py-2 mb-6">
           <img src="/icons/sowa.png" alt="Sowa Logo" className="h-11 w-auto object-contain" />
         </div>
-        <nav className="space-y-1 flex-1">
+        <nav className="space-y-1">
           <NavItem icon={<LayoutDashboard size={18} />} label="Overview" active={activeTab === "overview"} onClick={() => setActiveTab("overview")} />
           <NavItem icon={<ShoppingCart size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => setActiveTab("orders")} />
           <NavItem icon={<Store size={18} />} label="My Store" active={activeTab === "store"} onClick={() => setActiveTab("store")} />
@@ -590,11 +625,16 @@ function Dashboard() {
       </aside>
 
       <main className="flex-1 flex flex-col min-h-screen">
-        <div className="p-4 md:p-10 flex-1">
-          <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
-            <div>
+          <div className="p-4 md:flex-1 md:p-10">
+          <header className="mb-10 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+            <div className="flex items-center gap-3">
+              <button type="button" aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((open) => !open)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 shadow-sm md:hidden">
+                <Menu size={20} />
+              </button>
+              <div>
               <h1 className="text-2xl font-extrabold capitalize tracking-tight">{activeTab.replace("-", " ")}</h1>
               <p className="text-gray-400 text-sm font-bold">Managing @{username} storefront</p>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <div className="mr-1">
@@ -685,7 +725,7 @@ function Dashboard() {
           {activeTab === "payouts" && currentUser && (<PayoutsTab payoutHistory={payoutHistory} />)}
           {activeTab === "settings" && currentUser && <SettingsTab storeId={currentUser.uid} />}
         </div>
-        <footer className="p-8 text-center border-t border-gray-100 mt-auto">
+        <footer className="border-t border-gray-100 p-8 text-center">
           <p className="text-[9px] uppercase tracking-[0.3em] font-black text-gray-600 bold">
             Powered by Zebble Quantum Technologies LTD
           </p>

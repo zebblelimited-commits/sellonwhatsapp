@@ -14,7 +14,7 @@ import {
   Users, Store, CreditCard, AlertTriangle, TrendingUp, Clock, 
   CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight, Loader2,
   Search, Bell, ShieldCheck, ChevronRight, Eye, Flag, MessageSquare,
-  LayoutDashboard, Settings, LogOut, SlidersHorizontal,ClipboardList, Send, ArrowLeft, MoreVertical, User, Phone,FileText, X
+  LayoutDashboard, Settings, LogOut, SlidersHorizontal,ClipboardList, Send, ArrowLeft, MoreVertical, User, Phone,FileText, X, Menu
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -1460,6 +1460,7 @@ export default function AdminDashboard() {
   
   // ✅ Tab state - syncs with URL query param for shareability
   const [activeTab, setActiveTab] = useState(() => searchParams?.get("tab") || "home");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // ✅ Stats state
   const [stats, setStats] = useState<AdminStats>({
@@ -1635,6 +1636,7 @@ export default function AdminDashboard() {
   // ✅ Tab navigation handler
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
+    setIsMobileMenuOpen(false);
   };
 
   // ✅ Tab content mapping
@@ -1675,9 +1677,36 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className={`${font.className} flex h-screen overflow-hidden bg-gray-50 text-gray-900`}>
+    <div className={`${font.className} flex min-h-screen md:h-screen md:overflow-hidden bg-gray-50 text-gray-900`}>
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/30 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
+          <aside className="flex h-full w-72 max-w-[86vw] flex-col overflow-y-auto bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-green-600"><ShieldCheck size={16} className="text-white" /></div><span className="text-sm font-black text-gray-900">Zebble Admin</span></div>
+              <button type="button" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>
+            </div>
+            <nav className="space-y-1 overflow-y-auto no-scrollbar">
+              <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard" active={activeTab === "home"} onClick={() => handleTabChange("home")} />
+              <NavItem icon={<Users size={18} />} label="Users" active={activeTab === "users"} onClick={() => handleTabChange("users")} badge={stats.totalUsers > 1000 ? "1k+" : null} />
+              <NavItem icon={<Store size={18} />} label="Stores" active={activeTab === "stores"} onClick={() => handleTabChange("stores")} badge={stats.activeStores > 100 ? "100+" : null} />
+              <NavItem icon={<ClipboardList size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => handleTabChange("orders")} />
+              <NavItem icon={<CreditCard size={18} />} label="Payouts" active={activeTab === "payouts"} onClick={() => handleTabChange("payouts")} badge={stats.pendingPayouts > 0 ? stats.pendingPayouts : null} />
+              <NavItem icon={<AlertTriangle size={18} />} label="Disputes" active={activeTab === "disputes"} onClick={() => handleTabChange("disputes")} badge={stats.openDisputes > 0 ? stats.openDisputes : null} />
+              <NavItem icon={<MessageSquare size={18} />} label="Chat" active={activeTab === "chat"} onClick={() => handleTabChange("chat")} badge={totalUnreadChats > 0 ? totalUnreadChats : null} />
+              <NavItem icon={<Bell size={18} />} label="Notifications" active={activeTab === "notifications"} onClick={() => handleTabChange("notifications")} />
+              <NavItem icon={<TrendingUp size={18} />} label="Analytics" active={activeTab === "analytics"} onClick={() => handleTabChange("analytics")} />
+              <NavItem icon={<ClipboardList size={18} />} label="Audit logs" active={activeTab === "audit"} onClick={() => handleTabChange("audit")} />
+              <NavItem icon={<ShieldCheck size={18} />} label="Verifications" active={activeTab === "verifications"} onClick={() => handleTabChange("verifications")} badge={pendingVerifications > 0 ? pendingVerifications : null} />
+            </nav>
+            <div className="border-t border-gray-100 pt-4">
+              <NavItem icon={<Settings size={18} />} label="Settings" active={activeTab === "settings"} onClick={() => handleTabChange("settings")} />
+              <button type="button" onClick={async () => { setIsMobileMenuOpen(false); try { await signOut(auth); } finally { await fetch('/api/session', { method: 'DELETE' }).catch(() => undefined); router.replace('/admin/login'); } }} className="mt-1 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50"><LogOut size={18} /> Sign Out</button>
+            </div>
+          </aside>
+        </div>
+      )}
       {/* Sidebar - Matches buyer dashboard */}
-      <aside className="w-64 flex-shrink-0 bg-white border-r border-gray-100 hidden md:flex flex-col p-6 h-full">
+      <aside className="hidden h-full w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
         <div className="flex items-center px-2 py-2 mb-6">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-green-600 rounded-xl flex items-center justify-center"><ShieldCheck size={16} className="text-white" /></div>
@@ -1685,7 +1714,7 @@ export default function AdminDashboard() {
           </div>
         </div>
         
-        <nav className="space-y-1 flex-1 overflow-y-auto no-scrollbar">
+        <nav className="space-y-1 overflow-y-auto no-scrollbar">
           <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard" active={activeTab === "home"} onClick={() => handleTabChange("home")} />
           <NavItem icon={<Users size={18} />} label="Users" active={activeTab === "users"} onClick={() => handleTabChange("users")} badge={stats.totalUsers > 1000 ? "1k+" : null} />
           <NavItem icon={<Store size={18} />} label="Stores" active={activeTab === "stores"} onClick={() => handleTabChange("stores")} badge={stats.activeStores > 100 ? "100+" : null} />
@@ -1715,10 +1744,12 @@ export default function AdminDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      <main className="flex min-h-screen flex-1 flex-col min-w-0 md:h-full md:overflow-hidden">
         {/* Header - Matches buyer dashboard */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10 px-6 pt-6">
-          <div>
+        <header className="mb-10 flex flex-col justify-between gap-4 px-6 pt-6 md:flex-row md:items-center">
+          <div className="flex items-center gap-3">
+            <button type="button" aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((open) => !open)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 shadow-sm md:hidden"><Menu size={20} /></button>
+            <div>
             <h1 className="text-2xl font-extrabold capitalize tracking-tight">{activeTab.replace("-", " ")}</h1>
             <p className="text-gray-400 text-sm font-bold">
               {activeTab === "home" ? "Real-time platform metrics and quick actions" :
@@ -1734,6 +1765,7 @@ export default function AdminDashboard() {
                activeTab === "settings" ? "Manage your admin profile and preferences" :
                "Admin dashboard"} {/* ✅ Final fallback - removed the "..." */}
             </p>
+            </div>
           </div>
           
           <div className="flex items-center gap-3">
@@ -1751,7 +1783,7 @@ export default function AdminDashboard() {
         </header>
 
         {/* Tab Content Area */}
-        <div className="flex-1 overflow-y-auto px-6 pb-10 no-scrollbar">
+        <div className="px-6 pb-10 no-scrollbar md:flex-1 md:min-h-0 md:overflow-y-auto">
           {statsError && <div className="mb-6 rounded-2xl bg-amber-50 p-4 text-sm font-medium text-amber-800">{statsError}</div>}
           {renderTabContent()}
         </div>
