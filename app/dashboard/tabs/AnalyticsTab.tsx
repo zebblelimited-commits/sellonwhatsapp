@@ -29,7 +29,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 
 type TimeRange = "7D" | "1M" | "6M" | "1Y";
 type FirestoreDate = { toDate?: () => Date } | Date | string | number | null | undefined;
@@ -43,7 +43,19 @@ interface Order {
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
+  buyerId?: string;
+  buyerName?: string;
+  buyerPhone?: string;
+  buyerEmail?: string;
+  whatsappNumber?: string;
+  phone?: string;
   deliveryState?: string;
+}
+
+interface CustomerDetails {
+  name: string;
+  email: string;
+  phone: string;
 }
 
 interface AnalyticsEvent {
@@ -138,6 +150,7 @@ const makeBuckets = (range: TimeRange, end: Date): Bucket[] => {
 export default function AnalyticsTab({ orders = [], stats = {}, storeId }: AnalyticsTabProps) {
   const [timeRange, setTimeRange] = useState<TimeRange>("7D");
   const [analyticsData, setAnalyticsData] = useState<AnalyticsEvent[]>([]);
+  const [customerDetails, setCustomerDetails] = useState<Record<string, CustomerDetails>>({});
   const [loading, setLoading] = useState(Boolean(storeId));
   const [error, setError] = useState("");
 
@@ -185,6 +198,43 @@ export default function AnalyticsTab({ orders = [], stats = {}, storeId }: Analy
     const date = toDate(order.createdAt);
     return Boolean(date && date >= windowRange.start && date <= windowRange.end);
   }), [orders, windowRange]);
+
+  const orderIds = useMemo(() => [...filteredOrders]
+    .sort((a, b) => (toDate(b.createdAt)?.getTime() || 0) - (toDate(a.createdAt)?.getTime() || 0))
+    .slice(0, 100)
+    .map((order) => order.id)
+    .filter(Boolean)
+    .join(","), [filteredOrders]);
+
+  useEffect(() => {
+    if (!storeId || !orderIds) {
+      setCustomerDetails({});
+      return;
+    }
+
+    let cancelled = false;
+    const loadCustomerDetails = async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
+        const response = await fetch("/api/vendor/analytics/orders", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ orderIds: orderIds.split(",") }),
+          cache: "no-store",
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "Customer details could not be loaded");
+        if (!cancelled) setCustomerDetails(payload.customers || {});
+      } catch (customerError) {
+        console.error("[AnalyticsTab] Customer details lookup failed:", customerError);
+        if (!cancelled) setCustomerDetails({});
+      }
+    };
+
+    void loadCustomerDetails();
+    return () => { cancelled = true; };
+  }, [storeId, orderIds]);
 
   const paidOrders = useMemo(() => filteredOrders.filter(isPaidOrder), [filteredOrders]);
   const buckets = useMemo(() => makeBuckets(timeRange, windowRange.end), [timeRange, windowRange.end]);
@@ -328,7 +378,7 @@ export default function AnalyticsTab({ orders = [], stats = {}, storeId }: Analy
 
       <section className="overflow-hidden rounded-[32px] border border-gray-100 bg-white p-8 shadow-sm">
         <div className="mb-6"><h3 className="text-[11px] font-black uppercase tracking-tight text-slate-900">Recent Transactions</h3><p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Paid and pending orders in the selected period</p></div>
-        {recentOrders.length === 0 ? <EmptyState message="No orders were recorded in this period." /> : <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr className="border-b border-slate-100">{["ID", "Customer", "Contact", "Location", "Status", "Amount", "Date"].map((heading) => <th key={heading} className="whitespace-nowrap px-3 py-3 text-[9px] font-black uppercase text-slate-500">{heading}</th>)}</tr></thead><tbody>{recentOrders.map((order) => <tr key={order.id} className="border-b border-gray-100/50 last:border-0 hover:bg-slate-50/50"><td className="px-3 py-4 font-mono text-[10px] font-bold">#{order.id.slice(-6).toUpperCase()}</td><td className="px-3 py-4"><div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-emerald-600 text-[10px] font-black text-white">{(order.customerName || "A").charAt(0).toUpperCase()}</div><span className="text-[11px] font-black">{order.customerName || "Anonymous"}</span></div></td><td className="px-3 py-4 text-[10px]">{order.customerPhone || order.customerEmail || "—"}</td><td className="px-3 py-4 text-[10px]">{order.deliveryState || "—"}</td><td className="px-3 py-4"><StatusBadge status={normalizedStatus(order)} /></td><td className="px-3 py-4 text-right text-[11px] font-black">{money(amountOf(order.totalAmount))}</td><td className="whitespace-nowrap px-3 py-4 text-right text-[10px]">{toDate(order.createdAt)?.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) || "—"}</td></tr>)}</tbody></table></div>}
+        {recentOrders.length === 0 ? <EmptyState message="No orders were recorded in this period." /> : <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr className="border-b border-slate-100">{["ID", "Customer", "Contact", "Location", "Status", "Amount", "Date"].map((heading) => <th key={heading} className="whitespace-nowrap px-3 py-3 text-[9px] font-black uppercase text-slate-500">{heading}</th>)}</tr></thead><tbody>{recentOrders.map((order) => { const details = customerDetails[order.id]; const email = order.customerEmail || order.buyerEmail || details?.email || ""; const phone = order.customerPhone || order.buyerPhone || order.whatsappNumber || order.phone || details?.phone || ""; const name = order.customerName || order.buyerName || details?.name || (email ? email.split("@")[0] : "") || phone || "Anonymous"; return <tr key={order.id} className="border-b border-gray-100/50 last:border-0 hover:bg-slate-50/50"><td className="px-3 py-4 font-mono text-[10px] font-bold">#{order.id.slice(-6).toUpperCase()}</td><td className="px-3 py-4"><div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-emerald-600 text-[10px] font-black text-white">{name.charAt(0).toUpperCase()}</div><span className="text-[11px] font-black">{name}</span></div></td><td className="px-3 py-4 text-[10px]">{phone || email || "—"}</td><td className="px-3 py-4 text-[10px]">{order.deliveryState || "—"}</td><td className="px-3 py-4"><StatusBadge status={normalizedStatus(order)} /></td><td className="px-3 py-4 text-right text-[11px] font-black">{money(amountOf(order.totalAmount))}</td><td className="whitespace-nowrap px-3 py-4 text-right text-[10px]">{toDate(order.createdAt)?.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) || "—"}</td></tr>; })}</tbody></table></div>}
       </section>
     </div>
   );

@@ -47,6 +47,17 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // 🖥️ HOMEPAGE HERO SLIDES: Public display, active-admin management
+    // ═══════════════════════════════════════════════════════════
+    match /hero_slides/{slideId} {
+      // The homepage is public and must be able to render active slides.
+      allow read: if true;
+
+      // Slide mutations go through the protected admin API using the Admin SDK.
+      allow create, update, delete: if false;
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // ✅ STORE VERIFICATIONS: Admin review queue + owner access
     // ═══════════════════════════════════════════════════════════
     match /store_verifications/{docId} {

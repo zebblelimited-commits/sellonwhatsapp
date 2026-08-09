@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation"; // ✅ Removed useSearchParams
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { Search, LayoutDashboard, LogOut, ExternalLink, Store, Package } from "lucide-react";
+import { Search, LayoutDashboard, LogOut, ExternalLink, Store, Menu, X } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { collection, query as firestoreQuery, where, getDocs, getDoc, doc, limit } from "firebase/firestore";
@@ -20,6 +20,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   const [vendorUsername, setVendorUsername] = useState("");
   const [isBuyer, setIsBuyer] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Initialize query from URL safely on mount
   useEffect(() => {
@@ -154,16 +155,27 @@ export default function Header({ isStorePage = false, storeName = "" }) {
     <header className={`${font.className} flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 md:px-6 py-4 border-b border-gray-200 bg-white sticky top-0 z-50`}>
 
       {/* Balanced & Enlarged Logo Container */}
-      <div className="flex items-center justify-between w-full md:w-auto">
-        <Link href="/">
+      <div className="flex w-full items-center justify-between md:w-auto">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={isMobileMenuOpen}
+            onClick={() => setIsMobileMenuOpen((open) => !open)}
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-700 transition-colors hover:bg-gray-100 md:hidden"
+          >
+            {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+          <Link href="/" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="flex items-center px-2">
             <img 
               src="/icons/sowa.png" 
               alt="Sowa Logo" 
-              className="h-11 w-auto object-contain" 
+              className="h-11 w-auto object-contain"
             />
           </div>
-        </Link>
+          </Link>
+        </div>
 
         {/* Mobile Authentication Actions */}
         <div className="flex md:hidden gap-2">
@@ -183,6 +195,31 @@ export default function Header({ isStorePage = false, storeName = "" }) {
           )}
         </div>
       </div>
+
+      {isMobileMenuOpen && (
+        <div className="w-full space-y-1 border-t border-gray-100 pt-3 md:hidden">
+          {!isStorePage && (
+            <>
+              <Link href="/explore" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Explore</Link>
+              <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Pricing</Link>
+              <Link href="/boost-store" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Boost Store</Link>
+              <Link href="/faq" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">FAQ</Link>
+            </>
+          )}
+          {user && vendorUsername && <Link href={`/${vendorUsername}`} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-green-700 hover:bg-green-50">Visit Store</Link>}
+          {user ? (
+            <>
+              <Link href={dashboardUrl} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100">Dashboard</Link>
+              <button type="button" onClick={() => { setIsMobileMenuOpen(false); void handleLogout(); }} className="block w-full rounded-xl px-3 py-3 text-left text-sm font-semibold text-red-600 hover:bg-red-50">Logout</button>
+            </>
+          ) : (
+            <>
+              <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100">Login</Link>
+              <Link href="/register" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl bg-green-600 px-3 py-3 text-center text-sm font-bold text-white hover:bg-green-700">Get Started</Link>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Global Search with AJAX Overlay */}
       <div ref={searchRef} className="w-full md:max-w-md relative">
