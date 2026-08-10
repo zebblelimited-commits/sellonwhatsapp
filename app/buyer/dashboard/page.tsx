@@ -315,7 +315,7 @@ export default function BuyerDashboard() {
     <div className={`${font.className} flex min-h-screen md:h-screen md:overflow-hidden bg-gray-50/50 text-gray-900`}>
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[100] bg-black/30 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
-          <aside className="flex h-full w-72 max-w-[86vw] flex-col overflow-y-auto bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <aside className="flex max-h-[calc(100dvh-1rem)] w-72 max-w-[86vw] flex-col overflow-y-auto bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
               <img src="/icons/sowa.png" alt="Sowa Logo" className="h-10 w-auto object-contain" />
               <button type="button" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>
@@ -392,9 +392,9 @@ export default function BuyerDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex min-h-screen flex-1 flex-col min-w-0 md:h-full md:overflow-hidden">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col md:h-full md:overflow-hidden">
         <div className="p-4 no-scrollbar md:flex-1 md:min-h-0 md:overflow-y-auto md:p-10">
-          <header className="mb-10 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <header className="mb-6 flex flex-col justify-between gap-4 md:mb-10 md:flex-row md:items-center">
             <div className="flex items-center gap-3">
               <button type="button" aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((open) => !open)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 shadow-sm md:hidden">
                 {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}

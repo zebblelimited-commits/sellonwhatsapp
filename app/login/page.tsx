@@ -8,8 +8,8 @@ import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, AlertCircle, UserSearch } from "lucide-react";
 
 // Firebase Imports
-import { auth, db } from "@/lib/firebase";
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { auth, db, googleProvider } from "@/lib/firebase";
+import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { getApps } from "firebase/app";
 
@@ -169,8 +169,7 @@ export default function LoginPage() {
     setError("");
     
     try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, googleProvider);
       const session = await bakeSessionCookie();
       await routeUserByRole(result.user.uid, session.role);
     } catch (err: any) {
@@ -181,7 +180,11 @@ export default function LoginPage() {
           ? "Google sign-in was cancelled."
           : err.code === "auth/popup-blocked"
             ? "Your browser blocked the Google sign-in popup. Please allow popups and try again."
-            : "Google sign-in could not be completed. Please try again.");
+            : err.code === "auth/operation-not-allowed"
+              ? "Google sign-in is not enabled in Firebase Authentication."
+              : err.code === "auth/network-request-failed"
+                ? "Google sign-in could not reach Firebase. Check your connection and try again."
+                : "Google sign-in could not be completed. Please try again.");
     } finally {
       setLoading(false);
     }

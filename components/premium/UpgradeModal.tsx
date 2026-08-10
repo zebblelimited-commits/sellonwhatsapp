@@ -86,21 +86,22 @@ export function UpgradeModal({ onClose, preselectedPlan }: UpgradeModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white w-full max-w-2xl rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto overscroll-contain bg-black/50 p-3 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="my-2 flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200 sm:my-4 sm:max-h-[calc(100dvh-2rem)] sm:rounded-[32px]">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-gray-100 p-4 sm:p-6">
           <div>
-            <h3 className="text-xl font-bold text-gray-900">Upgrade Your Plan</h3>
+            <h3 className="text-lg font-bold text-gray-900 sm:text-xl">Upgrade Your Plan</h3>
             <p className="text-sm text-gray-500">Unlock premium features to grow your business</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+          <button type="button" onClick={onClose} aria-label="Close upgrade dialog" className="shrink-0 rounded-full p-2 hover:bg-gray-100 transition-colors">
             <X size={20} />
           </button>
         </div>
 
         {/* Plans Grid */}
-        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {plans.map((plan) => (
             <button
               key={plan.id}
@@ -152,17 +153,19 @@ export function UpgradeModal({ onClose, preselectedPlan }: UpgradeModalProps) {
               </span>
             </button>
           ))}
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-          <p className="text-[10px] text-gray-400">
+        <div className="flex shrink-0 flex-col items-stretch gap-3 border-t border-gray-100 bg-gray-50 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <p className="max-w-full text-[10px] text-gray-400 sm:max-w-[55%]">
             Secure payment via Nomba • Cancel anytime • 7-day money-back guarantee
           </p>
           <button 
+            type="button"
             onClick={handleUpgrade}
             disabled={loading || selectedPlan === "free"}
-            className="px-6 py-3 bg-[#00a63e] hover:bg-[#008c34] disabled:bg-gray-300 text-white rounded-xl font-bold text-sm flex items-center gap-2 transition-all active:scale-[0.98]"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00a63e] px-6 py-3 text-sm font-bold text-white transition-all hover:bg-[#008c34] disabled:bg-gray-300 active:scale-[0.98] sm:w-auto"
           >
             {loading ? <><Loader2 size={16} className="animate-spin" /> Processing...</> : "Continue to Payment"}
           </button>
