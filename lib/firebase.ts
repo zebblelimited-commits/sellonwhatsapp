@@ -7,7 +7,9 @@ import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCWWU6i7mzba9UKukC2ii118IMHB88onwc",
-  authDomain: "sellonwhatsapp-c3e0c.firebaseapp.com", // Keep this static as discussed
+  // Set NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN to the Firebase-connected custom
+  // domain after DNS is verified. Keep the Firebase fallback for recovery.
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "sellonwhatsapp-c3e0c.firebaseapp.com",
   projectId: "sellonwhatsapp-c3e0c",
   storageBucket: "sellonwhatsapp-c3e0c.firebasestorage.app",
   messagingSenderId: "574073567173",

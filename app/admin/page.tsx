@@ -4,17 +4,17 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { db, auth } from "@/lib/firebase";
-import { 
+import {
   collection, query, where, getDocs, getDoc, orderBy, limit, onSnapshot,
-  updateDoc, doc, addDoc, serverTimestamp, deleteDoc 
+  updateDoc, doc, addDoc, serverTimestamp, deleteDoc
 } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { 
-  Users, Store, CreditCard, AlertTriangle, TrendingUp, Clock, 
+import {
+  Users, Store, CreditCard, AlertTriangle, TrendingUp, Clock,
   CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight, Loader2,
   Search, Bell, ShieldCheck, ChevronRight, Eye, Flag, MessageSquare,
-  LayoutDashboard, Settings, LogOut, SlidersHorizontal,ClipboardList, Send, ArrowLeft, MoreVertical, User, Phone,FileText, X, Menu, Package
+  LayoutDashboard, Settings, LogOut, SlidersHorizontal, ClipboardList, Send, ArrowLeft, MoreVertical, User, Phone, FileText, X, Menu, Package
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -209,8 +209,8 @@ function AdminUsersTab() {
     const matchesSearch = !searchQuery || u.email?.toLowerCase().includes(searchQuery.toLowerCase()) || u.displayName?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" ? true :
       statusFilter === "active" ? u.isActive !== false :
-      statusFilter === "banned" ? u.isBanned === true :
-      statusFilter === "unverified" ? u.isVerified !== true : true;
+        statusFilter === "banned" ? u.isBanned === true :
+          statusFilter === "unverified" ? u.isVerified !== true : true;
     return matchesSearch && matchesStatus;
   }), [users, searchQuery, statusFilter]);
 
@@ -634,7 +634,7 @@ function AdminDisputesTab() {
                   <span>•</span>
                   <span>₦{dispute.amount?.toLocaleString()}</span>
                 </div>
-                </div>
+              </div>
               <button onClick={() => router.push(`/admin/disputes/${dispute.id}`)} className="rounded-xl bg-gray-50 px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-gray-100">Open detail</button>
             </div>
             <DisputeThread
@@ -834,11 +834,11 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedChat || !adminId) return;
-    
+
     setSending(true);
     try {
       await supportChatRequest(`/api/chats/${encodeURIComponent(selectedChat.id)}/messages`, { content: newMessage });
-      
+
       setNewMessage("");
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -848,8 +848,8 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
   };
 
   // ✅ Filter chats by search
-  const filteredChats = useMemo(() => 
-    chats.filter(c => 
+  const filteredChats = useMemo(() =>
+    chats.filter(c =>
       c.userName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.userEmail?.toLowerCase().includes(searchQuery.toLowerCase())
     ), [chats, searchQuery]);
@@ -864,16 +864,16 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
   return (
     <div className="relative h-[calc(100vh-140px)] bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden flex animate-in fade-in duration-300">
       {listenerError && <div className="absolute z-10 m-4 rounded-2xl bg-red-50 p-3 text-xs font-medium text-red-700">{listenerError}</div>}
-      
+
       {/* LEFT: Conversation List */}
       <div className={`${mobileShowChat ? "hidden md:flex" : "flex"} w-full md:w-80 border-r border-gray-100 flex-col`}>
         {/* Search Header */}
         <div className="p-4 border-b border-gray-100">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-            <input 
-              type="text" 
-              placeholder="Search conversations..." 
+            <input
+              type="text"
+              placeholder="Search conversations..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-green-500/20 outline-none"
@@ -893,9 +893,8 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
             <button
               key={chat.id}
               onClick={() => { setSelectedChat(chat); setMobileShowChat(true); }}
-              className={`w-full text-left p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors ${
-                selectedChat?.id === chat.id ? "bg-green-50 border-l-4 border-l-green-500" : ""
-              }`}
+              className={`w-full text-left p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors ${selectedChat?.id === chat.id ? "bg-green-50 border-l-4 border-l-green-500" : ""
+                }`}
             >
               <div className="flex items-start gap-3">
                 <div className="relative">
@@ -915,9 +914,8 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
                   </div>
                   <div className="flex items-center justify-between mt-0.5">
                     <div className="min-w-0"><p className="text-[10px] text-gray-500 truncate">{chat.userPhone ? `WhatsApp: ${chat.userPhone}` : chat.userEmail || "Contact not provided"}</p><p className="text-[10px] text-gray-400 truncate">{chat.lastMessage || "No messages yet"}</p></div>
-                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase ${
-                      chat.userRole === "vendor" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
-                    }`}>
+                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase ${chat.userRole === "vendor" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+                      }`}>
                       {chat.userRole}
                     </span>
                   </div>
@@ -956,11 +954,10 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
               {messages.map((msg) => (
                 <div key={msg.id} className={`flex ${msg.senderRole === "admin" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
-                    msg.senderRole === "admin" 
-                      ? "bg-green-600 text-white rounded-br-md" 
-                      : "bg-white border border-gray-100 text-gray-700 rounded-bl-md"
-                  }`}>
+                  <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${msg.senderRole === "admin"
+                    ? "bg-green-600 text-white rounded-br-md"
+                    : "bg-white border border-gray-100 text-gray-700 rounded-bl-md"
+                    }`}>
                     <p>{msg.content}</p>
                     <p className={`text-[9px] mt-1 text-right ${msg.senderRole === "admin" ? "text-green-100" : "text-gray-400"}`}>
                       {formatTime(msg.timestamp)} {msg.senderRole === "admin" && (msg.read ? "✓✓" : "✓")}
@@ -981,8 +978,8 @@ function AdminChatTab({ initialChats = [] }: { initialChats?: any[] }) {
                 className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-green-500/20 outline-none"
                 disabled={sending}
               />
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={sending || !newMessage.trim()}
                 className="p-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-xl transition-all active:scale-[0.95]"
               >
@@ -1074,17 +1071,16 @@ function AdminAnalyticsTab() {
           <h2 className="text-xl font-bold text-gray-900">Platform Analytics</h2>
           <p className="text-sm text-gray-500">Track growth, revenue, and engagement metrics</p>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {["7d", "30d", "90d"].map(range => (
             <button
               key={range}
               onClick={() => setTimeRange(range)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                timeRange === range 
-                  ? "bg-green-600 text-white shadow-md" 
-                  : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
-              }`}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${timeRange === range
+                ? "bg-green-600 text-white shadow-md"
+                : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"
+                }`}
             >
               {range === "7d" ? "Last 7 Days" : range === "30d" ? "Last 30 Days" : "Last 90 Days"}
             </button>
@@ -1105,7 +1101,7 @@ function AdminAnalyticsTab() {
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+
         {/* GMV Trend (Line Chart) */}
         <div className="bg-white rounded-[32px] border border-gray-100 p-6 shadow-sm">
           <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
@@ -1115,33 +1111,33 @@ function AdminAnalyticsTab() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={analytics.gmvData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                <XAxis 
-                  dataKey="date" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fill: '#9ca3af' }} 
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10, fill: '#9ca3af' }}
                   interval={analytics.gmvData.length > 14 ? 2 : 0}
                 />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
                   tick={{ fontSize: 10, fill: '#9ca3af' }}
                   tickFormatter={(value) => `₦${(value / 100000).toFixed(1)}M`}
                 />
-                <Tooltip 
-                  contentStyle={{ 
-                    borderRadius: '16px', 
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: '16px',
                     border: '1px solid #e5e7eb',
                     backgroundColor: '#fff',
                     fontSize: '11px'
                   }}
                   formatter={(value) => [`₦${Number(value ?? 0).toLocaleString()}`, 'GMV']}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="gmv" 
-                  stroke={chartColors.primary} 
-                  strokeWidth={2} 
+                <Line
+                  type="monotone"
+                  dataKey="gmv"
+                  stroke={chartColors.primary}
+                  strokeWidth={2}
                   dot={{ fill: chartColors.primary, strokeWidth: 2, r: 3 }}
                   activeDot={{ r: 5, stroke: chartColors.primary, strokeWidth: 2 }}
                 />
@@ -1159,39 +1155,39 @@ function AdminAnalyticsTab() {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={analytics.userGrowth} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                <XAxis 
-                  dataKey="date" 
-                  axisLine={false} 
-                  tickLine={false} 
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
                   tick={{ fontSize: 10, fill: '#9ca3af' }}
                   interval={analytics.userGrowth.length > 14 ? 2 : 0}
                 />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
                   tick={{ fontSize: 10, fill: '#9ca3af' }}
                 />
-                <Tooltip 
-                  contentStyle={{ 
-                    borderRadius: '16px', 
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: '16px',
                     border: '1px solid #e5e7eb',
                     backgroundColor: '#fff',
                     fontSize: '11px'
                   }}
                 />
-                <Area 
-                  type="monotone" 
-                  dataKey="activeUsers" 
-                  stroke={chartColors.secondary} 
-                  fill={`${chartColors.secondary}20`} 
+                <Area
+                  type="monotone"
+                  dataKey="activeUsers"
+                  stroke={chartColors.secondary}
+                  fill={`${chartColors.secondary}20`}
                   strokeWidth={2}
                   name="Active Users"
                 />
-                <Area 
-                  type="monotone" 
-                  dataKey="newUsers" 
-                  stroke={chartColors.primary} 
-                  fill={`${chartColors.primary}20`} 
+                <Area
+                  type="monotone"
+                  dataKey="newUsers"
+                  stroke={chartColors.primary}
+                  fill={`${chartColors.primary}20`}
                   strokeWidth={2}
                   name="New Signups"
                 />
@@ -1223,16 +1219,16 @@ function AdminAnalyticsTab() {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip 
-                  contentStyle={{ 
-                    borderRadius: '16px', 
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: '16px',
                     border: '1px solid #e5e7eb',
                     backgroundColor: '#fff',
                     fontSize: '11px'
                   }}
                 />
-                <Legend 
-                  verticalAlign="bottom" 
+                <Legend
+                  verticalAlign="bottom"
                   height={36}
                   wrapperStyle={{ fontSize: '10px', color: '#6b7280' }}
                 />
@@ -1248,39 +1244,39 @@ function AdminAnalyticsTab() {
           </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart 
-                data={analytics.topStores} 
+              <BarChart
+                data={analytics.topStores}
                 layout="vertical"
                 margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={true} vertical={false} />
-                <XAxis 
-                  type="number" 
-                  axisLine={false} 
-                  tickLine={false} 
+                <XAxis
+                  type="number"
+                  axisLine={false}
+                  tickLine={false}
                   tick={{ fontSize: 10, fill: '#9ca3af' }}
                   tickFormatter={(value) => `₦${(value / 1000).toFixed(0)}k`}
                 />
-                <YAxis 
-                  type="category" 
-                  dataKey="name" 
-                  axisLine={false} 
-                  tickLine={false} 
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
                   tick={{ fontSize: 10, fill: '#6b7280', width: 80 }}
                   width={80}
                 />
-                <Tooltip 
-                  contentStyle={{ 
-                    borderRadius: '16px', 
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: '16px',
                     border: '1px solid #e5e7eb',
                     backgroundColor: '#fff',
                     fontSize: '11px'
                   }}
                   formatter={(value) => [`₦${Number(value ?? 0).toLocaleString()}`, 'Sales']}
                 />
-                <Bar 
-                  dataKey="sales" 
-                  fill={chartColors.primary} 
+                <Bar
+                  dataKey="sales"
+                  fill={chartColors.primary}
                   radius={[0, 8, 8, 0]}
                   barSize={20}
                 />
@@ -1298,34 +1294,34 @@ function AdminAnalyticsTab() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={analytics.disputeRate} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                <XAxis 
-                  dataKey="date" 
-                  axisLine={false} 
-                  tickLine={false} 
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
                   tick={{ fontSize: 10, fill: '#9ca3af' }}
                   interval={analytics.disputeRate.length > 14 ? 2 : 0}
                 />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
                   tick={{ fontSize: 10, fill: '#9ca3af' }}
                   tickFormatter={(value) => `${value}%`}
                   domain={[0, 5]}
                 />
-                <Tooltip 
-                  contentStyle={{ 
-                    borderRadius: '16px', 
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: '16px',
                     border: '1px solid #e5e7eb',
                     backgroundColor: '#fff',
                     fontSize: '11px'
                   }}
                   formatter={(value) => [`${String(value ?? 0)}%`, 'Dispute Rate']}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="rate" 
-                  stroke={chartColors.danger} 
-                  strokeWidth={2} 
+                <Line
+                  type="monotone"
+                  dataKey="rate"
+                  stroke={chartColors.danger}
+                  strokeWidth={2}
                   dot={{ fill: chartColors.danger, strokeWidth: 2, r: 3 }}
                 />
               </LineChart>
@@ -1344,30 +1340,30 @@ function AdminAnalyticsTab() {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={analytics.revenueByCategory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-              <XAxis 
-                dataKey="category" 
-                axisLine={false} 
-                tickLine={false} 
+              <XAxis
+                dataKey="category"
+                axisLine={false}
+                tickLine={false}
                 tick={{ fontSize: 10, fill: '#9ca3af' }}
               />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
+              <YAxis
+                axisLine={false}
+                tickLine={false}
                 tick={{ fontSize: 10, fill: '#9ca3af' }}
                 tickFormatter={(value) => `₦${(value / 100000).toFixed(1)}M`}
               />
-              <Tooltip 
-                contentStyle={{ 
-                  borderRadius: '16px', 
+              <Tooltip
+                contentStyle={{
+                  borderRadius: '16px',
                   border: '1px solid #e5e7eb',
                   backgroundColor: '#fff',
                   fontSize: '11px'
                 }}
                 formatter={(value) => [`₦${Number(value ?? 0).toLocaleString()}`, 'Revenue']}
               />
-              <Bar 
-                dataKey="revenue" 
-                fill={chartColors.primary} 
+              <Bar
+                dataKey="revenue"
+                fill={chartColors.primary}
                 radius={[8, 8, 0, 0]}
                 barSize={40}
               />
@@ -1458,11 +1454,11 @@ export default function AdminDashboard() {
   const searchParams = useSearchParams();
   const [adminReady, setAdminReady] = useState(false);
   const [adminError, setAdminError] = useState("");
-  
+
   // ✅ Tab state - syncs with URL query param for shareability
   const [activeTab, setActiveTab] = useState(() => searchParams?.get("tab") || "home");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
+
   // ✅ Stats state
   const [stats, setStats] = useState<AdminStats>({
     totalUsers: 0,
@@ -1526,14 +1522,14 @@ export default function AdminDashboard() {
   }, [router]);
 
   useEffect(() => {
-  if (!adminReady) return;
-  // Lightweight listener just for the badge count
-  const q = query(collection(db, "store_verifications"), where("status", "==", "pending"));
-  const unsub = onSnapshot(q, (snap) => setPendingVerifications(snap.size), (error) => {
-    console.error("Pending verification badge listener error:", error);
-    setStatsError("Some admin metrics could not be loaded. Check Firestore permissions or indexes.");
-  });
-  return () => unsub();
+    if (!adminReady) return;
+    // Lightweight listener just for the badge count
+    const q = query(collection(db, "store_verifications"), where("status", "==", "pending"));
+    const unsub = onSnapshot(q, (snap) => setPendingVerifications(snap.size), (error) => {
+      console.error("Pending verification badge listener error:", error);
+      setStatsError("Some admin metrics could not be loaded. Check Firestore permissions or indexes.");
+    });
+    return () => unsub();
   }, [adminReady]);
 
   // ✅ Keep dashboard metrics live and normalize legacy status values.
@@ -1548,15 +1544,15 @@ export default function AdminDashboard() {
 
     const refreshStats = () => {
       const payoutData = latest.payouts.filter(isPendingPayout);
-        setStats((current) => ({
-          ...current,
-          totalUsers: latest.users.length,
-          activeStores: latest.stores.filter(isActiveStore).length,
-          pendingPayouts: payoutData.length,
-          pendingPayoutAmount: payoutData.reduce((total, payout) => total + payoutAmount(payout), 0),
-          openDisputes: latest.disputes.filter(isOpenDispute).length,
-          loading: false,
-        }));
+      setStats((current) => ({
+        ...current,
+        totalUsers: latest.users.length,
+        activeStores: latest.stores.filter(isActiveStore).length,
+        pendingPayouts: payoutData.length,
+        pendingPayoutAmount: payoutData.reduce((total, payout) => total + payoutAmount(payout), 0),
+        openDisputes: latest.disputes.filter(isOpenDispute).length,
+        loading: false,
+      }));
     };
 
     const listen = (name: keyof typeof latest) => onSnapshot(
@@ -1644,25 +1640,25 @@ export default function AdminDashboard() {
   const renderTabContent = () => {
     switch (activeTab) {
       case "home": return <AdminHome stats={stats} onNavigate={handleTabChange} />;
-      case "users": return <AdminUsersManagement/>;
-      case "stores": return <AdminStoresManagement/>;
+      case "users": return <AdminUsersManagement />;
+      case "stores": return <AdminStoresManagement />;
       case "products": return <AdminProductsTab />;
-      case "orders": return <AdminOrdersTab/>;
-      case "payouts": return <AdminPayoutsTab/>;
-      case "disputes": return <AdminDisputesTab/>;
-      case "notifications": return <AdminNotificationsTab/>;
-      case "chat": return <AdminChatTab initialChats={chats} />;  
-      case "analytics": return <AdminAnalyticsTab/>;
+      case "orders": return <AdminOrdersTab />;
+      case "payouts": return <AdminPayoutsTab />;
+      case "disputes": return <AdminDisputesTab />;
+      case "notifications": return <AdminNotificationsTab />;
+      case "chat": return <AdminChatTab initialChats={chats} />;
+      case "analytics": return <AdminAnalyticsTab />;
       case "audit": return <AdminAuditLogsTab />;
-      case "verifications": return <AdminVerificationsTab/>;  
-      case "settings": return <AdminSettingsTab/>;
+      case "verifications": return <AdminVerificationsTab />;
+      case "settings": return <AdminSettingsTab />;
       default: return <AdminHome stats={stats} onNavigate={handleTabChange} />;
     }
   };
 
   // ✅ Safe unread count calculator
-  const totalUnreadChats = useMemo(() => 
-    chats.reduce((acc, c) => acc + (c.unreadCount || 0), 0), 
+  const totalUnreadChats = useMemo(() =>
+    chats.reduce((acc, c) => acc + (c.unreadCount || 0), 0),
     [chats]
   );
 
@@ -1684,7 +1680,7 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-[100] bg-black/30 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
           <aside className="flex h-full w-72 max-w-[86vw] flex-col overflow-y-auto bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
-              <div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-green-600"><ShieldCheck size={16} className="text-white" /></div><span className="text-sm font-black text-gray-900">Zebble Admin</span></div>
+              <div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-green-600"><ShieldCheck size={16} className="text-white" /></div><span className="text-sm font-black text-gray-900">SellOnWhatsapp Admin</span></div>
               <button type="button" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>
             </div>
             <nav className="space-y-1 overflow-y-auto no-scrollbar">
@@ -1713,10 +1709,10 @@ export default function AdminDashboard() {
         <div className="flex items-center px-2 py-2 mb-6">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-green-600 rounded-xl flex items-center justify-center"><ShieldCheck size={16} className="text-white" /></div>
-            <span className="font-black text-sm text-gray-900">Zebble Admin</span>
+            <span className="font-black text-sm text-gray-900">SellOnWhatsapp Admin</span>
           </div>
         </div>
-        
+
         <nav className="space-y-1 overflow-y-auto no-scrollbar">
           <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard" active={activeTab === "home"} onClick={() => handleTabChange("home")} />
           <NavItem icon={<Users size={18} />} label="Users" active={activeTab === "users"} onClick={() => handleTabChange("users")} badge={stats.totalUsers > 1000 ? "1k+" : null} />
@@ -1725,11 +1721,11 @@ export default function AdminDashboard() {
           <NavItem icon={<ClipboardList size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => handleTabChange("orders")} />
           <NavItem icon={<CreditCard size={18} />} label="Payouts" active={activeTab === "payouts"} onClick={() => handleTabChange("payouts")} badge={stats.pendingPayouts > 0 ? stats.pendingPayouts : null} />
           <NavItem icon={<AlertTriangle size={18} />} label="Disputes" active={activeTab === "disputes"} onClick={() => handleTabChange("disputes")} badge={stats.openDisputes > 0 ? stats.openDisputes : null} />
-          <NavItem icon={<MessageSquare size={18} />} label="Chat" active={activeTab === "chat"} onClick={() => handleTabChange("chat")}badge={totalUnreadChats > 0 ? totalUnreadChats : null}/>
+          <NavItem icon={<MessageSquare size={18} />} label="Chat" active={activeTab === "chat"} onClick={() => handleTabChange("chat")} badge={totalUnreadChats > 0 ? totalUnreadChats : null} />
           <NavItem icon={<Bell size={18} />} label="Notifications" active={activeTab === "notifications"} onClick={() => handleTabChange("notifications")} />
           <NavItem icon={<TrendingUp size={18} />} label="Analytics" active={activeTab === "analytics"} onClick={() => handleTabChange("analytics")} />
           <NavItem icon={<ClipboardList size={18} />} label="Audit logs" active={activeTab === "audit"} onClick={() => handleTabChange("audit")} />
-          <NavItem icon={<ShieldCheck size={18} />} label="Verifications" active={activeTab === "verifications"} onClick={() => handleTabChange("verifications")}badge={pendingVerifications > 0 ? pendingVerifications : null}/>
+          <NavItem icon={<ShieldCheck size={18} />} label="Verifications" active={activeTab === "verifications"} onClick={() => handleTabChange("verifications")} badge={pendingVerifications > 0 ? pendingVerifications : null} />
         </nav>
 
         <div className="pt-6 border-t border-gray-100">
@@ -1754,24 +1750,24 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-3">
             <button type="button" aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((open) => !open)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 shadow-sm md:hidden"><Menu size={20} /></button>
             <div>
-            <h1 className="text-2xl font-extrabold capitalize tracking-tight">{activeTab.replace("-", " ")}</h1>
-            <p className="text-gray-400 text-sm font-bold">
-              {activeTab === "home" ? "Real-time platform metrics and quick actions" :
-               activeTab === "users" ? "Manage buyer and vendor accounts" :
-               activeTab === "stores" ? "Review, approve, and manage vendor stores" :
-               activeTab === "orders" ? "Monitor marketplace orders and escrow states" :
-               activeTab === "payouts" ? "Review and approve vendor payout requests" :
-               activeTab === "disputes" ? "Review and resolve customer disputes" :
-               activeTab === "chat" ? "Real-time support & user communication hub" :
-               activeTab === "notifications" ? "Broadcast announcements to users or vendors" :
-               activeTab === "analytics" ? "Track growth, revenue, and engagement metrics" :
-               activeTab === "audit" ? "Review administrative actions and security events" :
-               activeTab === "settings" ? "Manage your admin profile and preferences" :
-               "Admin dashboard"} {/* ✅ Final fallback - removed the "..." */}
-            </p>
+              <h1 className="text-2xl font-extrabold capitalize tracking-tight">{activeTab.replace("-", " ")}</h1>
+              <p className="text-gray-400 text-sm font-bold">
+                {activeTab === "home" ? "Real-time platform metrics and quick actions" :
+                  activeTab === "users" ? "Manage buyer and vendor accounts" :
+                    activeTab === "stores" ? "Review, approve, and manage vendor stores" :
+                      activeTab === "orders" ? "Monitor marketplace orders and escrow states" :
+                        activeTab === "payouts" ? "Review and approve vendor payout requests" :
+                          activeTab === "disputes" ? "Review and resolve customer disputes" :
+                            activeTab === "chat" ? "Real-time support & user communication hub" :
+                              activeTab === "notifications" ? "Broadcast announcements to users or vendors" :
+                                activeTab === "analytics" ? "Track growth, revenue, and engagement metrics" :
+                                  activeTab === "audit" ? "Review administrative actions and security events" :
+                                    activeTab === "settings" ? "Manage your admin profile and preferences" :
+                                      "Admin dashboard"} {/* ✅ Final fallback - removed the "..." */}
+              </p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />

@@ -2,19 +2,18 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation"; // ✅ Removed useSearchParams
+import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Search, LayoutDashboard, LogOut, ExternalLink, Store, Menu, X } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { collection, query as firestoreQuery, where, getDocs, getDoc, doc, limit } from "firebase/firestore";
+import { collection, query as firestoreQuery, getDocs, getDoc, doc, limit } from "firebase/firestore";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
 export default function Header({ isStorePage = false, storeName = "" }) {
   const router = useRouter();
 
-  // ✅ FIX 1: Removed useSearchParams() to prevent Next.js Suspense boundary errors
   const [query, setQuery] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [vendorUsername, setVendorUsername] = useState("");
@@ -22,19 +21,16 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Initialize query from URL safely on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setQuery(params.get("q") || "");
   }, []);
 
-  // AJAX Overlay States
   const [isFocused, setIsFocused] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<{ stores: any[], products: any[] }>({ stores: [], products: [] });
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // 1. Auth Monitoring - ✅ FIX 2: Added try/catch to prevent unhandled rejections crashing the app
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -55,7 +51,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
           } else if (storeSnap.exists() || vendorSnap?.exists()) {
             const storeData = storeSnap.exists() ? storeSnap.data() : vendorSnap?.data();
             setIsAdmin(false);
-            setIsBuyer(false); // ✅ User has a store = vendor
+            setIsBuyer(false);
             setVendorUsername(storeData?.username || "");
           } else {
             setIsAdmin(false);
@@ -77,7 +73,6 @@ export default function Header({ isStorePage = false, storeName = "" }) {
     return () => unsubscribe();
   }, []);
 
-  // 2. Global AJAX Search Logic
   useEffect(() => {
     const performGlobalSearch = async () => {
       if (query.length < 2) {
@@ -89,7 +84,6 @@ export default function Header({ isStorePage = false, storeName = "" }) {
       try {
         const cleanQuery = query.toLowerCase().replace("@", "");
 
-        // Fetch Stores and Products in parallel
         const [storeSnap, prodSnap] = await Promise.all([
           getDocs(firestoreQuery(collection(db, "stores"), limit(10))),
           getDocs(firestoreQuery(collection(db, "products"), limit(20)))
@@ -117,7 +111,6 @@ export default function Header({ isStorePage = false, storeName = "" }) {
     return () => clearTimeout(debounceId);
   }, [query]);
 
-  // Close overlay on click outside
   useEffect(() => {
     const clickOutside = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) setIsFocused(false);
@@ -126,7 +119,6 @@ export default function Header({ isStorePage = false, storeName = "" }) {
     return () => document.removeEventListener("mousedown", clickOutside);
   }, []);
 
-  // ✅ FIX 3: Updated handleSearch to use window.location.search instead of searchParams
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setIsFocused(false);
@@ -148,83 +140,83 @@ export default function Header({ isStorePage = false, storeName = "" }) {
     }
   };
 
-  // ✅ Determine correct dashboard URL based on user role
   const dashboardUrl = isAdmin ? "/admin" : isBuyer ? "/buyer/dashboard" : "/dashboard";
 
   return (
-    <header className={`${font.className} flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 md:px-6 py-4 border-b border-gray-200 bg-white sticky top-0 z-50`}>
+    <header className={`${font.className} flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 lg:px-6 py-3.5 border-b border-gray-200 bg-white sticky top-0 z-50`}>
 
-      {/* Balanced & Enlarged Logo Container */}
-      <div className="flex w-full items-center justify-between md:w-auto">
+      {/* Logo & Mobile Menu Toggle */}
+      <div className="flex w-full items-center justify-between lg:w-auto shrink-0">
         <div className="flex items-center gap-1">
           <button
             type="button"
             aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={isMobileMenuOpen}
             onClick={() => setIsMobileMenuOpen((open) => !open)}
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-700 transition-colors hover:bg-gray-100 md:hidden"
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-700 transition-colors hover:bg-gray-100 lg:hidden"
           >
             {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
           <Link href="/" onClick={() => setIsMobileMenuOpen(false)}>
-            <div className="flex items-center px-2">
+            <div className="flex items-center px-1">
               <img
                 src="/icons/sowa.png"
                 alt="Sowa Logo"
-                className="h-8 md:h-9 w-auto object-contain"
+                className="h-8 lg:h-11 w-auto object-contain"
               />
             </div>
           </Link>
         </div>
 
-        {/* Mobile Authentication Actions */}
-        <div className="flex md:hidden gap-2">
+        {/* Mobile Action Buttons */}
+        <div className="flex lg:hidden gap-2">
           {user ? (
             <>
-              <Link href={dashboardUrl} className="px-3 py-1 text-xs font-bold border border-gray-200 rounded-lg">
+              <Link href={dashboardUrl} className="px-3 py-1.5 text-xs font-bold border border-gray-200 rounded-lg">
                 Dashboard
               </Link>
-              <button onClick={handleLogout} className="px-3 py-1 text-xs font-bold border border-red-200 text-red-600 rounded-lg">
+              <button onClick={handleLogout} className="px-3 py-1.5 text-xs font-bold border border-red-200 text-red-600 rounded-lg">
                 Logout
               </button>
             </>
           ) : (
-            <Link href="/login" className="px-3 py-1 text-xs font-bold border border-gray-200 rounded-lg">
+            <Link href="/login" className="px-3 py-1.5 text-xs font-bold border border-gray-200 rounded-lg">
               Login
             </Link>
           )}
         </div>
       </div>
 
+      {/* Mobile Drawer Menu */}
       {isMobileMenuOpen && (
-        <div className="w-full space-y-1 border-t border-gray-100 pt-3 md:hidden">
+        <div className="w-full space-y-1 border-t border-gray-100 pt-3 lg:hidden">
           {!isStorePage && (
             <>
-              <Link href="/explore" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Explore</Link>
-              <Link href="/categories" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Categories</Link>
-              <Link href="/search" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Search</Link>
-              <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Pricing</Link>
-              <Link href="/boost-store" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Boost Store</Link>
-              <Link href="/faq" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">FAQ</Link>
+              <Link href="/explore" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Explore</Link>
+              <Link href="/categories" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Categories</Link>
+              <Link href="/search" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Search</Link>
+              <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Pricing</Link>
+              <Link href="/boost-store" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Boost Store</Link>
+              <Link href="/faq" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">FAQ</Link>
             </>
           )}
-          {user && vendorUsername && <Link href={`/${vendorUsername}`} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-green-700 hover:bg-green-50">Visit Store</Link>}
+          {user && vendorUsername && <Link href={`/${vendorUsername}`} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-green-700 hover:bg-green-50">Visit Store</Link>}
           {user ? (
             <>
-              <Link href={dashboardUrl} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100">Dashboard</Link>
-              <button type="button" onClick={() => { setIsMobileMenuOpen(false); void handleLogout(); }} className="block w-full rounded-xl px-3 py-3 text-left text-sm font-semibold text-red-600 hover:bg-red-50">Logout</button>
+              <Link href={dashboardUrl} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100">Dashboard</Link>
+              <button type="button" onClick={() => { setIsMobileMenuOpen(false); void handleLogout(); }} className="block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-red-600 hover:bg-red-50">Logout</button>
             </>
           ) : (
             <>
-              <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100">Login</Link>
-              <Link href="/register" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl bg-green-600 px-3 py-3 text-center text-sm font-bold text-white hover:bg-green-700">Get Started</Link>
+              <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100">Login</Link>
+              <Link href="/register" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl bg-green-600 px-3 py-2.5 text-center text-sm font-bold text-white hover:bg-green-700">Get Started</Link>
             </>
           )}
         </div>
       )}
 
       {/* Global Search with AJAX Overlay */}
-      <div ref={searchRef} className="w-full md:max-w-md relative">
+      <div ref={searchRef} className="w-full flex-1 min-w-[200px] lg:max-w-xs xl:max-w-md relative">
         <form onSubmit={handleSearch} className="relative group z-[60]">
           <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-green-600 transition-colors">
             <Search size={18} strokeWidth={2.5} />
@@ -245,7 +237,6 @@ export default function Header({ isStorePage = false, storeName = "" }) {
               <div className="p-4 text-center text-xs text-gray-400">Searching...</div>
             ) : (results.stores.length > 0 || results.products.length > 0) ? (
               <div className="max-h-[400px] overflow-y-auto">
-                {/* Store Results */}
                 {results.stores.length > 0 && (
                   <>
                     <div className="px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Stores</div>
@@ -261,7 +252,6 @@ export default function Header({ isStorePage = false, storeName = "" }) {
                   </>
                 )}
 
-                {/* Product Results */}
                 {results.products.length > 0 && (
                   <>
                     <div className="px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Products</div>
@@ -289,37 +279,38 @@ export default function Header({ isStorePage = false, storeName = "" }) {
         )}
       </div>
 
+      {/* Desktop Navigation Links */}
       {!isStorePage && (
-        <nav className="hidden md:flex gap-6 text-sm font-medium text-gray-600">
-          <Link href="/explore" className="hover:text-green-600">Explore</Link>
-          <Link href="/categories" className="hover:text-green-600">Categories</Link>
-          <Link href="/search" className="hover:text-green-600">Search</Link>
-          <a href="/pricing" className="hover:text-green-600">Pricing</a>
-          <a href="/boost-store" className="hover:text-green-600">Boost Store</a>
-          <a href="/faq" className="hover:text-green-600">FAQ</a>
+        <nav className="hidden lg:flex items-center gap-4 xl:gap-6 text-xs xl:text-sm font-semibold text-gray-600 shrink-0">
+          <Link href="/explore" className="hover:text-green-600 transition-colors whitespace-nowrap">Explore</Link>
+          <Link href="/categories" className="hover:text-green-600 transition-colors whitespace-nowrap">Categories</Link>
+          <Link href="/search" className="hover:text-green-600 transition-colors whitespace-nowrap">Search</Link>
+          <a href="/pricing" className="hover:text-green-600 transition-colors whitespace-nowrap">Pricing</a>
+          <a href="/boost-store" className="hover:text-green-600 transition-colors whitespace-nowrap">Boost Store</a>
+          <a href="/faq" className="hover:text-green-600 transition-colors whitespace-nowrap">FAQ</a>
         </nav>
       )}
 
-      {/* Auth Buttons */}
-      <div className="hidden md:flex gap-2">
+      {/* Desktop Auth Buttons */}
+      <div className="hidden lg:flex items-center gap-2 shrink-0">
         {user ? (
           <>
             {vendorUsername && (
-              <Link href={`/${vendorUsername}`} target="_blank" className="flex items-center gap-2 px-5 py-2 text-sm font-bold border border-green-100 text-[#00a63e] rounded-xl hover:bg-green-50 transition-all">
-                <ExternalLink size={16} /> Visit Store
+              <Link href={`/${vendorUsername}`} target="_blank" className="flex items-center gap-1.5 px-3.5 py-2 text-xs xl:text-sm font-bold border border-green-100 text-[#00a63e] rounded-xl hover:bg-green-50 transition-all whitespace-nowrap">
+                <ExternalLink size={15} /> Visit Store
               </Link>
             )}
-            <Link href={dashboardUrl} className="flex items-center gap-2 px-5 py-2 text-sm font-bold border border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
-              <LayoutDashboard size={16} /> Dashboard
+            <Link href={dashboardUrl} className="flex items-center gap-1.5 px-3.5 py-2 text-xs xl:text-sm font-bold border border-gray-200 rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap">
+              <LayoutDashboard size={15} /> Dashboard
             </Link>
-            <button onClick={handleLogout} className="flex items-center gap-2 px-5 py-2 text-sm font-bold border border-red-100 text-red-600 rounded-xl hover:bg-red-50 transition-all active:scale-95">
-              <LogOut size={16} /> Logout
+            <button onClick={handleLogout} className="flex items-center gap-1.5 px-3.5 py-2 text-xs xl:text-sm font-bold border border-red-100 text-red-600 rounded-xl hover:bg-red-50 transition-all active:scale-95 whitespace-nowrap">
+              <LogOut size={15} /> Logout
             </button>
           </>
         ) : (
           <>
-            <Link href="/login" className="px-5 py-2 text-sm font-bold border border-gray-200 rounded-xl hover:bg-gray-50 transition-all">Login</Link>
-            <Link href="/register" className="px-5 py-2 text-sm font-bold bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all shadow-sm">Get Started</Link>
+            <Link href="/login" className="px-4 py-2 text-xs xl:text-sm font-bold border border-gray-200 rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap">Login</Link>
+            <Link href="/register" className="px-4 py-2 text-xs xl:text-sm font-bold bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all shadow-sm whitespace-nowrap">Get Started</Link>
           </>
         )}
       </div>

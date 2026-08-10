@@ -153,7 +153,7 @@ export default function AdminLogin() {
             <div className="w-10 h-10 bg-green-600 rounded-xl flex items-center justify-center">
               <ShieldCheck size={20} className="text-white" />
             </div>
-            <span className="font-bold text-lg">Zebble Admin Portal</span>
+            <span className="font-bold text-lg">SellOnwhatsapp Admin Portal</span>
           </div>
           <div className="font-bold text-3xl mb-4 leading-tight">
             {slides[currentSlide].title}
@@ -188,7 +188,7 @@ export default function AdminLogin() {
             </div>
             <div>
               <h1 className="text-2xl font-black text-gray-900">Admin Portal</h1>
-              <p className="text-gray-500 text-sm font-medium">Secure access for Zebble administrators</p>
+              <p className="text-gray-500 text-sm font-medium">Secure access for SellOnWhatsapp administrators</p>
             </div>
           </div>
 
@@ -287,7 +287,7 @@ export default function AdminLogin() {
 
           {/* Back to App Link */}
           <p className="mt-8 text-center text-sm text-gray-500 font-medium">
-            Not an admin? <Link href="/" className="text-green-600 font-bold hover:underline px-2 py-1 rounded-lg hover:bg-[#ecfcca] transition-all">Return to Sowa</Link>
+            Not an admin? <Link href="/" className="text-green-600 font-bold hover:underline px-2 py-1 rounded-lg hover:bg-[#ecfcca] transition-all">Return to SellOnWhatsapp.com</Link>
           </p>
         </div>
 

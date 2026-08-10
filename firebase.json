@@ -1,4 +1,13 @@
 {
+  "hosting": {
+    "site": "sellonwhatsapp-c3e0c",
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  },
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"

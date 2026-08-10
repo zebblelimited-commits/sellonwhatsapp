@@ -1,0 +1,153 @@
+[debug] [2026-08-10T10:34:10.225Z] ----------------------------------------------------------------------
+[debug] [2026-08-10T10:34:10.299Z] Command:       /home/zebble/.nvm/versions/node/v20.19.6/bin/node /home/zebble/.nvm/versions/node/v20.19.6/bin/firebase hosting:sites:list --project sellonwhatsapp-c3e0c
+[debug] [2026-08-10T10:34:10.301Z] CLI Version:   14.26.0
+[debug] [2026-08-10T10:34:10.302Z] Platform:      linux
+[debug] [2026-08-10T10:34:10.302Z] Node Version:  v20.19.6
+[debug] [2026-08-10T10:34:10.303Z] Time:          Mon Aug 10 2026 11:34:10 GMT+0100 (West Africa Standard Time)
+[debug] [2026-08-10T10:34:10.304Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-08-10T10:34:10.915Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-10T10:34:10.919Z] > authorizing via signed-in user (zebblelimited@gmail.com)
+[debug] [2026-08-10T10:34:10.920Z] [iam] checking project sellonwhatsapp-c3e0c for permissions ["firebase.projects.get","firebasehosting.sites.get"]
+[debug] [2026-08-10T10:34:10.923Z] Checked if tokens are valid: false, expires at: 1786284838416
+[debug] [2026-08-10T10:34:10.924Z] Checked if tokens are valid: false, expires at: 1786284838416
+[debug] [2026-08-10T10:34:10.925Z] > refreshing access token with scopes: []
+[debug] [2026-08-10T10:34:10.931Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-08-10T10:34:10.932Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-08-10T10:34:11.711Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-08-10T10:34:11.713Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-08-10T10:34:13.259Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions [none]
+[debug] [2026-08-10T10:34:13.261Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions x-goog-quota-user=projects/sellonwhatsapp-c3e0c
+[debug] [2026-08-10T10:34:13.261Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.get"]}
+[debug] [2026-08-10T10:34:14.399Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions 200
+[debug] [2026-08-10T10:34:14.400Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.get"]}
+[debug] [2026-08-10T10:34:14.401Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:34:14.401Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:34:14.404Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites pageToken=&pageSize=10
+[debug] [2026-08-10T10:34:16.161Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites 200
+[debug] [2026-08-10T10:34:16.161Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites {"sites":[{"name":"projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c","defaultUrl":"https://sellonwhatsapp-c3e0c.web.app","appId":"1:574073567173:web:faf6673db6968701be7dac","type":"DEFAULT_SITE"}]}
+[info] 
+[info] Sites for project sellonwhatsapp-c3e0c
+[info] 
+[info] ┌──────────────────────┬──────────────────────────────────────┬───────────────────────────────────────────┐
+│ Site ID              │ Default URL                          │ App ID (if set)                           │
+├──────────────────────┼──────────────────────────────────────┼───────────────────────────────────────────┤
+│ sellonwhatsapp-c3e0c │ https://sellonwhatsapp-c3e0c.web.app │ 1:574073567173:web:faf6673db6968701be7dac │
+└──────────────────────┴──────────────────────────────────────┴───────────────────────────────────────────┘
+[debug] [2026-08-10T10:34:36.419Z] ----------------------------------------------------------------------
+[debug] [2026-08-10T10:34:36.424Z] Command:       /home/zebble/.nvm/versions/node/v20.19.6/bin/node /home/zebble/.nvm/versions/node/v20.19.6/bin/firebase hosting:channel:list --project sellonwhatsapp-c3e0c --site sellonwhatsapp-c3e0c
+[debug] [2026-08-10T10:34:36.425Z] CLI Version:   14.26.0
+[debug] [2026-08-10T10:34:36.425Z] Platform:      linux
+[debug] [2026-08-10T10:34:36.426Z] Node Version:  v20.19.6
+[debug] [2026-08-10T10:34:36.426Z] Time:          Mon Aug 10 2026 11:34:36 GMT+0100 (West Africa Standard Time)
+[debug] [2026-08-10T10:34:36.426Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-08-10T10:34:37.039Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-10T10:34:37.042Z] > authorizing via signed-in user (zebblelimited@gmail.com)
+[debug] [2026-08-10T10:34:37.043Z] [iam] checking project sellonwhatsapp-c3e0c for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-08-10T10:34:37.046Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:34:37.047Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:34:37.050Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions [none]
+[debug] [2026-08-10T10:34:37.051Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions x-goog-quota-user=projects/sellonwhatsapp-c3e0c
+[debug] [2026-08-10T10:34:37.052Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-08-10T10:34:38.244Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions 200
+[debug] [2026-08-10T10:34:38.245Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-08-10T10:34:38.248Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:34:38.248Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:34:38.250Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c/channels pageToken=&pageSize=10
+[debug] [2026-08-10T10:34:39.403Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c/channels 200
+[debug] [2026-08-10T10:34:39.404Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c/channels {"channels":[{"name":"projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c/channels/live","url":"https://sellonwhatsapp-c3e0c.web.app","createTime":"2026-04-21T00:56:33.705645399Z","updateTime":"2026-04-21T00:56:33.705645399Z","retainedReleaseCount":2147483647}]}
+[info] 
+[info] Channels for site sellonwhatsapp-c3e0c
+[info] 
+[info] ┌────────────┬─────────────────────┬──────────────────────────────────────┬─────────────┐
+│ Channel ID │ Last Release Time   │ URL                                  │ Expire Time │
+├────────────┼─────────────────────┼──────────────────────────────────────┼─────────────┤
+│ live       │ 2026-04-21 01:56:33 │ https://sellonwhatsapp-c3e0c.web.app │ never       │
+└────────────┴─────────────────────┴──────────────────────────────────────┴─────────────┘
+[debug] [2026-08-10T10:35:13.702Z] ----------------------------------------------------------------------
+[debug] [2026-08-10T10:35:13.707Z] Command:       /home/zebble/.nvm/versions/node/v20.19.6/bin/node /home/zebble/.nvm/versions/node/v20.19.6/bin/firebase hosting:sites:get sellonwhatsapp-c3e0c --project sellonwhatsapp-c3e0c
+[debug] [2026-08-10T10:35:13.708Z] CLI Version:   14.26.0
+[debug] [2026-08-10T10:35:13.708Z] Platform:      linux
+[debug] [2026-08-10T10:35:13.709Z] Node Version:  v20.19.6
+[debug] [2026-08-10T10:35:13.709Z] Time:          Mon Aug 10 2026 11:35:13 GMT+0100 (West Africa Standard Time)
+[debug] [2026-08-10T10:35:13.710Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-08-10T10:35:14.275Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-10T10:35:14.279Z] > authorizing via signed-in user (zebblelimited@gmail.com)
+[debug] [2026-08-10T10:35:14.280Z] [iam] checking project sellonwhatsapp-c3e0c for permissions ["firebase.projects.get","firebasehosting.sites.get"]
+[debug] [2026-08-10T10:35:14.283Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:35:14.284Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:35:14.288Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions [none]
+[debug] [2026-08-10T10:35:14.288Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions x-goog-quota-user=projects/sellonwhatsapp-c3e0c
+[debug] [2026-08-10T10:35:14.289Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.get"]}
+[debug] [2026-08-10T10:35:15.741Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions 200
+[debug] [2026-08-10T10:35:15.741Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.get"]}
+[debug] [2026-08-10T10:35:15.743Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:35:15.743Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:35:15.744Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c [none]
+[debug] [2026-08-10T10:35:17.166Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c 200
+[debug] [2026-08-10T10:35:17.168Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c {"name":"projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c","defaultUrl":"https://sellonwhatsapp-c3e0c.web.app","appId":"1:574073567173:web:faf6673db6968701be7dac","type":"DEFAULT_SITE"}
+[info] 
+[info] ┌──────────────┬───────────────────────────────────────────┐
+│ Site ID:     │ sellonwhatsapp-c3e0c                      │
+├──────────────┼───────────────────────────────────────────┤
+│ Default URL: │ https://sellonwhatsapp-c3e0c.web.app      │
+├──────────────┼───────────────────────────────────────────┤
+│ App ID:      │ 1:574073567173:web:faf6673db6968701be7dac │
+└──────────────┴───────────────────────────────────────────┘
+[debug] [2026-08-10T10:35:59.770Z] ----------------------------------------------------------------------
+[debug] [2026-08-10T10:35:59.775Z] Command:       /home/zebble/.nvm/versions/node/v20.19.6/bin/node /home/zebble/.nvm/versions/node/v20.19.6/bin/firebase hosting:channel:list --project sellonwhatsapp-c3e0c --site sellonwhatsapp-c3e0c --json
+[debug] [2026-08-10T10:35:59.776Z] CLI Version:   14.26.0
+[debug] [2026-08-10T10:35:59.777Z] Platform:      linux
+[debug] [2026-08-10T10:35:59.777Z] Node Version:  v20.19.6
+[debug] [2026-08-10T10:35:59.778Z] Time:          Mon Aug 10 2026 11:35:59 GMT+0100 (West Africa Standard Time)
+[debug] [2026-08-10T10:35:59.778Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-08-10T10:36:00.381Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-10T10:36:00.382Z] > authorizing via signed-in user (zebblelimited@gmail.com)
+[debug] [2026-08-10T10:36:00.383Z] [iam] checking project sellonwhatsapp-c3e0c for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-08-10T10:36:00.386Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:36:00.386Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:36:00.388Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions [none]
+[debug] [2026-08-10T10:36:00.389Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions x-goog-quota-user=projects/sellonwhatsapp-c3e0c
+[debug] [2026-08-10T10:36:00.389Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-08-10T10:36:01.553Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions 200
+[debug] [2026-08-10T10:36:01.553Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-08-10T10:36:01.555Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:36:01.555Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:36:01.556Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c/channels pageToken=&pageSize=10
+[debug] [2026-08-10T10:36:02.821Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c/channels 200
+[debug] [2026-08-10T10:36:02.821Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c/channels {"channels":[{"name":"projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c/channels/live","url":"https://sellonwhatsapp-c3e0c.web.app","createTime":"2026-04-21T00:56:33.705645399Z","updateTime":"2026-04-21T00:56:33.705645399Z","retainedReleaseCount":2147483647}]}
+[info] 
+[info] Channels for site sellonwhatsapp-c3e0c
+[info] 
+[info] ┌────────────┬─────────────────────┬──────────────────────────────────────┬─────────────┐
+│ Channel ID │ Last Release Time   │ URL                                  │ Expire Time │
+├────────────┼─────────────────────┼──────────────────────────────────────┼─────────────┤
+│ live       │ 2026-04-21 01:56:33 │ https://sellonwhatsapp-c3e0c.web.app │ never       │
+└────────────┴─────────────────────┴──────────────────────────────────────┴─────────────┘
+[debug] [2026-08-10T10:36:20.253Z] ----------------------------------------------------------------------
+[debug] [2026-08-10T10:36:20.258Z] Command:       /home/zebble/.nvm/versions/node/v20.19.6/bin/node /home/zebble/.nvm/versions/node/v20.19.6/bin/firebase hosting:channel:open live --project sellonwhatsapp-c3e0c --site sellonwhatsapp-c3e0c --json
+[debug] [2026-08-10T10:36:20.258Z] CLI Version:   14.26.0
+[debug] [2026-08-10T10:36:20.259Z] Platform:      linux
+[debug] [2026-08-10T10:36:20.259Z] Node Version:  v20.19.6
+[debug] [2026-08-10T10:36:20.259Z] Time:          Mon Aug 10 2026 11:36:20 GMT+0100 (West Africa Standard Time)
+[debug] [2026-08-10T10:36:20.260Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-08-10T10:36:20.832Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-08-10T10:36:20.833Z] > authorizing via signed-in user (zebblelimited@gmail.com)
+[debug] [2026-08-10T10:36:20.834Z] [iam] checking project sellonwhatsapp-c3e0c for permissions ["firebase.projects.get","firebasehosting.sites.get"]
+[debug] [2026-08-10T10:36:20.837Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:36:20.837Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:36:20.840Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions [none]
+[debug] [2026-08-10T10:36:20.840Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions x-goog-quota-user=projects/sellonwhatsapp-c3e0c
+[debug] [2026-08-10T10:36:20.840Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.get"]}
+[debug] [2026-08-10T10:36:21.600Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions 200
+[debug] [2026-08-10T10:36:21.600Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/sellonwhatsapp-c3e0c:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.get"]}
+[debug] [2026-08-10T10:36:21.603Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:36:21.604Z] Checked if tokens are valid: true, expires at: 1786361650714
+[debug] [2026-08-10T10:36:21.605Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c/channels/live [none]
+[debug] [2026-08-10T10:36:22.392Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c/channels/live 200
+[debug] [2026-08-10T10:36:22.393Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c/channels/live {"name":"projects/sellonwhatsapp-c3e0c/sites/sellonwhatsapp-c3e0c/channels/live","url":"https://sellonwhatsapp-c3e0c.web.app","createTime":"2026-04-21T00:56:33.705645399Z","updateTime":"2026-04-21T00:56:33.705645399Z","retainedReleaseCount":2147483647}
+[info] i  hosting:channel: https://sellonwhatsapp-c3e0c.web.app 
