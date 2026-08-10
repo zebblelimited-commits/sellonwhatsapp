@@ -9,7 +9,7 @@ import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, AlertCircle, UserSearch }
 
 // Firebase Imports
 import { auth, db } from "@/lib/firebase";
-import { getRedirectResult, signInWithEmailAndPassword, GoogleAuthProvider, signInWithRedirect } from "firebase/auth";
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { getApps } from "firebase/app";
 
@@ -109,47 +109,6 @@ export default function LoginPage() {
     router.replace("/register/onboarding/role");
   };
 
-  // Complete Google sign-in after Firebase redirects back to /login.
-  useEffect(() => {
-    let mounted = true;
-
-    const completeRedirectLogin = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (!mounted || !result?.user) return;
-
-        setLoading(true);
-        setError("");
-        const session = await bakeSessionCookie();
-        if (mounted) await routeUserByRole(result.user.uid, session.role);
-      } catch (err: any) {
-        console.error("Google redirect login error:", err.code, err.message);
-        if (!mounted) return;
-
-        switch (err.code) {
-          case "auth/unauthorized-domain":
-            setError(`This domain (${window.location.hostname}) is not authorized for Google sign-in.`);
-            break;
-          case "auth/account-exists-with-different-credential":
-            setError("An account already exists with a different sign-in method. Use your email and password instead.");
-            break;
-          case "auth/network-request-failed":
-            setError("Network error. Please check your connection and try again.");
-            break;
-          default:
-            setError("Google sign-in could not be completed. Please try again.");
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    void completeRedirectLogin();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   // Email/Password Login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -211,12 +170,18 @@ export default function LoginPage() {
     
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const session = await bakeSessionCookie();
+      await routeUserByRole(result.user.uid, session.role);
     } catch (err: any) {
       console.error("Google login error:", err.code, err.message);
       setError(err.code === "auth/unauthorized-domain"
         ? `This domain (${window.location.hostname}) is not authorized for Google sign-in.`
-        : "Google sign-in could not be started. Please try again.");
+        : err.code === "auth/popup-closed-by-user"
+          ? "Google sign-in was cancelled."
+          : err.code === "auth/popup-blocked"
+            ? "Your browser blocked the Google sign-in popup. Please allow popups and try again."
+            : "Google sign-in could not be completed. Please try again.");
     } finally {
       setLoading(false);
     }
