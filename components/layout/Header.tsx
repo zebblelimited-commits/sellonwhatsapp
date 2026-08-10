@@ -190,16 +190,12 @@ export default function Header({ isStorePage = false, storeName = "" }) {
       {/* Mobile Drawer Menu */}
       {isMobileMenuOpen && (
         <div className="w-full space-y-1 border-t border-gray-100 pt-3 lg:hidden">
-          {!isStorePage && (
-            <>
-              <Link href="/explore" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Explore</Link>
-              <Link href="/categories" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Categories</Link>
-              <Link href="/search" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Search</Link>
-              <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Pricing</Link>
-              <Link href="/boost-store" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Boost Store</Link>
-              <Link href="/faq" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">FAQ</Link>
-            </>
-          )}
+          <Link href="/explore" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Explore</Link>
+          <Link href="/categories" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Categories</Link>
+          <Link href="/search" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Search</Link>
+          <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Pricing</Link>
+          <Link href="/boost-store" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Boost Store</Link>
+          <Link href="/faq" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">FAQ</Link>
           {user && vendorUsername && <Link href={`/${vendorUsername}`} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-green-700 hover:bg-green-50">Visit Store</Link>}
           {user ? (
             <>
@@ -280,16 +276,14 @@ export default function Header({ isStorePage = false, storeName = "" }) {
       </div>
 
       {/* Desktop Navigation Links */}
-      {!isStorePage && (
-        <nav className="hidden lg:flex items-center gap-4 xl:gap-6 text-xs xl:text-sm font-semibold text-gray-600 shrink-0">
-          <Link href="/explore" className="hover:text-green-600 transition-colors whitespace-nowrap">Explore</Link>
-          <Link href="/categories" className="hover:text-green-600 transition-colors whitespace-nowrap">Categories</Link>
-          <Link href="/search" className="hover:text-green-600 transition-colors whitespace-nowrap">Search</Link>
-          <a href="/pricing" className="hover:text-green-600 transition-colors whitespace-nowrap">Pricing</a>
-          <a href="/boost-store" className="hover:text-green-600 transition-colors whitespace-nowrap">Boost Store</a>
-          <a href="/faq" className="hover:text-green-600 transition-colors whitespace-nowrap">FAQ</a>
-        </nav>
-      )}
+      <nav className="hidden lg:flex items-center gap-4 xl:gap-6 text-xs xl:text-sm font-semibold text-gray-600 shrink-0">
+        <Link href="/explore" className="hover:text-green-600 transition-colors whitespace-nowrap">Explore</Link>
+        <Link href="/categories" className="hover:text-green-600 transition-colors whitespace-nowrap">Categories</Link>
+        <Link href="/search" className="hover:text-green-600 transition-colors whitespace-nowrap">Search</Link>
+        <Link href="/pricing" className="hover:text-green-600 transition-colors whitespace-nowrap">Pricing</Link>
+        <Link href="/boost-store" className="hover:text-green-600 transition-colors whitespace-nowrap">Boost Store</Link>
+        <Link href="/faq" className="hover:text-green-600 transition-colors whitespace-nowrap">FAQ</Link>
+      </nav>
 
       {/* Desktop Auth Buttons */}
       <div className="hidden lg:flex items-center gap-2 shrink-0">
