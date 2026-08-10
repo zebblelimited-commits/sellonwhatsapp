@@ -3,12 +3,20 @@ import { doc, getDoc, collection, query, where, getDocs } from "firebase/firesto
 import { notFound } from "next/navigation";
 import ProductPageClient from "@/components/ProductPageClient";
 
+type ProductRecord = {
+  id: string;
+  storeId?: string;
+  vendorId?: string;
+  ownerId?: string;
+  [key: string]: unknown;
+};
+
 async function getProductData(productId: string, username: string) {
   if (!productId) return null;
 
   const productSnap = await getDoc(doc(db, "products", productId));
   if (!productSnap.exists()) return null;
-  const product = { id: productSnap.id, ...productSnap.data() };
+  const product = { id: productSnap.id, ...productSnap.data() } as ProductRecord;
 
   const storesRef = collection(db, "stores");
   const q = query(storesRef, where("username", "==", username.toLowerCase()));

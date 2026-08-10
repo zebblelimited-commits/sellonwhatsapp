@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { MapPin, Phone, Mail } from "lucide-react";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });

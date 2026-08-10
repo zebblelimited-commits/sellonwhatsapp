@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { signOut, onAuthStateChanged } from "firebase/auth";

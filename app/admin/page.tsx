@@ -9,7 +9,7 @@ import {
   updateDoc, doc, addDoc, serverTimestamp, deleteDoc
 } from "firebase/firestore";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import {
   Users, Store, CreditCard, AlertTriangle, TrendingUp, Clock,
   CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight, Loader2,

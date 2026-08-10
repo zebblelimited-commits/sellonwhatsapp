@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { MessageSquare, ShieldCheck, BarChart3, TrendingUp } from "lucide-react";
 
 const font = Plus_Jakarta_Sans({

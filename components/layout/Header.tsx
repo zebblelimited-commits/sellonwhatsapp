@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { Search, LayoutDashboard, LogOut, ExternalLink, Store, Menu, X } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";

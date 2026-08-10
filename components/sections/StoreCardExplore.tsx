@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { Crown, LayoutGrid, MapPin, MessageCircle, ShieldCheck, Users } from "lucide-react";
 import FollowButton from "@/components/store/FollowButton";
 import { trackMetric } from "@/lib/analytics";

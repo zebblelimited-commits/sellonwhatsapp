@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import {
   Search, Filter, MapPin, Star, MessageCircle,
   LayoutGrid, SlidersHorizontal, Users,

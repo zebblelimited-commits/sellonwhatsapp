@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { ExternalLink, Store as StoreIcon } from "lucide-react";
 import { db } from "@/lib/firebase";

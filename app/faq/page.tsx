@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { 
   Search, ChevronDown, ChevronUp, MessageSquare, 
   ShieldCheck, Zap, CreditCard, Package, Truck, 

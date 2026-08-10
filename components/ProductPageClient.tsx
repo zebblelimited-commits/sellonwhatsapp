@@ -5,7 +5,7 @@ import {
   CreditCard, Banknote, X, Box, Loader2, Smartphone, QrCode,
   Calendar, CheckCircle2, MessageCircle
 } from "lucide-react";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { trackMetric } from "@/lib/analytics";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";

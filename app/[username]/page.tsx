@@ -4,7 +4,7 @@ import React, { useState, useEffect, use, useMemo } from "react";
 import { useSearchParams } from "next/navigation"; // Added for URL search sync
 import Image from "next/image";
 import Link from "next/link";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import {
   MapPin, Clock, Search, Share2, Package, Users, Phone, Calendar, CheckCircle2, ShieldCheck
 } from "lucide-react";

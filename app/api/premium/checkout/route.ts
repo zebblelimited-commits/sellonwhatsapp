@@ -24,7 +24,11 @@ export async function POST(req: NextRequest) {
     if (!planDoc.exists) {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
-    const plan = planDoc.data();
+    const plan = planDoc.data() || {};
+    const planPrice = Number(plan.price);
+    if (!Number.isFinite(planPrice) || planPrice <= 0) {
+      return NextResponse.json({ error: "Plan price is invalid" }, { status: 400 });
+    }
 
     // 3. Create Nomba payment session
     const nomabaResponse = await fetch(`${process.env.NOMBA_SANDBOX_URL}/api/v1/charges`, {
@@ -34,7 +38,7 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        amount: plan.price,
+        amount: planPrice,
         currency: "NGN",
         email: decoded.email,
         reference: `premium_${userId}_${Date.now()}`,

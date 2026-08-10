@@ -1,7 +1,7 @@
 // app/dashboard/page.tsx
 "use client";
 import React, { useState, useEffect, Suspense } from "react";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { signOut, onAuthStateChanged, User } from "firebase/auth";

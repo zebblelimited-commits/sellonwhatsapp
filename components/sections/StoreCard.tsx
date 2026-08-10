@@ -2,7 +2,7 @@
 "use client";
 
 import Image from "next/image";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { ShieldCheck, Crown } from "lucide-react";
 
 const jakarta = Plus_Jakarta_Sans({

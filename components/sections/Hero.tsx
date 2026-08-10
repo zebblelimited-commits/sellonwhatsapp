@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { collection, onSnapshot } from "firebase/firestore";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { db } from "@/lib/firebase";
 
 const jakarta = Plus_Jakarta_Sans({

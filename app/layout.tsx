@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { Suspense } from "react";
 import "./globals.css";
 
@@ -17,6 +17,16 @@ const plusJakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "SellOnWhatsApp | Secure Social Commerce",
   description: "Secure WhatsApp Commerce & Escrow Solutions",
+  icons: {
+    icon: [
+      {
+        url: "/icon.png",
+        type: "image/png",
+      },
+    ],
+    shortcut: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({

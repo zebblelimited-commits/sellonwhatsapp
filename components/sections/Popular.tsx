@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { Calendar, CheckCircle2, Package, Search } from "lucide-react";
 import { collection, doc, getDoc, getDocs, limit, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
