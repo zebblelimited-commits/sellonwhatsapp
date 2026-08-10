@@ -56,7 +56,6 @@ export function PremiumFeatureLock({
         <UpgradeModal 
           onClose={() => setShowUpgradeModal(false)} 
           preselectedPlan={planRequired.toLowerCase().replace(" ", "_")}
-          badgeType={badgeType} // ✅ Pass badge type to modal
         />
       )}
     </>

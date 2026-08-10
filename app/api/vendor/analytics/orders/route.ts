@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const decoded = await adminAuth.verifyIdToken(authorization.slice("Bearer ".length).trim());
     const body = await request.json().catch(() => ({})) as { orderIds?: unknown };
     const orderIds = Array.isArray(body.orderIds)
-      ? Array.from(new Set(body.orderIds.filter((id): id is string => typeof id === "string" && id.trim()).map((id) => id.trim()))).slice(0, 100)
+      ? Array.from(new Set(body.orderIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0).map((id) => id.trim()))).slice(0, 100)
       : [];
 
     if (orderIds.length === 0) return NextResponse.json({ customers: {} });

@@ -1,7 +1,7 @@
 // app/pricing/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import {
@@ -207,6 +207,8 @@ export default function PricingPage() {
     setLoadingPlan(planId);
 
     try {
+      const user = currentUser;
+      if (!user) throw new Error("Authentication failed");
       const idToken = await currentUser?.getIdToken();
       if (!idToken) throw new Error("Authentication failed");
 
@@ -246,16 +248,16 @@ export default function PricingPage() {
           discountPercentage: Math.round(duration.discount * 100),
           savingsAmount: savingsAmount,            // How much they save
           autoRenew: autoRenewEnabled,
-          userId: currentUser.uid,
-          userEmail: currentUser.email,
+          userId: user.uid,
+          userEmail: user.email,
           returnUrl: `${window.location.origin}/payment/subscription-success`,
           // Include metadata for the webhook
           metadata: {
             isSubscription: true,
             planType: planId,
             durationMonths: duration.months,
-            userId: currentUser.uid,
-            userEmail: currentUser.email
+            userId: user.uid,
+            userEmail: user.email
           }
         })
       });
@@ -678,7 +680,7 @@ function AutoRenewToggle({
 }
 
 // 📦 FAQ Accordion Component
-function FAQItem({ question, answer }: { question: string; answer: string }): JSX.Element {
+function FAQItem({ question, answer }: { question: string; answer: string }): ReactNode {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">

@@ -3,6 +3,7 @@
 import { ShieldAlert, Clock, CheckCircle2, XCircle, MessageSquare, Upload } from "lucide-react";
 import DisputeThread from "@/components/disputes/DisputeThread";
 
+/** @param {{ disputes?: any[], vendorId?: string, onAction?: (action: string, dispute: any) => void }} props */
 export default function DisputesTab({ disputes = [], vendorId, onAction }) {
   if (disputes.length === 0) {
     return (

@@ -32,13 +32,14 @@ export function ZebbleNotificationCenter() {
                 onNotificationClick={(notification) => {
                     // Extract actionUrl from the payload. 
                     // Defaults to /dashboard?tab=orders if not present.
-                    const targetUrl = notification.payload?.actionUrl || "/dashboard?tab=orders";
+                    const payload = (notification as unknown as { payload?: { actionUrl?: string } }).payload;
+                    const targetUrl = payload?.actionUrl || "/dashboard?tab=orders";
                     router.push(targetUrl);
                 }}
                 appearance={{
                     elements: {
                         bellIcon: "text-slate-500 hover:text-green-600 transition-colors",
-                        unseenBadge: "bg-green-600 text-white border-2 border-white",
+                        badge: "bg-green-600 text-white border-2 border-white",
                         popoverContent: "rounded-[24px] border-gray-100 shadow-2xl bg-white",
                     },
                     variables: {

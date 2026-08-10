@@ -11,11 +11,28 @@ import {
   doc, deleteDoc, updateDoc, increment, serverTimestamp
 } from "firebase/firestore";
 
-export default function ProductsTab({ onOpenModal, storeSlug, onEditProduct, onShareProduct }) {
-  const [products, setProducts] = useState([]);
+type Product = {
+  id: string;
+  name?: string;
+  images?: string[];
+  productType?: string;
+  stockCount?: number;
+  stock?: number;
+  availability?: string;
+  [key: string]: any;
+};
+type ProductsTabProps = {
+  onOpenModal: () => void;
+  storeSlug: string;
+  onEditProduct: (product: Product) => void;
+  onShareProduct: (product: Product) => void;
+};
+
+export default function ProductsTab({ onOpenModal, storeSlug, onEditProduct, onShareProduct }: ProductsTabProps) {
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -26,7 +43,7 @@ export default function ProductsTab({ onOpenModal, storeSlug, onEditProduct, onS
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const items: Product[] = snapshot.docs.map(productDoc => ({ id: productDoc.id, ...productDoc.data() }));
       setProducts(items);
       setLoading(false);
     });
@@ -42,7 +59,9 @@ export default function ProductsTab({ onOpenModal, storeSlug, onEditProduct, onS
 
     // 2. Decrement the count in the Store document
     // We use the currentUser.uid because that is your storeId
-    const storeRef = doc(db, "stores", auth.currentUser.uid); 
+    const user = auth.currentUser;
+    if (!user) return;
+    const storeRef = doc(db, "stores", user.uid);
     await updateDoc(storeRef, {
       productCount: increment(-1) // You'll need to import { increment } from "firebase/firestore"
     });
@@ -126,10 +145,10 @@ export default function ProductsTab({ onOpenModal, storeSlug, onEditProduct, onS
   );
 }
 
-function ProductItem({ item, storeSlug, onEdit, onDeleteClick, onShare }) {
+function ProductItem({ item, storeSlug, onEdit, onDeleteClick, onShare }: { item: Product; storeSlug: string; onEdit: () => void; onDeleteClick: () => void; onShare: () => void }) {
   const [showMenu, setShowMenu] = useState(false);
   const [updatingStock, setUpdatingStock] = useState(false);
-  const menuRef = useRef(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   
   // Logic Variables
   const isBooking = item.productType === "booking";
@@ -140,8 +159,8 @@ function ProductItem({ item, storeSlug, onEdit, onDeleteClick, onShare }) {
     : !Number.isFinite(stockCount) || stockCount <= 0 || item.availability === "out_of_stock";
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setShowMenu(false);
       }
     };

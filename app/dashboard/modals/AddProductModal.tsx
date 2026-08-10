@@ -15,7 +15,38 @@ import { STORE_CATEGORIES } from '../nigeriaData';
 
 // ✅ 2. MAP TABS TO SPECIFIC CATEGORY GROUPS
 // This ensures users only see relevant categories for the type of product they are adding
-const TAB_CATEGORY_MAP = {
+type ProductType = 'physical' | 'service' | 'booking' | 'utility';
+type ProductImage = { file?: File; preview: string; isExisting: boolean };
+type ProductVariant = { type: string; value: string };
+type ProductRecord = {
+  id?: string;
+  productType?: ProductType;
+  images?: string[];
+  features?: string[];
+  variants?: ProductVariant[];
+  [key: string]: any;
+};
+type ProductFormData = {
+  name: string;
+  description: string;
+  price: string;
+  discountPrice: string;
+  mainCategory: string;
+  subCategory: string;
+  stockCount: string;
+  deliveryType: string;
+  duration: string;
+  metricType: string;
+  unitLabel: string;
+  locationType: string;
+};
+type AddProductModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  initialData?: ProductRecord | null;
+};
+
+const TAB_CATEGORY_MAP: Record<ProductType, string[]> = {
   physical: ['physical-products', 'vehicles', 'property'],
   service: ['freelance-services'],
   booking: ['bookable-services', 'events-tickets'],
@@ -26,14 +57,14 @@ const BRAND_GREEN = "#00A63E";
 const CLOUDINARY_UPLOAD_PRESET = "sellonwhatsapp_preset";
 const CLOUDINARY_CLOUD_NAME = "dmjzgqigl";
 
-const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
+const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModalProps) => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [productType, setProductType] = useState('physical');
-  const [images, setImages] = useState([]);
+  const [productType, setProductType] = useState<ProductType>('physical');
+  const [images, setImages] = useState<ProductImage[]>([]);
   const [features, setFeatures] = useState([""]);
-  const [variants, setVariants] = useState([]);
-  const [savedProductId, setSavedProductId] = useState(null);
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [savedProductId, setSavedProductId] = useState<string | null>(null);
 
   // --- Subscription Limit States ---
   const [currentCount, setCurrentCount] = useState(0);
@@ -41,7 +72,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
   const [loadingLimits, setLoadingLimits] = useState(true);
 
   // ✅ 3. UPDATED FORM STATE (Replaced 'category' with 'mainCategory' & 'subCategory')
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ProductFormData>({
     name: '',
     description: '',
     price: '',
@@ -70,7 +101,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
   useEffect(() => {
     if (initialData && isOpen) {
       setProductType(initialData.productType || 'physical');
-      setImages(initialData.images?.map(url => ({ preview: url, isExisting: true })) || []);
+      setImages(initialData.images?.map((url: string) => ({ preview: url, isExisting: true })) || []);
       setFeatures(initialData.features || [""]);
       setVariants(initialData.variants || []);
       setFormData({
@@ -130,7 +161,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
 
   if (!isOpen) return null;
 
-  const uploadToCloudinary = async (file) => {
+  const uploadToCloudinary = async (file: File) => {
     if (!file) return null;
     const data = new FormData();
     data.append("file", file);
@@ -150,13 +181,13 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
     }
   };
 
-  const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.currentTarget.files || []);
     if (files.length === 0) return;
 
     const newImages = files.map(file => ({
       file,
-      preview: URL.createObjectURL(file),
+      preview: URL.createObjectURL(file as Blob),
       isExisting: false
     }));
     setImages(prev => [...prev, ...newImages]);
@@ -166,7 +197,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
     setVariants([...variants, { type: 'Size', value: '' }]);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>) => {
     if (e) e.preventDefault();
 
     if (currentCount >= productLimit && !initialData) {
@@ -188,6 +219,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
       const imageUrls = await Promise.all(
         images.map(async (img) => {
           if (img.isExisting) return img.preview;
+          if (!img.file) return null;
           return await uploadToCloudinary(img.file);
         })
       );
@@ -203,7 +235,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
         category: formData.subCategory, // Kept for backward compatibility with older queries
         productType,
         trackInventory: productType === 'physical',
-        images: imageUrls.filter(url => url !== null),
+        images: imageUrls.filter((url): url is string => url !== null),
         features: features.filter(f => f.trim() !== ""),
         variants: variants.filter(v => v.value.trim() !== ""),
         storeId: user.uid,
@@ -221,8 +253,10 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
       if (initialData?.id) {
         await updateDoc(doc(db, "products", initialData.id), payload);
       } else {
-        payload.createdAt = serverTimestamp();
-        const docRef = await addDoc(collection(db, "products"), payload);
+        const docRef = await addDoc(collection(db, "products"), {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
         productId = docRef.id;
 
         const storeRef = doc(db, "stores", user.uid);
@@ -232,14 +266,14 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
       }
 
       if (productType === 'booking') {
-        setSavedProductId(productId);
+        setSavedProductId(productId || null);
         setLoading(false);
       } else {
         onClose();
       }
     } catch (err) {
       console.error("Submit Error:", err);
-      showToast("error", `Submission failed: ${err.message}`);
+      showToast("error", `Submission failed: ${err instanceof Error ? err.message : "Unknown error"}`);
       setLoading(false);
     }
   };
@@ -270,7 +304,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }) => {
 
             {/* Tabs */}
             <div className="flex bg-gray-100 p-1 mx-6 mt-4 rounded-xl">
-              {['physical', 'service', 'booking', 'utility'].map((type) => (
+              {(['physical', 'service', 'booking', 'utility'] as ProductType[]).map((type) => (
                 <button
                   key={type}
                   type="button"

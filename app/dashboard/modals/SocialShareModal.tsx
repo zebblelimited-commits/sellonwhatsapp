@@ -7,7 +7,7 @@ import {
   TikTokIcon, YoutubeIcon, TwitterIcon 
 } from "@/components/icons/SocialIcons"; 
 
-export default function SocialShareModal({ isOpen, onClose, title, url }) {
+export default function SocialShareModal({ isOpen, onClose, title, url }: { isOpen: boolean; onClose: () => void; title: string; url: string }) {
   const [copied, setCopied] = useState(false);
   if (!isOpen) return null;
 

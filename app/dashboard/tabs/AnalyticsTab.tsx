@@ -72,6 +72,9 @@ interface AnalyticsTabProps {
   orders?: Order[];
   stats?: StoreStats;
   storeId: string;
+  views?: number;
+  clicks?: number;
+  buyNowClicks?: number;
 }
 
 interface Bucket {

@@ -142,6 +142,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 });
     }
 
+    const documentRef: FirebaseFirestore.DocumentReference = docSnap.ref;
+
     const localData = docSnap.data()!;
     // ✅ Added localData.storeId as fallback for payouts
     const targetUserId = isPartner ? storeIdForPartner : (localData.vendorId || localData.storeId || localData.userId);
@@ -154,11 +156,11 @@ export async function POST(request: NextRequest) {
       if (isPayout) {
         // ✅ HANDLE PAYOUT COMPLETION
         const successResult = await adminDb.runTransaction(async (transaction) => {
-          const payoutSnap = await transaction.get(docSnap.ref);
+          const payoutSnap = await transaction.get(documentRef);
           const payoutData = payoutSnap.data() || {};
           const currentStatus = String(payoutData.status || "").toLowerCase();
           if (!payoutSnap.exists || ["completed", "failed", "refunded"].includes(currentStatus)) return { transitioned: false };
-          transaction.update(docSnap.ref, {
+          transaction.update(documentRef, {
             status: "completed",
             providerReference,
             providerStatus: gatewayStatus,
@@ -212,7 +214,7 @@ export async function POST(request: NextRequest) {
         const expiryDate = new Date();
         expiryDate.setDate(expiryDate.getDate() + durationDays);
 
-        await docSnap.ref.update({
+        await documentRef.update({
           isPartner: true,
           partnerExpiry: expiryDate.toISOString(),
           partnerPlan: "marketplace-pro",
@@ -263,7 +265,7 @@ export async function POST(request: NextRequest) {
 
         if (collectionName === "orders") {
           const holdResult = await adminDb.runTransaction(async (transaction) => {
-            const orderSnap = await transaction.get(docSnap.ref);
+            const orderSnap = await transaction.get(documentRef);
             if (!orderSnap.exists) throw new Error("Order disappeared while reserving escrow");
             const order = orderSnap.data() || {};
             const orderAmount = Number(order.totalAmount ?? 0);
@@ -354,7 +356,7 @@ export async function POST(request: NextRequest) {
             expiryDate.setDate(expiryDate.getDate() + activeDuration);
           }
 
-          await docSnap.ref.update({
+          await documentRef.update({
             status: newStatus,
             startDate: new Date().toISOString(),
             expiryDate: expiryDate.toISOString(),
@@ -430,7 +432,7 @@ export async function POST(request: NextRequest) {
       if (isPayout) {
         // ✅ HANDLE PAYOUT FAILURE & AUTOMATIC REFUND
         const failureResult = await adminDb.runTransaction(async (transaction) => {
-          const payoutSnap = await transaction.get(docSnap.ref);
+          const payoutSnap = await transaction.get(documentRef);
           if (!payoutSnap.exists) return { refunded: false, alreadyFinal: true };
 
           const payoutData = payoutSnap.data() || {};
@@ -455,7 +457,7 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          transaction.update(docSnap.ref, {
+          transaction.update(documentRef, {
             status: "refunded",
             providerReference,
             providerStatus: gatewayStatus,
@@ -539,7 +541,7 @@ export async function POST(request: NextRequest) {
           );
         }
       } else {
-        await docSnap.ref.update({
+        await documentRef.update({
           status: "failed",
           ...(collectionName === "orders" ? { paymentStatus: "failed" } : {}),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),

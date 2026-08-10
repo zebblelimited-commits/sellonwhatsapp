@@ -674,14 +674,14 @@ function Dashboard() {
             />
           )}
 
-          {activeTab === "orders" && <OrdersTab orders={orders} disputes={disputes} onDisputeAction={handleDisputeAction} />}
+          {activeTab === "orders" && <OrdersTab disputes={disputes} onDisputeAction={handleDisputeAction} />}
           {activeTab === "store" && <MyStoreTab initialData={storeData} />}
           {activeTab === "products" && (
             <ProductsTab
               onOpenModal={() => { setEditingProduct(null); setIsProductModalOpen(true); }}
               storeSlug={username}
-              onEditProduct={(p) => { setEditingProduct(p); setIsProductModalOpen(true); }}
-              onShareProduct={(p) => openShare(p.name, `${storeUrl}/${p.id}`)}
+              onEditProduct={(p: any) => { setEditingProduct(p); setIsProductModalOpen(true); }}
+              onShareProduct={(p: any) => openShare(p.name, `${storeUrl}/${p.id}`)}
             />
           )}
           {activeTab === "withdraw" && (
@@ -694,13 +694,13 @@ function Dashboard() {
           {activeTab === "disputes" && (
             <DisputesTab
               disputes={disputes}
-              vendorId={currentUser?.uid}
+              vendorId={currentUser?.uid || ""}
               onAction={handleDisputeAction}
             />
           )}
           {activeTab === "notifications" && (
             <NotificationsTab
-              vendorId={currentUser?.uid}
+              vendorId={currentUser?.uid || ""}
               disputes={disputes}
               onNotificationAction={(action, data) => {
                 if (action === "view_dispute" && data?.id) {

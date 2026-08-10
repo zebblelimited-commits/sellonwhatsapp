@@ -15,6 +15,7 @@ import {
 } from "@/components/icons/SocialIcons";
 import { STORE_CATEGORIES } from "../nigeriaData";
 import LocationSelector from "../LocationSelector";
+import { showToast } from "@/lib/toast";
 
 // ✅ TypeScript Interfaces
 interface StoreData {
@@ -331,7 +332,7 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
 
       unsubscribeBoost = onSnapshot(boostQuery, (snapshot) => {
         if (!snapshot.empty) {
-          const boostDocs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          const boostDocs: any[] = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
           const runningBoost = boostDocs.find((b: any) => b.status === "active");
           const pendingBoost = boostDocs.find((b: any) => b.status === "pending");
           const targetingDoc = runningBoost || pendingBoost;
@@ -1495,7 +1496,7 @@ function BoostCard({
 
       <div className="flex gap-2">
         <button 
-          onClick={() => showNotification("info", "Analytics Update", "Detailed performance logs are refreshed real-time.")}
+          onClick={() => showToast("info", "Detailed performance logs are refreshed in real time.")}
           className="flex-1 py-2 border border-gray-200 text-xs font-bold text-gray-700 bg-white hover:bg-gray-50 rounded-xl transition-colors"
           disabled={boost.status === "pending"}
         >

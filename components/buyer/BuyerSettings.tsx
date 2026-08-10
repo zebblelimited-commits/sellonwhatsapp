@@ -90,13 +90,6 @@ useEffect(() => {
         newPrefs: newPrefs
       });
 
-      // After catch block:
-      console.error("❌ Update failed:", {
-        code: err.code,
-        message: err.message,
-        rules: "Check if 'preferences' is in buyers update rules hasOnly() list"
-      });
-      
       // ✅ Only update the 'preferences' field (matches rules)
       await updateDoc(doc(db, "buyers", auth.currentUser.uid), {
         preferences: newPrefs,

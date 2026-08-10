@@ -9,21 +9,36 @@ import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 import { showToast } from "@/lib/toast";
 import { supportChatRequest } from "@/components/chat/chatApi";
 
-export default function OrdersTab({ disputes = [], onDisputeAction }) {
+type SellerOrder = {
+    id: string;
+    createdAt?: { toMillis?: () => number; seconds?: number } | null;
+    status?: string;
+    totalAmount?: number;
+    customerName?: string;
+    customerPhone?: string;
+    buyerPhone?: string;
+    phone?: string;
+    trackingId?: string;
+    buyerId?: string;
+    [key: string]: any;
+};
+type SellerDispute = { id: string; orderId?: string; status?: string; [key: string]: any };
+
+export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes?: SellerDispute[]; onDisputeAction?: (action: string, dispute: SellerDispute) => void }) {
     const router = useRouter();
-    const [orders, setOrders] = useState([]);
+    const [orders, setOrders] = useState<SellerOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [listenerError, setListenerError] = useState("");
     const [shippingLoading, setShippingLoading] = useState(false);
-    const [chatLoadingOrderId, setChatLoadingOrderId] = useState(null);
-    const [completionLoadingOrderId, setCompletionLoadingOrderId] = useState(null);
+    const [chatLoadingOrderId, setChatLoadingOrderId] = useState<string | null>(null);
+    const [completionLoadingOrderId, setCompletionLoadingOrderId] = useState<string | null>(null);
     
     // ✅ NEW: Filter and Search State
     const [filter, setFilter] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
 
     // UI State for the shipping form
-    const [shippingForm, setShippingForm] = useState({ orderId: null, trackingId: "", carrier: "Zebble Internal" });
+    const [shippingForm, setShippingForm] = useState<{ orderId: string | null; trackingId: string; carrier: string }>({ orderId: null, trackingId: "", carrier: "Zebble Internal" });
     
     const [responseModal, setResponseModal] = useState<any>(null);
     const [responseText, setResponseText] = useState("");
@@ -45,7 +60,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
             setListenerError("");
             const q = query(collection(db, "orders"), where("vendorId", "==", user.uid));
             unsubscribeOrders = onSnapshot(q, (snap) => {
-                const data = snap.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() }));
+                const data: SellerOrder[] = snap.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() }));
                 data.sort((a, b) => {
                     const dateA = a.createdAt?.toMillis?.() || (a.createdAt?.seconds || 0) * 1000;
                     const dateB = b.createdAt?.toMillis?.() || (b.createdAt?.seconds || 0) * 1000;
@@ -74,7 +89,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
     };
 
     // 2. Open the shipping form
-    const openShippingForm = (orderId) => {
+    const openShippingForm = (orderId: string) => {
         setShippingForm({
             orderId,
             trackingId: generateInternalTracking(),
@@ -111,7 +126,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
         }
     };
 
-    const handleOpenBuyerChat = async (order) => {
+    const handleOpenBuyerChat = async (order: SellerOrder) => {
         if (!order.buyerId || chatLoadingOrderId) {
             if (!order.buyerId) showToast("error", "This order has no buyer account to chat with.");
             return;
@@ -162,7 +177,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
         }
     };
 
-    const openResponseModal = (dispute) => {
+    const openResponseModal = (dispute: SellerDispute) => {
         setResponseModal(dispute);
         setResponseText("");
         setResponseError("");
@@ -205,11 +220,11 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
     };
 
     // Helper: Get active dispute for an order
-    const getOrderDispute = (orderId) => {
+    const getOrderDispute = (orderId: string) => {
         return disputes?.find(d => d.orderId === orderId && ['open', 'under_review'].includes(String(d.status || "").toLowerCase()));
     };
 
-    const canonicalStatus = (value) => {
+    const canonicalStatus = (value: unknown): string => {
         const status = String(value || "").toUpperCase();
         if (["PAID", "HELD", "PAID_HELD"].includes(status)) return "PAID_HELD";
         if (["SHIPPED", "IN_TRANSIT", "OUT_FOR_DELIVERY"].includes(status)) return "SHIPPED";
@@ -217,7 +232,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
         return status;
     };
 
-    const normalizedOrderStatus = (order) => canonicalStatus(order.status);
+    const normalizedOrderStatus = (order: SellerOrder) => canonicalStatus(order.status);
 
     // ✅ NEW: Filter and Search Logic
     const filteredOrders = useMemo(() => {
@@ -242,7 +257,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
         return result;
     }, [orders, filter, searchQuery, disputes, getOrderDispute, normalizedOrderStatus]);
 
-    const getStatusStyle = (status, hasDispute) => {
+    const getStatusStyle = (status: unknown, hasDispute: boolean) => {
         status = canonicalStatus(status);
         if (hasDispute) return "bg-red-50 text-red-600 border-red-100";
         switch (status) {
@@ -254,7 +269,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
         }
     };
 
-    const getStatusIcon = (status, hasDispute) => {
+    const getStatusIcon = (status: unknown, hasDispute: boolean) => {
         status = canonicalStatus(status);
         if (hasDispute) return <AlertTriangle size={14} />;
         if (status === "PAID_HELD") return <Clock size={14} />;
@@ -263,13 +278,13 @@ export default function OrdersTab({ disputes = [], onDisputeAction }) {
         return <Info size={14} />;
     };
 
-    const getStatusLabel = (status, hasDispute) => {
+    const getStatusLabel = (status: unknown, hasDispute: boolean) => {
         status = canonicalStatus(status);
         if (hasDispute) return "Disputed";
         if (status === "PAID_HELD") return "Escrow";
         if (status === "SHIPPED") return "In Transit";
         if (status === "COMPLETED") return "Completed";
-        return status.replace("_", " ");
+        return canonicalStatus(status).replace("_", " ");
     };
 
     return (

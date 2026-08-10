@@ -7,7 +7,9 @@ import { Clock, MessageCircle, Save, Loader2, CheckCircle2, AlertCircle } from "
 export default function StoreHoursSettings({ storeId, initialSettings }: { storeId: string; initialSettings: any }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [hours, setHours] = useState(() => {
+  type DayHours = { open: string; close: string; enabled: boolean };
+  type AutoReply = { enabled: boolean; message: string };
+  const [hours, setHours] = useState<Record<string, DayHours>>(() => {
     const defaultHours = {
       monday: { open: "09:00", close: "18:00", enabled: true }, tuesday: { open: "09:00", close: "18:00", enabled: true },
       wednesday: { open: "09:00", close: "18:00", enabled: true }, thursday: { open: "09:00", close: "18:00", enabled: true },
@@ -17,7 +19,7 @@ export default function StoreHoursSettings({ storeId, initialSettings }: { store
     return initialSettings?.storeHours || defaultHours;
   });
   
-  const [autoReply, setAutoReply] = useState(initialSettings?.whatsappAutoReply || {
+  const [autoReply, setAutoReply] = useState<AutoReply>(initialSettings?.whatsappAutoReply || {
     enabled: false, message: "Thanks for reaching out! We'll respond within 2 hours during business hours."
   });
 

@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       if (docById.exists) {
         console.log(`✅ Found by doc ID: ${orderRef}`);
         // Continue processing with docById...
-        return processSubscriptionDoc(docById, isSuccess, isFailure, transactionStatus);
+        return processSubscriptionDoc(docById, isSuccess, isFailure, transactionStatus, eventType);
       }
       
       return NextResponse.json({ 
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     }
 
     const doc = querySnapshot.docs[0];
-    return await processSubscriptionDoc(doc, isSuccess, isFailure, transactionStatus);
+    return await processSubscriptionDoc(doc, isSuccess, isFailure, transactionStatus, eventType);
 
   } catch (error: any) {
     console.error("❌ CRITICAL Webhook Error:", error);
@@ -81,12 +81,13 @@ export async function POST(request: NextRequest) {
 
 // ✅ Extracted helper function (mirrors boost webhook pattern)
 async function processSubscriptionDoc(
-  doc: admin.firestore.QueryDocumentSnapshot,
+  doc: admin.firestore.DocumentSnapshot,
   isSuccess: boolean,
   isFailure: boolean,
-  transactionStatus?: string
+  transactionStatus?: string,
+  eventType?: string,
 ) {
-  const data = doc.data();
+  const data = doc.data() || {};
   const orderRef = data.nombaReference;
 
   // ✅ Prevent double-processing (idempotency)
@@ -133,6 +134,6 @@ async function processSubscriptionDoc(
   }
 
   // ✅ Acknowledge other events (pending, refunded, etc.)
-  console.log(`ℹ️ Unhandled event for ${orderRef}: event_type=${payload.event_type}, tx_status=${transactionStatus}`);
-  return NextResponse.json({ received: true, event: payload.event_type }, { status: 200 });
+  console.log(`ℹ️ Unhandled event for ${orderRef}: event_type=${eventType}, tx_status=${transactionStatus}`);
+  return NextResponse.json({ received: true, event: eventType }, { status: 200 });
 }

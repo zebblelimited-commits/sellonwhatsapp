@@ -77,7 +77,7 @@ export default function Features() {
         {features.map((feature, i) => (
           <div
             key={i}
-            style={{ "--hover-bg": "#f7fee7" }} // Custom color variable
+            style={{ "--hover-bg": "#f7fee7" } as React.CSSProperties} // Custom color variable
             className="p-8 bg-white border border-gray-100 rounded-[32px] transition-all duration-300 cursor-pointer group hover:bg-[#ecfcca] hover:border-[#d9e8b5] hover:shadow-xl hover:-translate-y-2"
           >
             {/* Icon Bubble */}

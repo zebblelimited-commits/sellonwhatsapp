@@ -33,6 +33,17 @@ import { BuyerProfile as ProfileTab } from "@/components/buyer/BuyerProfile";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
+type RecommendedStore = {
+  id: string;
+  isActive?: boolean;
+  isDeleted?: boolean;
+  category?: string;
+  followerCount?: number;
+  createdAt?: { seconds?: number } | Date | string | null;
+  score?: number;
+  [key: string]: any;
+};
+
 export default function BuyerDashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("home");
@@ -112,7 +123,7 @@ export default function BuyerDashboard() {
               limit(50)
             ),
             (snapshot) => {
-              const disputes = snapshot.docs
+              const disputes: any[] = snapshot.docs
                 .map(doc => ({
                   id: doc.id,
                   ...doc.data(),
@@ -438,7 +449,7 @@ export default function BuyerDashboard() {
             {activeTab === "purchases" && <PurchasesTab />}
             {activeTab === "orders" && (
               <OrdersTab
-                disputes={buyerDisputes}
+                disputes={buyerDisputes as any}
                 onDisputeAction={handleBuyerDisputeAction}
               />
             )}
@@ -447,7 +458,7 @@ export default function BuyerDashboard() {
             {activeTab === "settings" && <SettingsTab />}
             {activeTab === "disputes" && (
               <BuyerDisputesTab
-                disputes={buyerDisputes}
+                disputes={buyerDisputes as any}
                 buyerId={auth.currentUser?.uid}
                 onAction={handleBuyerDisputeAction}
               />
@@ -605,7 +616,7 @@ function BuyerHome({ userData, stats, buyerDisputeStats, onExploreClick, onViewO
       const storesQuery = query(collection(db, "stores"), limit(20));
       const snapshot = await getDocs(storesQuery);
 
-      let stores = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let stores: RecommendedStore[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
       stores = stores.filter(s =>
         s.isActive !== false &&
@@ -616,9 +627,9 @@ function BuyerHome({ userData, stats, buyerDisputeStats, onExploreClick, onViewO
       stores = stores
         .map(s => ({
           ...s,
-          score: (userCategoryPrefs.has(s.category) ? 1000 : 0) +
+          score: (userCategoryPrefs.has(s.category || "") ? 1000 : 0) +
             (s.followerCount || 0) * 0.5 +
-            ((s.createdAt?.seconds || Date.now() / 1000) * 0.01)
+            ((((s.createdAt as { seconds?: number } | undefined)?.seconds || Date.now() / 1000) * 0.01))
         }))
         .sort((a, b) => b.score - a.score)
         .slice(0, 4);

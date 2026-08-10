@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { 
@@ -900,7 +900,7 @@ function AutoRenewToggle({
   );
 }
 
-function FAQItem({ question, answer }: { question: string; answer: string }): JSX.Element {
+function FAQItem({ question, answer }: { question: string; answer: string }): ReactNode {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">

@@ -37,7 +37,10 @@ export default function OverviewTab({
   totalSales = 0,
   followers = 0,
   productCount = 0,
-  hasProAccess = false
+  hasProAccess = false,
+  views,
+  clicks,
+  buyNowClicks
 }: {
   username: string,
   storeUrl: string,
@@ -46,7 +49,10 @@ export default function OverviewTab({
   totalSales?: number,
   followers?: number,
   productCount?: number,
-  hasProAccess?: boolean
+  hasProAccess?: boolean,
+  views?: number,
+  clicks?: number,
+  buyNowClicks?: number
 }) {
   const [timeRange, setTimeRange] = useState("7D");
   const [analyticsData, setAnalyticsData] = useState<any[]>([]);
@@ -228,7 +234,7 @@ export default function OverviewTab({
                 <XAxis dataKey="date" axisLine={false} tickLine={false} interval={timeRange === "7D" ? 0 : timeRange === "1M" ? 5 : timeRange === "6M" ? 30 : 1} tick={{ fontSize: 12, fontWeight: 900, fill: "#475569" }} />
                 <YAxis axisLine={false} tickLine={false} tickFormatter={compactNumber} tick={{ fontSize: 12, fontWeight: 900, fill: "#475569" }} />
                 <Tooltip 
-                  formatter={(value: number, name: string) => [value.toLocaleString(), `${name}:`]}
+                  formatter={(value: unknown, name: unknown) => [Number(value || 0).toLocaleString(), `${String(name || "")}:`]}
                   contentStyle={{ backgroundColor: "#fff", borderRadius: "16px", border: "1px solid #f1f5f9", boxShadow: "0 4px 12px rgba(0,0,0,0.03)" }}
                   itemStyle={{ fontWeight: "900", fontSize: "10px", textTransform: "capitalize" }}
                   labelStyle={{ fontWeight: "900", fontSize: "9px", color: "#64748b", textTransform: "uppercase", marginBottom: "4px" }}
@@ -279,7 +285,7 @@ export default function OverviewTab({
                         <Cell key={`cell-${index}`} fill={DONUT_COLORS[index % DONUT_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value: number) => [value.toLocaleString(), "Views"]} contentStyle={{ backgroundColor: "#fff", borderRadius: "14px", border: "1px solid #f1f5f9" }} itemStyle={{ fontWeight: "800", fontSize: "11px" }} />
+                    <Tooltip formatter={(value: unknown) => [Number(value || 0).toLocaleString(), "Views"]} contentStyle={{ backgroundColor: "#fff", borderRadius: "14px", border: "1px solid #f1f5f9" }} itemStyle={{ fontWeight: "800", fontSize: "11px" }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
