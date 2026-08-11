@@ -47,7 +47,7 @@ export default function Footer() {
           <div className="flex flex-col gap-4">
             <Link
               href="/"
-              className="inline-flex items-center justify-center p-2 rounded-xl border border-gray-200 w-fit hover:border-gray-300 transition-colors"
+              className="inline-flex items-center justify-center p-2 rounded-xl w-fit transition-colors"
             >
               <img
                 src="/icons/sowa.png"
@@ -158,7 +158,7 @@ export default function Footer() {
                 {/* App Store Button */}
                 <button
                   onClick={() => handleStoreClick("Apple App Store")}
-                  className="relative flex items-center bg-white text-gray-900 px-3.5 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all text-left w-full shadow-sm"
+                  className="relative flex items-center bg-white text-gray-900 px-3.5 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all text-left w-full"
                 >
                   <div className="flex items-center gap-2.5">
                     <img
@@ -173,7 +173,7 @@ export default function Footer() {
                   </div>
 
                   {/* Floating Top Right Badge */}
-                  <span className="absolute -top-2.5 -right-2 z-10 bg-green-600 text-white text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full shadow-md border-2 border-white">
+                  <span className="absolute -top-2.5 -right-2 z-10 bg-green-600 text-white text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full border-2 border-white">
                     Soon
                   </span>
                 </button>
@@ -181,7 +181,7 @@ export default function Footer() {
                 {/* Google Play Button */}
                 <button
                   onClick={() => handleStoreClick("Google Play Store")}
-                  className="relative flex items-center bg-white text-gray-900 px-3.5 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all text-left w-full shadow-sm"
+                  className="relative flex items-center bg-white text-gray-900 px-3.5 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all text-left w-full"
                 >
                   <div className="flex items-center gap-2.5">
                     <img
@@ -196,7 +196,7 @@ export default function Footer() {
                   </div>
 
                   {/* Floating Top Right Badge */}
-                  <span className="absolute -top-2.5 -right-2 z-10 bg-green-600 text-white text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full shadow-md border-2 border-white">
+                  <span className="absolute -top-2.5 -right-2 z-10 bg-green-600 text-white text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full border-2 border-white">
                     Soon
                   </span>
                 </button>
