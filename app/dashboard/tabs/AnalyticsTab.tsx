@@ -330,10 +330,10 @@ export default function AnalyticsTab({ orders = [], stats = {}, storeId }: Analy
   if (loading) return <AnalyticsLoading />;
 
   return (
-    <div className="space-y-8 pb-10 font-plus-jakarta">
+    <div className="w-full min-w-0 max-w-full space-y-8 overflow-x-hidden pb-10 font-plus-jakarta">
       {error && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">{error}</div>}
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <AnalyticsCard label="Period Revenue" value={money(realStats.revenue)} icon={<ShoppingBag size={18} />} iconColor="text-emerald-700" iconBg="bg-emerald-50" subtitle={`${timeRange} paid orders`} />
         <AnalyticsCard label="Views" value={realStats.views.toLocaleString()} icon={<Eye size={18} />} iconColor="text-blue-600" iconBg="bg-blue-50" subtitle={`${timeRange} period`} />
         <AnalyticsCard label="Clicks" value={realStats.clicks.toLocaleString()} icon={<MousePointer2 size={18} />} iconColor="text-indigo-600" iconBg="bg-indigo-50" subtitle="Product/store clicks" />
@@ -396,7 +396,7 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function ChartPanel({ title, subtitle, icon, className = "", children }: { title: string; subtitle: string; icon: React.ReactNode; className?: string; children: React.ReactNode }) {
-  return <section className={`rounded-[32px] border border-gray-100 bg-white p-8 shadow-sm ${className}`}><div className="mb-6 flex items-start gap-2"><div>{icon}</div><div><h3 className="text-[11px] font-black uppercase tracking-tight text-slate-900">{title}</h3><p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-slate-500">{subtitle}</p></div></div><div className="h-64 w-full">{children}</div></section>;
+  return <section className={`min-w-0 max-w-full overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:rounded-[32px] sm:p-8 ${className}`}><div className="mb-5 flex min-w-0 items-start gap-2 sm:mb-6"><div className="shrink-0">{icon}</div><div className="min-w-0"><h3 className="truncate text-[11px] font-black uppercase tracking-tight text-slate-900">{title}</h3><p className="mt-1 truncate text-[9px] font-bold uppercase tracking-widest text-slate-500">{subtitle}</p></div></div><div className="h-52 w-full min-w-0 sm:h-64">{children}</div></section>;
 }
 
 function AnalyticsCard({ label, value, icon, iconColor, iconBg, subtitle }: { label: string; value: string; icon: React.ReactNode; iconColor: string; iconBg: string; subtitle: string }) {

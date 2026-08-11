@@ -27,7 +27,7 @@ export default function PaymentTabManager({ storeId, initialSettings }: { storeI
           setPayoutStatus(payout.status || "VERIFIED");
           return;
         }
-        
+
         const res = await fetch(`/api/vendor/payout-settings?storeId=${storeId}`);
         if (res.ok) {
           const data = await res.json();
@@ -43,7 +43,7 @@ export default function PaymentTabManager({ storeId, initialSettings }: { storeI
   }, [storeId]);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+    <div className="grid w-full min-w-0 max-w-full grid-cols-1 items-start gap-8 overflow-x-hidden lg:grid-cols-12">
       <div className="lg:col-span-7">
         <PaymentForm
           storeId={storeId}
@@ -79,9 +79,9 @@ export default function PaymentTabManager({ storeId, initialSettings }: { storeI
         </div>
 
         <div className="bg-green-50/50 border border-green-100 rounded-[32px] p-8">
-          <h3 className="font-bold text-lg text-green-900 mb-2">Zebble Escrow</h3>
+          <h3 className="font-bold text-lg text-green-900 mb-2">SellOnWhatsapp Escrow</h3>
           <p className="text-green-700 text-xs font-medium leading-relaxed">
-            Your payout configuration is active. Zebble handles the escrow and releases your 97% share directly to your bank once customers confirm receipt on WhatsApp.
+            Your payout configuration is active. SellOnWhatsapphandles the escrow and releases your 97% share directly to your bank once customers confirm receipt on WhatsApp.
           </p>
         </div>
       </div>

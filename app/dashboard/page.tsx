@@ -524,7 +524,7 @@ function Dashboard() {
   );
 
   return (
-    <div className={`${font.className} flex min-h-0 items-start bg-gray-50/50 text-gray-900 md:min-h-screen`}>
+    <div className={`${font.className} flex min-h-screen w-full min-w-0 items-start overflow-x-hidden bg-gray-50/50 text-gray-900`}>
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-black/30 p-2 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
           <aside className="flex h-auto min-h-0 max-h-[calc(100dvh-1rem)] w-[min(18rem,calc(100vw-1rem))] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -624,8 +624,8 @@ function Dashboard() {
         </div>
       </aside>
 
-      <main className="flex min-h-0 flex-1 flex-col self-start">
-          <div className="p-4 md:p-10">
+      <main className="flex min-h-screen min-w-0 flex-1 flex-col self-start">
+          <div className="w-full min-w-0 flex-1 p-4 md:p-10">
           <header className="mb-6 flex flex-col justify-between gap-4 md:mb-10 md:flex-row md:items-center">
             <div className="flex items-center gap-3">
               <button type="button" aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((open) => !open)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 shadow-sm md:hidden">
@@ -725,8 +725,8 @@ function Dashboard() {
           {activeTab === "payouts" && currentUser && (<PayoutsTab payoutHistory={payoutHistory} />)}
           {activeTab === "settings" && currentUser && <SettingsTab storeId={currentUser.uid} />}
         </div>
-        <footer className="border-t border-gray-100 p-4 text-center md:p-8">
-          <p className="text-[9px] uppercase tracking-[0.3em] font-black text-gray-600 bold">
+        <footer className="mt-auto w-full border-t border-gray-100 p-4 text-center md:p-8">
+          <p className="break-words text-[8px] font-black uppercase leading-relaxed tracking-[0.16em] text-gray-600 sm:text-[9px] sm:tracking-[0.3em]">
             Powered by Zebble Quantum Technologies LTD
           </p>
         </footer>

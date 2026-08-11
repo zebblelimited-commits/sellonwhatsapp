@@ -186,7 +186,7 @@ export default function NotificationsTab({ vendorId, onNotificationAction }: Not
   const filteredNotifications = notifications.filter(n => filter === "all" || n.type === filter);
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-500">
+    <div className="w-full min-w-0 max-w-full space-y-4 overflow-x-hidden animate-in fade-in duration-500">
       {/* Header with Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -199,7 +199,7 @@ export default function NotificationsTab({ vendorId, onNotificationAction }: Not
         </div>
         
         <div className="flex items-center gap-2">
-          <div className="flex bg-gray-100 rounded-xl p-1">
+          <div className="flex max-w-full overflow-x-auto bg-gray-100 rounded-xl p-1 no-scrollbar">
             {[
               { id: "all", label: "All" },
               { id: "order", label: "Orders" },

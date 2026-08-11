@@ -168,7 +168,7 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden animate-in fade-in duration-500">
       {/* Notification Toast */}
       {notification && (
         <div className={`p-4 rounded-2xl flex items-center gap-3 text-sm font-medium animate-in slide-in-from-top-2 ${
@@ -180,10 +180,10 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
       )}
 
       {/* 🌟 TOP SECTION: 3 Cards in a Row (Reverted to your original layout) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 md:grid-cols-3">
         
         {/* Card 1: Withdraw to Bank (GREEN BACKGROUND - ENHANCED FONTS) */}
-        <div className={`rounded-3xl shadow-sm p-6 min-h-[280px] flex flex-col ${
+        <div className={`min-w-0 max-w-full rounded-3xl shadow-sm p-6 min-h-[280px] flex flex-col ${
           isPartnerActive 
             ? 'bg-gradient-to-br from-amber-400 to-orange-500 border border-amber-300' 
             : 'bg-gradient-to-br from-green-500 to-emerald-600 border border-green-400'
@@ -259,7 +259,7 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
         </div>
 
         {/* Card 2: Funds in Escrow (Changed from Total Sales) */}
-        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 min-h-[280px] flex flex-col">
+        <div className="min-w-0 max-w-full bg-white rounded-3xl border border-gray-100 shadow-sm p-6 min-h-[280px] flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center">
               <Lock size={24} className="text-purple-600" />
@@ -277,7 +277,7 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
         </div>
 
         {/* Card 3: Available Balance (Left exactly as requested) */}
-        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 min-h-[280px] flex flex-col">
+        <div className="min-w-0 max-w-full bg-white rounded-3xl border border-gray-100 shadow-sm p-6 min-h-[280px] flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center">
               <Wallet size={24} className="text-blue-600" />
@@ -300,7 +300,7 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
       </div>
 
       {/* 🌟 PAYOUT DESTINATION (Fetches and displays bank details) */}
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
+      <div className="min-w-0 max-w-full overflow-hidden bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-gray-900 flex items-center gap-2">
             <Building2 size={18} className="text-gray-400" /> Payout Destination
@@ -346,7 +346,7 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
       </div>
 
       {/* Payout History */}
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="min-w-0 max-w-full overflow-hidden bg-white rounded-3xl border border-gray-100 shadow-sm">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <h3 className="font-bold text-gray-900 flex items-center gap-2">
             <Info size={18} className="text-gray-400" /> Payout History

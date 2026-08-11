@@ -288,7 +288,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
     };
 
     return (
-        <div className="space-y-4 animate-in fade-in duration-500 relative">
+        <div className="w-full min-w-0 max-w-full space-y-4 overflow-x-hidden animate-in fade-in duration-500 relative">
             {/* SHIPPING MODAL */}
             {shippingForm.orderId && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in zoom-in duration-200">
@@ -336,7 +336,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
 
             {/* ✅ NEW: FILTERS & SEARCH BAR (Sticky) */}
             {listenerError && <div className="rounded-2xl border border-red-100 bg-red-50 p-3 text-xs font-bold text-red-700">{listenerError}</div>}
-            <div className="flex flex-col sm:flex-row gap-3 sticky top-0 z-20 bg-[#fafafa] py-2 -mx-2 px-2 border-b border-gray-100">
+            <div className="flex min-w-0 flex-col gap-3 sticky top-0 z-20 bg-[#fafafa] py-2 border-b border-gray-100 sm:-mx-2 sm:flex-row sm:px-2">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                     <input 
@@ -371,7 +371,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
             </div>
 
             {/* ✅ NEW: COMPACT 2-COLUMN GRID LAYOUT */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-3 md:grid-cols-2">
                 {loading ? (
                     <div className="col-span-full grid gap-3 md:grid-cols-2">
                         {[1, 2, 3, 4].map((item) => <div key={item} className="h-40 animate-pulse rounded-2xl bg-white border border-gray-100" />)}
@@ -390,7 +390,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                         const orderStatus = normalizedOrderStatus(order);
                         const customerPhone = order.customerPhone || order.buyerPhone || order.phone || "";
                         return (
-                            <div key={order.id} className={`bg-white p-4 rounded-2xl border shadow-sm transition-all hover:shadow-md ${hasDispute ? 'border-red-200 ring-1 ring-red-100' : 'border-gray-100'}`}>
+                            <div key={order.id} className={`min-w-0 max-w-full overflow-hidden bg-white p-4 rounded-2xl border shadow-sm transition-all hover:shadow-md ${hasDispute ? 'border-red-200 ring-1 ring-red-100' : 'border-gray-100'}`}>
                                 {/* Row 1: ID and Status */}
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="flex items-center gap-2">

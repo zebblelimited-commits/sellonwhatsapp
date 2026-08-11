@@ -50,9 +50,9 @@ export default function PayoutsTab({ payoutHistory = [] }: PayoutsTabProps) {
   };
 
   return (
-    <div className="animate-in fade-in duration-500">
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden animate-in fade-in duration-500">
       {/* Payout History Table */}
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="min-w-0 max-w-full overflow-hidden bg-white rounded-3xl border border-gray-100 shadow-sm">
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <h3 className="font-bold text-gray-900 flex items-center gap-2">
             <Info size={18} className="text-gray-400" /> Payout History

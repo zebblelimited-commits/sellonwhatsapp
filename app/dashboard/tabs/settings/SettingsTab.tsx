@@ -33,7 +33,7 @@ export default function SettingsTab({ storeId }: { storeId: string }) {
   }
 
   return (
-    <div className="animate-in fade-in duration-500">
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden animate-in fade-in duration-500">
       <div className="flex flex-wrap gap-2 mb-8 bg-gray-100/50 p-1.5 rounded-2xl w-fit">
         <SubTabBtn active={subTab === "security"} label="Security" icon={<Lock size={14} />} onClick={() => setSubTab("security")} />
         <SubTabBtn active={subTab === "hours"} label="Store Hours" icon={<Clock size={14} />} onClick={() => setSubTab("hours")} />
@@ -41,7 +41,7 @@ export default function SettingsTab({ storeId }: { storeId: string }) {
         <SubTabBtn active={subTab === "payment"} label="Payments" icon={<CreditCard size={14} />} onClick={() => setSubTab("payment")} />
       </div>
 
-      <div className="max-w-6xl">
+      <div className="w-full min-w-0 max-w-6xl">
         {subTab === "payment" && <PaymentTabManager storeId={storeId} initialSettings={storeSettings} />}
         {subTab === "security" && <SecuritySettings storeId={storeId} initialSettings={storeSettings} />}
         {subTab === "hours" && <StoreHoursSettings storeId={storeId} initialSettings={storeSettings} />}
