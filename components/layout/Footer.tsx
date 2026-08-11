@@ -43,7 +43,7 @@ export default function Footer() {
       <footer className={`${font.className} border-t border-gray-200 bg-white px-6 py-12 text-sm text-gray-600`}>
         <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-10">
 
-          {/* Section 1: Logo, About & Mobile Apps */}
+          {/* Section 1: Logo & About */}
           <div className="flex flex-col gap-4">
             <Link href="/" className="flex items-center px-2">
               <img
@@ -55,56 +55,6 @@ export default function Footer() {
             <p className="leading-relaxed">
               Empowering small businesses to sell smarter and faster by turning WhatsApp into a professional storefront.
             </p>
-
-            {/* App Store Buttons with Coming Soon Badge */}
-            <div className="mt-2 flex flex-col gap-3">
-              <span className="text-xs font-semibold text-gray-900 uppercase tracking-wider">
-                Get the App
-              </span>
-              <div className="flex flex-col sm:flex-row md:flex-col lg:flex-row gap-3">
-                {/* App Store Button */}
-                <button
-                  onClick={() => handleStoreClick("Apple App Store")}
-                  className="group relative flex items-center justify-between bg-black text-white px-3 py-2 rounded-xl border border-black hover:bg-gray-800 transition-all text-left w-full sm:w-auto"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <img
-                      src="/images/apple-store.png"
-                      alt="Apple App Store"
-                      className="h-6 w-auto object-contain"
-                    />
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-gray-400 leading-none">Download on the</span>
-                      <span className="text-xs font-semibold leading-tight">App Store</span>
-                    </div>
-                  </div>
-                  <span className="ml-2 bg-green-500/20 text-green-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-green-500/30">
-                    Soon
-                  </span>
-                </button>
-
-                {/* Google Play Button */}
-                <button
-                  onClick={() => handleStoreClick("Google Play Store")}
-                  className="group relative flex items-center justify-between bg-black text-white px-3 py-2 rounded-xl border border-black hover:bg-gray-800 transition-all text-left w-full sm:w-auto"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <img
-                      src="/images/google-play.png"
-                      alt="Google Play Store"
-                      className="h-6 w-auto object-contain"
-                    />
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-gray-400 leading-none">GET IT ON</span>
-                      <span className="text-xs font-semibold leading-tight">Google Play</span>
-                    </div>
-                  </div>
-                  <span className="ml-2 bg-green-500/20 text-green-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-green-500/30">
-                    Soon
-                  </span>
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* Section 2: Quick Links */}
@@ -142,56 +92,108 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Section 4: Contact & Socials */}
-          <div>
-            <h4 className={`${headingFont.className} font-bold text-gray-900 mb-4`}>
-              Contact & Follow
-            </h4>
+          {/* Section 4: Contact, Socials & App Downloads */}
+          <div className="flex flex-col gap-6">
+            <div>
+              <h4 className={`${headingFont.className} font-bold text-gray-900 mb-4`}>
+                Contact & Follow
+              </h4>
 
-            {/* Contact Info */}
-            <ul className="flex flex-col gap-3 mb-6 text-xs font-medium text-gray-500">
-              <li className="flex items-center gap-2 transition-colors hover:text-green-600 group">
-                <MapPin size={14} className="text-gray-400 group-hover:text-green-600" /> Lagos, Nigeria
-              </li>
-              <li className="flex items-center gap-2 transition-colors hover:text-green-600 group">
-                <Phone size={14} className="text-gray-400 group-hover:text-green-600" /> +234 800 000 0000
-              </li>
-              <li className="flex items-center gap-2 transition-colors hover:text-green-600 group">
-                <Mail size={14} className="text-gray-400 group-hover:text-green-600" /> support@sellonwhatsapp.com
-              </li>
-            </ul>
+              {/* Contact Info */}
+              <ul className="flex flex-col gap-3 mb-6 text-xs font-medium text-gray-500">
+                <li className="flex items-center gap-2 transition-colors hover:text-green-600 group">
+                  <MapPin size={14} className="text-gray-400 group-hover:text-green-600" /> Lagos, Nigeria
+                </li>
+                <li className="flex items-center gap-2 transition-colors hover:text-green-600 group">
+                  <Phone size={14} className="text-gray-400 group-hover:text-green-600" /> +234 800 000 0000
+                </li>
+                <li className="flex items-center gap-2 transition-colors hover:text-green-600 group">
+                  <Mail size={14} className="text-gray-400 group-hover:text-green-600" /> support@sellonwhatsapp.com
+                </li>
+              </ul>
 
-            {/* Social Grid */}
-            <div className="flex flex-wrap gap-2">
-              {/* WhatsApp */}
-              <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] transition-all">
-                <Image src="/icons/whatsapplogo.svg" width={18} height={18} alt="WhatsApp" />
-              </a>
+              {/* Social Grid */}
+              <div className="flex flex-wrap gap-2">
+                {/* WhatsApp */}
+                <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] transition-all">
+                  <Image src="/icons/whatsapplogo.svg" width={18} height={18} alt="WhatsApp" />
+                </a>
 
-              {/* Threads */}
-              <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] transition-all">
-                <Image src="/icons/threadslogo.svg" width={18} height={18} alt="Threads" />
-              </a>
+                {/* Threads */}
+                <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] transition-all">
+                  <Image src="/icons/threadslogo.svg" width={18} height={18} alt="Threads" />
+                </a>
 
-              {/* X (Twitter) */}
-              <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-black transition-all">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z" /><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772" /></svg>
-              </a>
+                {/* X (Twitter) */}
+                <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-black transition-all">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z" /><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772" /></svg>
+                </a>
 
-              {/* Instagram */}
-              <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-pink-600 transition-all">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
-              </a>
+                {/* Instagram */}
+                <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-pink-600 transition-all">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
+                </a>
 
-              {/* Facebook */}
-              <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-blue-600 transition-all">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
-              </a>
+                {/* Facebook */}
+                <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-blue-600 transition-all">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
+                </a>
 
-              {/* YouTube */}
-              <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-red-600 transition-all">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 2-2 68.4 68.4 0 0 1 15 0 2 2 0 0 1 2 2 24.12 24.12 0 0 1 0 10 2 2 0 0 1-2 2 68.4 68.4 0 0 1-15 0 2 2 0 0 1-2-2Z" /><path d="m10 15 5-3-5-3z" /></svg>
-              </a>
+                {/* YouTube */}
+                <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-red-600 transition-all">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 2-2 68.4 68.4 0 0 1 15 0 2 2 0 0 1 2 2 24.12 24.12 0 0 1 0 10 2 2 0 0 1-2 2 68.4 68.4 0 0 1-15 0 2 2 0 0 1-2-2Z" /><path d="m10 15 5-3-5-3z" /></svg>
+                </a>
+              </div>
+            </div>
+
+            {/* App Store Buttons - Vertical Stacking */}
+            <div className="flex flex-col gap-3 pt-2">
+              <h5 className={`${headingFont.className} text-xs font-semibold text-gray-900 uppercase tracking-wider`}>
+                Get the App
+              </h5>
+              <div className="flex flex-col gap-2.5 max-w-[220px]">
+                {/* App Store Button */}
+                <button
+                  onClick={() => handleStoreClick("Apple App Store")}
+                  className="group relative flex items-center justify-between bg-black text-white px-3 py-2 rounded-xl border border-black hover:bg-gray-800 transition-all text-left w-full"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <img
+                      src="/images/apple-store.svg"
+                      alt="Apple App Store"
+                      className="h-5 w-auto object-contain"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-[9px] text-gray-400 leading-none">Download on the</span>
+                      <span className="text-xs font-semibold leading-tight">App Store</span>
+                    </div>
+                  </div>
+                  <span className="bg-green-500/20 text-green-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-green-500/30">
+                    Soon
+                  </span>
+                </button>
+
+                {/* Google Play Button */}
+                <button
+                  onClick={() => handleStoreClick("Google Play Store")}
+                  className="group relative flex items-center justify-between bg-black text-white px-3 py-2 rounded-xl border border-black hover:bg-gray-800 transition-all text-left w-full"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <img
+                      src="/images/google-play.svg"
+                      alt="Google Play Store"
+                      className="h-5 w-auto object-contain"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-[9px] text-gray-400 leading-none">GET IT ON</span>
+                      <span className="text-xs font-semibold leading-tight">Google Play</span>
+                    </div>
+                  </div>
+                  <span className="bg-green-500/20 text-green-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-green-500/30">
+                    Soon
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
