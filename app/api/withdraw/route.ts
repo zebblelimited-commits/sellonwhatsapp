@@ -249,6 +249,21 @@ export async function POST(request: NextRequest) {
         throw new WithdrawalError("Please link a bank account in Settings first.", 400);
       }
 
+      const bankVerificationStatus = String(
+        storeData.payoutAccountVerificationStatus ??
+        payoutSettings.verificationStatus ??
+        payoutSettings.status ??
+        "pending",
+      ).trim().toLowerCase();
+      if (!['approved', 'verified', 'complete', 'completed'].includes(bankVerificationStatus)) {
+        throw new WithdrawalError(
+          bankVerificationStatus === "rejected"
+            ? "Your payout bank account was rejected. Update your bank details and submit them for review."
+            : "Your payout bank account is awaiting admin verification. Withdrawals will be enabled after approval.",
+          403,
+        );
+      }
+
       const rawAvailable = Number(storeData.availableBalance ?? 0);
       const availableBalance = Number.isFinite(rawAvailable) ? rawAvailable : 0;
       const rawEscrow = Number(storeData.escrowBalance ?? 0);

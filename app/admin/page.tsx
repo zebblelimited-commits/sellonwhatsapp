@@ -11,7 +11,7 @@ import {
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import {
-  Users, Store, CreditCard, AlertTriangle, TrendingUp, Clock,
+  Users, Store, CreditCard, Landmark, AlertTriangle, TrendingUp, Clock,
   CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight, Loader2,
   Search, Bell, ShieldCheck, ChevronRight, Eye, Flag, MessageSquare,
   LayoutDashboard, Settings, LogOut, SlidersHorizontal, ClipboardList, Send, ArrowLeft, MoreVertical, User, Phone, FileText, X, Menu, Package
@@ -25,6 +25,7 @@ import AdminStoresManagement from "@/components/admin/AdminStoresManagement";
 import AdminSettingsPanel from "@/components/admin/AdminSettingsPanel";
 import AdminAuditLogsTab from "@/components/admin/AdminAuditLogsTab";
 import AdminVerificationsPanel from "@/components/admin/AdminVerificationsTab";
+import AdminBankVerificationsTab from "@/components/admin/AdminBankVerificationsTab";
 import AdminProductsTab from "@/components/admin/AdminProductsTab";
 import { adminMutation } from "@/components/admin/adminApi";
 import { supportChatRequest } from "@/components/chat/chatApi";
@@ -51,6 +52,7 @@ type AdminStats = {
   pendingPayoutAmount: number;
   openDisputes: number;
   pendingVerifications: number;
+  pendingBankVerifications: number;
   subscriptionRevenue: number;
   boostRevenue: number;
   partnerCommissionRevenue: number;
@@ -135,7 +137,7 @@ function AdminHome({ stats, onNavigate }: { stats: AdminStats; onNavigate: (tab:
       <div className="bg-white rounded-[32px] border border-gray-100 p-6 shadow-sm">
         <h3 className="font-bold text-lg mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <QuickAction icon={Users} label="Manage Users" onClick={() => onNavigate("users")} color="blue" />
+          <QuickAction icon={Landmark} label={`Bank Verifications${stats.pendingBankVerifications ? ` (${stats.pendingBankVerifications})` : ""}`} onClick={() => onNavigate("bank-verifications")} color="blue" />
           <QuickAction icon={Store} label="Review Stores" onClick={() => onNavigate("stores")} color="green" />
           <QuickAction icon={CreditCard} label="Approve Payouts" onClick={() => onNavigate("payouts")} color="purple" />
           <QuickAction icon={AlertTriangle} label="Resolve Disputes" onClick={() => onNavigate("disputes")} color="red" />
@@ -1469,6 +1471,7 @@ export default function AdminDashboard() {
     pendingPayoutAmount: 0,
     openDisputes: 0,
     pendingVerifications: 0,
+    pendingBankVerifications: 0,
     subscriptionRevenue: 0,
     boostRevenue: 0,
     partnerCommissionRevenue: 0,
@@ -1481,6 +1484,7 @@ export default function AdminDashboard() {
   const [chats, setChats] = useState<any[]>([]);
 
   const [pendingVerifications, setPendingVerifications] = useState(0);
+  const [pendingBankVerifications, setPendingBankVerifications] = useState(0);
   const [statsError, setStatsError] = useState("");
 
   // Middleware protects the initial request, but this client-side check also
@@ -1530,6 +1534,36 @@ export default function AdminDashboard() {
       setStatsError("Some admin metrics could not be loaded. Check Firestore permissions or indexes.");
     });
     return () => unsub();
+  }, [adminReady]);
+
+  useEffect(() => {
+    if (!adminReady) return;
+    let cancelled = false;
+    const loadPendingBankVerifications = async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
+        const response = await fetch("/api/admin/bank-verifications?status=pending", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "Bank verification count failed");
+        if (!cancelled) {
+          const count = Array.isArray(payload.verifications) ? payload.verifications.length : 0;
+          setPendingBankVerifications(count);
+          setStats((current) => ({ ...current, pendingBankVerifications: count }));
+        }
+      } catch (error) {
+        console.error("Pending bank verification count error:", error);
+      }
+    };
+    void loadPendingBankVerifications();
+    const timer = window.setInterval(loadPendingBankVerifications, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [adminReady]);
 
   // ✅ Keep dashboard metrics live and normalize legacy status values.
@@ -1651,6 +1685,7 @@ export default function AdminDashboard() {
       case "analytics": return <AdminAnalyticsTab />;
       case "audit": return <AdminAuditLogsTab />;
       case "verifications": return <AdminVerificationsTab />;
+      case "bank-verifications": return <AdminBankVerificationsTab />;
       case "settings": return <AdminSettingsTab />;
       default: return <AdminHome stats={stats} onNavigate={handleTabChange} />;
     }
@@ -1696,6 +1731,7 @@ export default function AdminDashboard() {
               <NavItem icon={<TrendingUp size={18} />} label="Analytics" active={activeTab === "analytics"} onClick={() => handleTabChange("analytics")} />
               <NavItem icon={<ClipboardList size={18} />} label="Audit logs" active={activeTab === "audit"} onClick={() => handleTabChange("audit")} />
               <NavItem icon={<ShieldCheck size={18} />} label="Verifications" active={activeTab === "verifications"} onClick={() => handleTabChange("verifications")} badge={pendingVerifications > 0 ? pendingVerifications : null} />
+              <NavItem icon={<Landmark size={18} />} label="Bank accounts" active={activeTab === "bank-verifications"} onClick={() => handleTabChange("bank-verifications")} badge={pendingBankVerifications > 0 ? pendingBankVerifications : null} />
             </nav>
             <div className="border-t border-gray-100 pt-4">
               <NavItem icon={<Settings size={18} />} label="Settings" active={activeTab === "settings"} onClick={() => handleTabChange("settings")} />
@@ -1726,6 +1762,7 @@ export default function AdminDashboard() {
           <NavItem icon={<TrendingUp size={18} />} label="Analytics" active={activeTab === "analytics"} onClick={() => handleTabChange("analytics")} />
           <NavItem icon={<ClipboardList size={18} />} label="Audit logs" active={activeTab === "audit"} onClick={() => handleTabChange("audit")} />
           <NavItem icon={<ShieldCheck size={18} />} label="Verifications" active={activeTab === "verifications"} onClick={() => handleTabChange("verifications")} badge={pendingVerifications > 0 ? pendingVerifications : null} />
+          <NavItem icon={<Landmark size={18} />} label="Bank accounts" active={activeTab === "bank-verifications"} onClick={() => handleTabChange("bank-verifications")} badge={pendingBankVerifications > 0 ? pendingBankVerifications : null} />
         </nav>
 
         <div className="pt-6 border-t border-gray-100">
@@ -1761,7 +1798,8 @@ export default function AdminDashboard() {
                             activeTab === "chat" ? "Real-time support & user communication hub" :
                               activeTab === "notifications" ? "Broadcast announcements to users or vendors" :
                                 activeTab === "analytics" ? "Track growth, revenue, and engagement metrics" :
-                                  activeTab === "audit" ? "Review administrative actions and security events" :
+                                activeTab === "audit" ? "Review administrative actions and security events" :
+                                  activeTab === "bank-verifications" ? "Verify seller payout bank accounts" :
                                     activeTab === "settings" ? "Manage your admin profile and preferences" :
                                       "Admin dashboard"} {/* ✅ Final fallback - removed the "..." */}
               </p>
