@@ -314,8 +314,8 @@ export default function BuyerDashboard() {
   return (
     <div className={`${font.className} flex min-h-screen items-start bg-gray-50/50 text-gray-900`}>
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/30 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
-          <aside className="flex max-h-[calc(100dvh-1rem)] w-72 max-w-[86vw] flex-col overflow-y-auto bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-black/30 p-2 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
+          <aside className="flex h-auto min-h-0 max-h-[calc(100dvh-1rem)] w-[min(18rem,calc(100vw-1rem))] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
               <img src="/icons/sowa.png" alt="Sowa Logo" className="h-10 w-auto object-contain" />
               <button type="button" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>
