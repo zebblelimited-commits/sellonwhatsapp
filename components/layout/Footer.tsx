@@ -146,17 +146,16 @@ export default function Footer() {
               </div>
             </div>
 
-            {/* App Store Buttons - Vertical Stacking with Padding & Floating Badges */}
+            {/* App Store Buttons - Clean Light Theme */}
             <div className="flex flex-col gap-3 pt-2">
               <h5 className={`${headingFont.className} text-xs font-semibold text-gray-900 uppercase tracking-wider`}>
                 Get the App
               </h5>
-              {/* Added gap-5 and pt-2 to prevent overlap between stacked buttons and top badges */}
               <div className="flex flex-col gap-5 pt-2 max-w-[200px]">
                 {/* App Store Button */}
                 <button
                   onClick={() => handleStoreClick("Apple App Store")}
-                  className="relative flex items-center bg-black text-white px-3.5 py-2.5 rounded-xl border border-black hover:bg-gray-800 transition-all text-left w-full"
+                  className="relative flex items-center bg-white text-gray-900 px-3.5 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all text-left w-full shadow-sm"
                 >
                   <div className="flex items-center gap-2.5">
                     <img
@@ -165,12 +164,12 @@ export default function Footer() {
                       className="h-5 w-auto object-contain"
                     />
                     <div className="flex flex-col">
-                      <span className="text-[9px] text-gray-400 leading-none">Download on the</span>
-                      <span className="text-xs font-semibold leading-tight">App Store</span>
+                      <span className="text-[9px] text-gray-500 leading-none">Download on the</span>
+                      <span className="text-xs font-semibold leading-tight text-gray-900">App Store</span>
                     </div>
                   </div>
 
-                  {/* Top Right Floating Badge */}
+                  {/* Floating Top Right Badge */}
                   <span className="absolute -top-2.5 -right-2 z-10 bg-green-600 text-white text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full shadow-md border-2 border-white">
                     Soon
                   </span>
@@ -179,7 +178,7 @@ export default function Footer() {
                 {/* Google Play Button */}
                 <button
                   onClick={() => handleStoreClick("Google Play Store")}
-                  className="relative flex items-center bg-black text-white px-3.5 py-2.5 rounded-xl border border-black hover:bg-gray-800 transition-all text-left w-full"
+                  className="relative flex items-center bg-white text-gray-900 px-3.5 py-2.5 rounded-xl border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all text-left w-full shadow-sm"
                 >
                   <div className="flex items-center gap-2.5">
                     <img
@@ -188,12 +187,12 @@ export default function Footer() {
                       className="h-5 w-auto object-contain"
                     />
                     <div className="flex flex-col">
-                      <span className="text-[9px] text-gray-400 leading-none">GET IT ON</span>
-                      <span className="text-xs font-semibold leading-tight">Google Play</span>
+                      <span className="text-[9px] text-gray-500 leading-none">GET IT ON</span>
+                      <span className="text-xs font-semibold leading-tight text-gray-900">Google Play</span>
                     </div>
                   </div>
 
-                  {/* Top Right Floating Badge */}
+                  {/* Floating Top Right Badge */}
                   <span className="absolute -top-2.5 -right-2 z-10 bg-green-600 text-white text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full shadow-md border-2 border-white">
                     Soon
                   </span>
