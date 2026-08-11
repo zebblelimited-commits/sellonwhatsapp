@@ -153,15 +153,15 @@ export default function OverviewTab({
     <div className="animate-in fade-in duration-500 font-plus-jakarta pb-4 sm:pb-10">
       {/* 1. Metric Cards */}
       <div className="mb-8">
-        <div className="flex lg:hidden gap-3 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide -mx-4 px-4">
-          <div className="snap-start flex-shrink-0 w-[240px]"> <StatCard label="Total Sales" value={`₦${totalSales.toLocaleString()}`} icon={<ShoppingBag size={18} />} color="text-green-700" bg="bg-green-50" subtitle="Lifetime revenue" isPrice={true} /> </div>
-          <div className="snap-start flex-shrink-0 w-[240px]"> <StatCard label="Followers" value={followers.toLocaleString()} icon={<Users size={18} />} color="text-indigo-600" bg="bg-indigo-50" subtitle="Store followers" /> </div>
-          <div className="snap-start flex-shrink-0 w-[240px]"> <StatCard label="Products" value={productCount.toString()} icon={<Package size={18} />} color="text-purple-600" bg="bg-purple-50" subtitle="Active listings" /> </div>
-          <div className="snap-start flex-shrink-0 w-[240px]"> <StatCard label="Total Views" value={stats.views.toLocaleString()} icon={<Eye size={18} />} color="text-blue-600" bg="bg-blue-50" subtitle={`${timeRange} period`} /> </div>
-          <div className="snap-start flex-shrink-0 w-[240px]"> <StatCard label="Total Clicks" value={stats.clicks.toLocaleString()} icon={<MousePointer2 size={18} />} color="text-green-600" bg="bg-green-50" subtitle={`${timeRange} period`} /> </div>
-          <div className="snap-start flex-shrink-0 w-[240px]"> <StatCard label="Buy Now" value={stats.buyNowClicks.toLocaleString()} icon={<ShoppingBag size={18} />} color="text-purple-600" bg="bg-purple-50" subtitle="Purchase intents" /> </div>
-          <div className="snap-start flex-shrink-0 w-[240px]"> <StatCard label="WhatsApp Clicks" value={stats.whatsappClicks.toLocaleString()} icon={<MessageCircle size={18} />} color="text-green-600" bg="bg-green-50" subtitle="Premium Metric" isLocked={!hasProAccess} /> </div>
-          <div className="snap-start flex-shrink-0 w-[240px]"> <StatCard label="Conversion" value={stats.views > 0 ? `${((stats.buyNowClicks / stats.views) * 100).toFixed(1)}%` : "0%"} icon={<TrendingUp size={18} />} color="text-emerald-600" bg="bg-emerald-50" subtitle="Buy Now / Views" /> </div>
+        <div className="grid grid-cols-2 gap-3 lg:hidden">
+          <StatCard label="Total Sales" value={`₦${totalSales.toLocaleString()}`} icon={<ShoppingBag size={18} />} color="text-green-700" bg="bg-green-50" subtitle="Lifetime revenue" isPrice={true} />
+          <StatCard label="Followers" value={followers.toLocaleString()} icon={<Users size={18} />} color="text-indigo-600" bg="bg-indigo-50" subtitle="Store followers" />
+          <StatCard label="Products" value={productCount.toString()} icon={<Package size={18} />} color="text-purple-600" bg="bg-purple-50" subtitle="Active listings" />
+          <StatCard label="Total Views" value={stats.views.toLocaleString()} icon={<Eye size={18} />} color="text-blue-600" bg="bg-blue-50" subtitle={`${timeRange} period`} />
+          <StatCard label="Total Clicks" value={stats.clicks.toLocaleString()} icon={<MousePointer2 size={18} />} color="text-green-600" bg="bg-green-50" subtitle={`${timeRange} period`} />
+          <StatCard label="Buy Now" value={stats.buyNowClicks.toLocaleString()} icon={<ShoppingBag size={18} />} color="text-purple-600" bg="bg-purple-50" subtitle="Purchase intents" />
+          <StatCard label="WhatsApp Clicks" value={stats.whatsappClicks.toLocaleString()} icon={<MessageCircle size={18} />} color="text-green-600" bg="bg-green-50" subtitle="Premium Metric" isLocked={!hasProAccess} />
+          <StatCard label="Conversion" value={stats.views > 0 ? `${((stats.buyNowClicks / stats.views) * 100).toFixed(1)}%` : "0%"} icon={<TrendingUp size={18} />} color="text-emerald-600" bg="bg-emerald-50" subtitle="Buy Now / Views" />
         </div>
 
         <div className="hidden lg:grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -186,8 +186,8 @@ export default function OverviewTab({
 
       {/* 3. Growth Velocity Section */}
       <div className="mb-8">
-        <div className="bg-white rounded-[32px] border border-gray-100 p-8 shadow-sm h-auto transition-all">
-          <div className="flex items-start justify-between mb-8">
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition-all sm:rounded-[32px] sm:p-8">
+          <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <TrendingUp size={16} className="text-emerald-600" />
@@ -197,7 +197,7 @@ export default function OverviewTab({
             </div>
             
             {/* 🌟 UPDATED: Added WhatsApp to the legend with a PRO badge for free users */}
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-x-3 gap-y-2 sm:gap-4">
               <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-purple-500" /><span className="text-[9px] font-black text-slate-500 uppercase">Buy Now</span></div>
               <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-[9px] font-black text-slate-500 uppercase">Clicks</span></div>
               
@@ -212,7 +212,7 @@ export default function OverviewTab({
             </div>
           </div>
           
-          <div className="h-[220px] w-full sm:h-[288px]">
+          <div className="h-[210px] min-w-0 w-full sm:h-[288px]">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsAreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
@@ -261,7 +261,7 @@ export default function OverviewTab({
 
       {/* 4. Secondary Grid */}
       <div className="grid grid-cols-1 gap-5 sm:gap-8 lg:grid-cols-2">
-        <div className="bg-[#ecfcca] rounded-2xl p-5 relative overflow-hidden group border border-green-100 shadow-sm flex flex-col justify-center sm:min-h-[340px] sm:rounded-[32px] sm:p-8">
+        <div className="min-w-0 bg-[#ecfcca] rounded-2xl p-5 relative overflow-hidden group border border-green-100 shadow-sm flex flex-col justify-center sm:min-h-[340px] sm:rounded-[32px] sm:p-8">
           <div className="relative z-10">
             <h3 className="font-bold text-gray-900 text-lg mb-1">Live Storefront</h3>
             <p className="text-green-800/60 text-xs font-bold mb-4 uppercase tracking-wider">Public Channel</p>
@@ -270,7 +270,7 @@ export default function OverviewTab({
           </div>
           <Store className="absolute -right-6 -bottom-6 text-green-700/5 rotate-12 transition-transform duration-700 group-hover:scale-110 group-hover:-rotate-0" size={180} />
         </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex flex-col justify-start sm:min-h-[340px] sm:justify-between sm:rounded-[32px] sm:p-8">
+        <div className="min-w-0 bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex flex-col justify-start sm:min-h-[340px] sm:justify-between sm:rounded-[32px] sm:p-8">
           <div>
             <div className="flex items-center gap-2 mb-6">
               <Share2 size={16} className="text-purple-600" />
