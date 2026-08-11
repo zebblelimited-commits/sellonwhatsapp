@@ -45,7 +45,7 @@ function storeBankDetails(store: Record<string, unknown>): BankDetails {
 }
 
 export async function GET(request: NextRequest) {
-  const access = await requireAdmin(request, { payouts: { read: true } });
+  const access = await requireAdmin(request, { payouts: { read: true, approve: false, reject: false } });
   if (!("admin" in access)) return access;
 
   try {
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const access = await requireAdmin(request, { payouts: { approve: true } });
+  const access = await requireAdmin(request);
   if (!("admin" in access)) return access;
 
   try {
@@ -99,6 +99,9 @@ export async function PATCH(request: NextRequest) {
     const notes = value(body.notes).slice(0, 2000);
     if (!storeId || !decision) return NextResponse.json({ error: "A store and decision are required" }, { status: 400 });
     if (decision === "reject" && !notes) return NextResponse.json({ error: "A rejection reason is required" }, { status: 400 });
+    const payoutPermissions = access.admin.permissions?.payouts;
+    if (decision === "approve" && !payoutPermissions?.approve) return NextResponse.json({ error: "Missing permission: payouts.approve" }, { status: 403 });
+    if (decision === "reject" && !payoutPermissions?.reject) return NextResponse.json({ error: "Missing permission: payouts.reject" }, { status: 403 });
 
     const result = await adminDb.runTransaction(async (transaction) => {
       const storeRef = adminDb.collection("stores").doc(storeId);
