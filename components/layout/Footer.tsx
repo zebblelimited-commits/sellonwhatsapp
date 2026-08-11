@@ -45,7 +45,10 @@ export default function Footer() {
 
           {/* Section 1: Logo & About */}
           <div className="flex flex-col gap-4">
-            <Link href="/" className="flex items-center px-2">
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center p-2 rounded-xl border border-gray-200 w-fit hover:border-gray-300 transition-colors"
+            >
               <img
                 src="/icons/sowa.png"
                 alt="Sowa Logo"
