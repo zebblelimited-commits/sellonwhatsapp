@@ -600,13 +600,13 @@ function AdminDisputesTab() {
   if (loading) return <div className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-green-600" size={32} /></div>;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="flex items-center justify-between">
+    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden animate-in fade-in duration-300">
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Dispute Resolution</h2>
           <p className="text-sm text-gray-500">Review the conversation and update the final outcome</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 outline-none focus:border-green-600">
             <option value="active">Active disputes</option>
             <option value="all">All disputes</option>
@@ -620,16 +620,16 @@ function AdminDisputesTab() {
       {listenerError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{listenerError}</div>}
       <div className="space-y-4">
         {visibleDisputes.map((dispute) => (
-          <div key={dispute.id} className="bg-white rounded-[32px] border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
+          <div key={dispute.id} className="min-w-0 max-w-full overflow-hidden rounded-[32px] border border-gray-100 bg-white p-4 shadow-sm transition-all hover:shadow-md sm:p-5">
+            <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-2">
                   <StatusBadge status={dispute.status} size="sm" />
                   <span className="text-[10px] text-gray-400">#{dispute.id?.slice(-8).toUpperCase()}</span>
                 </div>
                 <h4 className="font-bold text-sm text-gray-900">{dispute.reason?.replace('_', ' ')}</h4>
                 <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{dispute.description}</p>
-                <div className="flex items-center gap-4 mt-3 text-[10px] text-gray-400">
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-400">
                   <span>Buyer: {dispute.buyerEmail?.split('@')[0]}</span>
                   <span>•</span>
                   <span>Vendor: {dispute.vendorName}</span>
@@ -1715,7 +1715,7 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-black/30 p-2 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
           <aside className="flex h-auto min-h-0 max-h-[calc(100dvh-1rem)] w-[min(18rem,calc(100vw-1rem))] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
-              <div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-green-600"><ShieldCheck size={16} className="text-white" /></div><span className="text-sm font-black text-gray-900">SellOnWhatsapp Admin</span></div>
+              <div className="flex items-center gap-2"><Image src="/icon.png" alt="SellOnWhatsapp" width={32} height={32} className="h-8 w-8 rounded-xl object-cover" /><span className="text-sm font-black text-gray-900">SellOnWhatsapp Admin</span></div>
               <button type="button" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>
             </div>
             <nav className="space-y-1 overflow-y-auto no-scrollbar">
@@ -1744,7 +1744,7 @@ export default function AdminDashboard() {
       <aside className="sticky top-0 hidden h-screen w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
         <div className="flex items-center px-2 py-2 mb-6">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-green-600 rounded-xl flex items-center justify-center"><ShieldCheck size={16} className="text-white" /></div>
+            <Image src="/icon.png" alt="SellOnWhatsapp" width={32} height={32} className="h-8 w-8 rounded-xl object-cover" />
             <span className="font-black text-sm text-gray-900">SellOnWhatsapp Admin</span>
           </div>
         </div>

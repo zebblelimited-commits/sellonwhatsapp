@@ -94,16 +94,16 @@ export default function AdminProductsTab() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="w-full min-w-0 max-w-full space-y-6 overflow-x-hidden animate-in fade-in duration-300">
+      <div className="flex min-w-0 flex-col items-start justify-between gap-4 sm:flex-row sm:flex-wrap">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Products</h2>
           <p className="mt-1 text-sm text-gray-500">Search marketplace products and choose which ones appear in Sponsored Products.</p>
         </div>
-        <div className="rounded-2xl bg-green-50 px-4 py-3 text-xs font-bold text-green-700">{products.filter((product) => product.isSponsored).length} sponsored in results</div>
+        <div className="max-w-full rounded-2xl bg-green-50 px-4 py-3 text-xs font-bold text-green-700">{products.filter((product) => product.isSponsored).length} sponsored in results</div>
       </div>
 
-      <div className="relative max-w-2xl">
+      <div className="relative w-full max-w-2xl min-w-0">
         <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
         <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by product, seller, category, or product ID" className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-11 pr-4 text-sm font-medium outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100" />
       </div>
@@ -115,10 +115,10 @@ export default function AdminProductsTab() {
       ) : products.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-gray-200 bg-white p-12 text-center"><Package className="mx-auto text-gray-300" size={32} /><p className="mt-3 text-sm font-bold text-gray-700">No products matched your search.</p></div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid w-full min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {products.map((product) => (
-            <article key={product.id} className={`flex gap-4 rounded-3xl border bg-white p-4 shadow-sm transition ${product.isSponsored ? "border-green-200 ring-1 ring-green-100" : "border-gray-100"}`}>
-              <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-gray-100"><Image src={productImage(product)} alt={product.name} fill sizes="96px" className="object-cover" /></div>
+            <article key={product.id} className={`flex min-w-0 max-w-full gap-3 overflow-hidden rounded-3xl border bg-white p-3 shadow-sm transition sm:gap-4 sm:p-4 ${product.isSponsored ? "border-green-200 ring-1 ring-green-100" : "border-gray-100"}`}>
+              <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gray-100 sm:h-24 sm:w-24"><Image src={productImage(product)} alt={product.name} fill sizes="(max-width: 640px) 80px, 96px" className="object-cover" /></div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2"><div className="min-w-0"><h3 className="truncate text-sm font-bold text-gray-900">{product.name}</h3><p className="mt-1 truncate text-xs text-gray-500">{product.vendorName}</p></div>{product.isSponsored && <Sparkles className="shrink-0 text-green-600" size={16} aria-label="Sponsored" />}</div>
                 <p className="mt-2 text-sm font-black text-gray-900">₦{Number(product.price || 0).toLocaleString()}</p>

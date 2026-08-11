@@ -496,19 +496,19 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
             </form>
 
             {/* Footer with Limit Tracking */}
-            <div className="p-6 border-t border-gray-100 bg-gray-50/30 flex justify-between items-center gap-3">
-              <div className="flex items-center">
+            <div className="flex flex-col items-stretch gap-4 border-t border-gray-100 bg-gray-50/30 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:p-6">
+              <div className="flex min-w-0 max-w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                 {loadingLimits ? (
                   <Loader2 size={16} className="animate-spin text-gray-400" />
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-bold px-3 py-1.5 rounded-full ${isLimitReached ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-700'}`}>
+                  <div className="flex min-w-0 max-w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                    <span className={`max-w-full break-words text-center text-[10px] font-bold px-3 py-1.5 rounded-full ${isLimitReached ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-700'}`}>
                       {currentCount} of {productLimit} products used
                     </span>
                     <button
                       type="button"
                       onClick={() => { onClose(); router.push('/pricing'); }}
-                      className="flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 text-white text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full shadow-sm transition-transform hover:scale-105 active:scale-95"
+                      className="flex w-full items-center justify-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white shadow-sm transition-transform hover:from-amber-600 hover:scale-105 active:scale-95 sm:w-auto"
                     >
                       Upgrade <ArrowUpRight size={12} strokeWidth={3} />
                     </button>
@@ -516,12 +516,12 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                 )}
               </div>
 
-              <div className="flex items-center gap-3">
-                <button onClick={onClose} type="button" className="px-6 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-900 transition-colors">Discard</button>
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:gap-3">
+                <button onClick={onClose} type="button" className="flex-1 px-3 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-900 transition-colors sm:flex-none sm:px-6">Discard</button>
                 <button
                   onClick={handleSubmit}
                   disabled={loading || (!initialData && isLimitReached) || loadingLimits}
-                  className="text-white px-8 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all shadow-md active:scale-95 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-white transition-all shadow-md active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-300 sm:flex-none sm:px-8"
                   style={{ backgroundColor: (!initialData && isLimitReached) ? '#9CA3AF' : BRAND_GREEN }}
                 >
                   {loading ? 'Processing...' : <><CheckCircle size={14} /> {initialData ? 'Update Listing' : 'Publish Product'}</>}
