@@ -312,7 +312,7 @@ export default function BuyerDashboard() {
   );
 
   return (
-    <div className={`${font.className} flex min-h-screen md:h-screen md:overflow-hidden bg-gray-50/50 text-gray-900`}>
+    <div className={`${font.className} flex min-h-screen items-start bg-gray-50/50 text-gray-900`}>
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[100] bg-black/30 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
           <aside className="flex max-h-[calc(100dvh-1rem)] w-72 max-w-[86vw] flex-col overflow-y-auto bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -339,7 +339,7 @@ export default function BuyerDashboard() {
         </div>
       )}
       {/* Sidebar */}
-      <aside className="hidden h-full w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
+      <aside className="sticky top-0 hidden h-screen w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
         <div className="flex items-center px-2 py-2 mb-6">
           <img src="/icons/sowa.png" alt="Sowa Logo" className="h-11 w-auto object-contain" />
         </div>
@@ -392,8 +392,8 @@ export default function BuyerDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col md:h-full md:overflow-hidden">
-        <div className="p-4 no-scrollbar md:flex-1 md:min-h-0 md:overflow-y-auto md:p-10">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col self-start">
+        <div className="p-4 no-scrollbar md:p-10">
           <header className="mb-6 flex flex-col justify-between gap-4 md:mb-10 md:flex-row md:items-center">
             <div className="flex items-center gap-3">
               <button type="button" aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((open) => !open)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 shadow-sm md:hidden">

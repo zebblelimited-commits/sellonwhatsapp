@@ -1,6 +1,7 @@
 // @/components/premium/UpgradeModal.tsx
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, Check, Loader2 } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { showToast } from "@/lib/toast";
@@ -13,6 +14,17 @@ interface UpgradeModalProps {
 export function UpgradeModal({ onClose, preselectedPlan }: UpgradeModalProps) {
   const [selectedPlan, setSelectedPlan] = useState(preselectedPlan || "pro_monthly");
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   const plans = [
     {
@@ -85,13 +97,15 @@ export function UpgradeModal({ onClose, preselectedPlan }: UpgradeModalProps) {
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto overscroll-contain bg-black/50 p-3 backdrop-blur-sm sm:items-center sm:p-4">
-      <div className="my-2 flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200 sm:my-4 sm:max-h-[calc(100dvh-2rem)] sm:rounded-[32px]">
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto overscroll-contain bg-black/50 p-2 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="upgrade-plan-title">
+      <div className="my-2 flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200 sm:my-4 sm:max-h-[calc(100dvh-2rem)] sm:w-full sm:rounded-[32px]">
         {/* Header */}
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-gray-100 p-4 sm:p-6">
           <div>
-            <h3 className="text-lg font-bold text-gray-900 sm:text-xl">Upgrade Your Plan</h3>
+            <h3 id="upgrade-plan-title" className="text-lg font-bold text-gray-900 sm:text-xl">Upgrade Your Plan</h3>
             <p className="text-sm text-gray-500">Unlock premium features to grow your business</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close upgrade dialog" className="shrink-0 rounded-full p-2 hover:bg-gray-100 transition-colors">
@@ -171,6 +185,7 @@ export function UpgradeModal({ onClose, preselectedPlan }: UpgradeModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

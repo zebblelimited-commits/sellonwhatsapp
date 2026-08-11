@@ -1675,7 +1675,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className={`${font.className} flex min-h-screen md:h-screen md:overflow-hidden bg-gray-50 text-gray-900`}>
+    <div className={`${font.className} flex min-h-screen items-start bg-gray-50 text-gray-900`}>
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[100] bg-black/30 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
           <aside className="flex max-h-[calc(100dvh-1rem)] w-72 max-w-[86vw] flex-col overflow-y-auto bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -1705,7 +1705,7 @@ export default function AdminDashboard() {
         </div>
       )}
       {/* Sidebar - Matches buyer dashboard */}
-      <aside className="hidden h-full w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
+      <aside className="sticky top-0 hidden h-screen w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
         <div className="flex items-center px-2 py-2 mb-6">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-green-600 rounded-xl flex items-center justify-center"><ShieldCheck size={16} className="text-white" /></div>
@@ -1744,7 +1744,7 @@ export default function AdminDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col md:h-full md:overflow-hidden">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col self-start">
         {/* Header - Matches buyer dashboard */}
         <header className="mb-6 flex flex-col justify-between gap-4 px-6 pt-6 md:mb-10 md:flex-row md:items-center">
           <div className="flex items-center gap-3">
@@ -1783,7 +1783,7 @@ export default function AdminDashboard() {
         </header>
 
         {/* Tab Content Area */}
-        <div className="px-6 pb-6 no-scrollbar md:flex-1 md:min-h-0 md:overflow-y-auto md:pb-10">
+        <div className="px-6 pb-6 no-scrollbar md:pb-10">
           {statsError && <div className="mb-6 rounded-2xl bg-amber-50 p-4 text-sm font-medium text-amber-800">{statsError}</div>}
           {renderTabContent()}
         </div>
