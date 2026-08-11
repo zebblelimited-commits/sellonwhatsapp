@@ -146,16 +146,16 @@ export default function Footer() {
               </div>
             </div>
 
-            {/* App Store Buttons - Vertical Stacking */}
+            {/* App Store Buttons - Vertical Stacking with Floating Badges */}
             <div className="flex flex-col gap-3 pt-2">
               <h5 className={`${headingFont.className} text-xs font-semibold text-gray-900 uppercase tracking-wider`}>
                 Get the App
               </h5>
-              <div className="flex flex-col gap-2.5 max-w-[220px]">
+              <div className="flex flex-col gap-3 max-w-[200px]">
                 {/* App Store Button */}
                 <button
                   onClick={() => handleStoreClick("Apple App Store")}
-                  className="group relative flex items-center justify-between bg-black text-white px-3 py-2 rounded-xl border border-black hover:bg-gray-800 transition-all text-left w-full"
+                  className="group relative flex items-center bg-black text-white px-3 py-2 rounded-xl border border-black hover:bg-gray-800 transition-all text-left w-full"
                 >
                   <div className="flex items-center gap-2.5">
                     <img
@@ -168,7 +168,8 @@ export default function Footer() {
                       <span className="text-xs font-semibold leading-tight">App Store</span>
                     </div>
                   </div>
-                  <span className="bg-green-500/20 text-green-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-green-500/30">
+                  {/* Floating Top-Right Badge */}
+                  <span className="absolute -top-2 -right-2 bg-green-600 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shadow-sm border border-white">
                     Soon
                   </span>
                 </button>
@@ -176,7 +177,7 @@ export default function Footer() {
                 {/* Google Play Button */}
                 <button
                   onClick={() => handleStoreClick("Google Play Store")}
-                  className="group relative flex items-center justify-between bg-black text-white px-3 py-2 rounded-xl border border-black hover:bg-gray-800 transition-all text-left w-full"
+                  className="group relative flex items-center bg-black text-white px-3 py-2 rounded-xl border border-black hover:bg-gray-800 transition-all text-left w-full"
                 >
                   <div className="flex items-center gap-2.5">
                     <img
@@ -189,7 +190,8 @@ export default function Footer() {
                       <span className="text-xs font-semibold leading-tight">Google Play</span>
                     </div>
                   </div>
-                  <span className="bg-green-500/20 text-green-400 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-green-500/30">
+                  {/* Floating Top-Right Badge */}
+                  <span className="absolute -top-2 -right-2 bg-green-600 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shadow-sm border border-white">
                     Soon
                   </span>
                 </button>
