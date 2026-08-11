@@ -524,7 +524,7 @@ function Dashboard() {
   );
 
   return (
-    <div className={`${font.className} flex min-h-screen items-start bg-gray-50/50 text-gray-900`}>
+    <div className={`${font.className} flex min-h-0 items-start bg-gray-50/50 text-gray-900 md:min-h-screen`}>
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[100] bg-black/30 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
           <aside className="flex max-h-[calc(100dvh-1rem)] w-72 max-w-[86vw] flex-col overflow-y-auto bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -725,7 +725,7 @@ function Dashboard() {
           {activeTab === "payouts" && currentUser && (<PayoutsTab payoutHistory={payoutHistory} />)}
           {activeTab === "settings" && currentUser && <SettingsTab storeId={currentUser.uid} />}
         </div>
-        <footer className="border-t border-gray-100 p-8 text-center">
+        <footer className="border-t border-gray-100 p-4 text-center md:p-8">
           <p className="text-[9px] uppercase tracking-[0.3em] font-black text-gray-600 bold">
             Powered by Zebble Quantum Technologies LTD
           </p>
