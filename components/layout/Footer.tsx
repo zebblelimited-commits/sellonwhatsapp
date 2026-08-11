@@ -160,7 +160,7 @@ export default function Footer() {
                 >
                   <div className="flex items-center gap-2.5">
                     <img
-                      src="/images/apple-store.svg"
+                      src="/images/apple-store.png"
                       alt="Apple App Store"
                       className="h-5 w-auto object-contain"
                     />
@@ -183,7 +183,7 @@ export default function Footer() {
                 >
                   <div className="flex items-center gap-2.5">
                     <img
-                      src="/images/google-play.svg"
+                      src="/images/google-play.png"
                       alt="Google Play Store"
                       className="h-5 w-auto object-contain"
                     />
