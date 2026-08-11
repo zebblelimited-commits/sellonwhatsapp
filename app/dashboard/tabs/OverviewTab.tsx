@@ -143,14 +143,14 @@ export default function OverviewTab({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex min-h-24 items-center justify-center py-8 sm:min-h-[60vh]">
         <Loader2 className="animate-spin text-green-600" size={40} />
       </div>
     );
   }
 
   return (
-    <div className="animate-in fade-in duration-500 font-plus-jakarta pb-10">
+    <div className="animate-in fade-in duration-500 font-plus-jakarta pb-4 sm:pb-10">
       {/* 1. Metric Cards */}
       <div className="mb-8">
         <div className="flex lg:hidden gap-3 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide -mx-4 px-4">
@@ -212,8 +212,8 @@ export default function OverviewTab({
             </div>
           </div>
           
-          <div className="w-full" style={{ height: '288px' }}>
-            <ResponsiveContainer width="100%" height={288}>
+          <div className="h-[220px] w-full sm:h-[288px]">
+            <ResponsiveContainer width="100%" height="100%">
               <RechartsAreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
@@ -260,8 +260,8 @@ export default function OverviewTab({
       </div>
 
       {/* 4. Secondary Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-[#ecfcca] rounded-[32px] p-8 relative overflow-hidden group border border-green-100 shadow-sm flex flex-col justify-center min-h-[340px]">
+      <div className="grid grid-cols-1 gap-5 sm:gap-8 lg:grid-cols-2">
+        <div className="bg-[#ecfcca] rounded-2xl p-5 relative overflow-hidden group border border-green-100 shadow-sm flex flex-col justify-center sm:min-h-[340px] sm:rounded-[32px] sm:p-8">
           <div className="relative z-10">
             <h3 className="font-bold text-gray-900 text-lg mb-1">Live Storefront</h3>
             <p className="text-green-800/60 text-xs font-bold mb-4 uppercase tracking-wider">Public Channel</p>
@@ -270,13 +270,13 @@ export default function OverviewTab({
           </div>
           <Store className="absolute -right-6 -bottom-6 text-green-700/5 rotate-12 transition-transform duration-700 group-hover:scale-110 group-hover:-rotate-0" size={180} />
         </div>
-        <div className="bg-white rounded-[32px] border border-gray-100 p-8 shadow-sm flex flex-col justify-between min-h-[340px]">
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex flex-col justify-start sm:min-h-[340px] sm:justify-between sm:rounded-[32px] sm:p-8">
           <div>
             <div className="flex items-center gap-2 mb-6">
               <Share2 size={16} className="text-purple-600" />
               <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-tight">Traffic Sources</h3>
             </div>
-            <div className="flex flex-col sm:flex-row items-center gap-8">
+            <div className="flex flex-col items-center gap-6 sm:flex-row sm:gap-8">
               <div className="flex items-center justify-center" style={{ width: '160px', height: '160px' }}>
                 <ResponsiveContainer width="100%" height={160}>
                   <PieChart>
@@ -296,7 +296,7 @@ export default function OverviewTab({
               </div>
             </div>
           </div>
-          <div className="mt-8 pt-4 border-t border-slate-50 flex justify-between items-center">
+          <div className="mt-6 border-t border-slate-50 pt-4 flex justify-between items-center sm:mt-8">
             <div className="flex items-center gap-1.5 text-[8px] font-black text-slate-600 uppercase tracking-[0.2em]">
               <ShieldCheck size={20} className="text-emerald-500" />
               Secure Data Ledger
