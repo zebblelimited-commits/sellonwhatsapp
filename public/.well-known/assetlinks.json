@@ -1,0 +1,15 @@
+[
+    {
+        "relation": [
+            "delegate_permission/common.handle_all_urls"
+        ],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "com.sellonwhatsapp.app",
+            "sha256_cert_fingerprints": [
+                "D9:63:39:65:CB:6E:C7:BD:B1:4B:81:44:99:B2:A4:C2:BC:BA:F2:3E:16:7D:87:F7:BA:84:A6:F9:9B:CD:7B:11",
+                "8F:A5:79:0A:6F:BD:8B:EE:FD:37:23:06:41:7B:4D:71:32:4A:CD:8E:C0:F9:5F:4D:75:C7:AF:BA:09:DB:26:4E"
+            ]
+        }
+    }
+]
