@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { db, auth } from "@/lib/firebase";
 import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { CheckCircle2, Loader2, ArrowRight, ShieldCheck, ShoppingBag, CalendarCheck } from "lucide-react";
+import { CheckCircle2, Loader2, ArrowRight, ShieldCheck, ShoppingBag, CalendarCheck, Smartphone } from "lucide-react";
 
 type SuccessOrder = {
     isBooking?: boolean;
@@ -123,6 +123,8 @@ export default function SuccessPage() {
     // 4. AUTO-DISMISS & MOBILE DEEP LINKING HOOK
     useEffect(() => {
         if (status === "success" && orderReference) {
+            const deepLinkUrl = `sowa://payment-success?orderRef=${orderReference}&reference=${orderReference}`;
+
             // A. Post message if running inside Flutter InAppWebView / WebView
             if (typeof window !== "undefined" && (window as unknown as { FlutterWebView?: { postMessage: (msg: string) => void } }).FlutterWebView) {
                 (window as unknown as { FlutterWebView: { postMessage: (msg: string) => void } }).FlutterWebView.postMessage(
@@ -134,19 +136,28 @@ export default function SuccessPage() {
                 );
             }
 
-            // B. Dispatch custom deep link to trigger mobile app focus
+            // B. Dispatch custom deep link immediately
             if (typeof window !== "undefined") {
-                window.location.href = `sowa://payment-success?reference=${orderReference}`;
+                window.location.href = deepLinkUrl;
             }
 
-            // C. Fallback: Attempt to close window tab after 2 seconds
+            // C. Fallback timer for secondary dispatch and tab closure
+            const deepLinkTimer = setTimeout(() => {
+                if (typeof window !== "undefined") {
+                    window.location.href = deepLinkUrl;
+                }
+            }, 800);
+
             const closeTimer = setTimeout(() => {
                 if (typeof window !== "undefined") {
                     window.close();
                 }
-            }, 2000);
+            }, 2500);
 
-            return () => clearTimeout(closeTimer);
+            return () => {
+                clearTimeout(deepLinkTimer);
+                clearTimeout(closeTimer);
+            };
         }
     }, [status, orderReference]);
 
@@ -157,6 +168,8 @@ export default function SuccessPage() {
         const targetPath = isBooking ? '/buyer/dashboard/bookings' : '/buyer/dashboard';
         router.push(targetPath);
     };
+
+    const deepLinkUrl = `sowa://payment-success?orderRef=${orderReference}&reference=${orderReference}`;
 
     return (
         <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4 font-plus-jakarta">
@@ -238,6 +251,15 @@ export default function SuccessPage() {
                                     </p>
                                 </div>
                             )}
+
+                            {/* Native Mobile App Return CTA */}
+                            <a
+                                href={deepLinkUrl}
+                                className="w-full flex items-center justify-center gap-2 py-3.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl transition-all active:scale-[0.97]"
+                            >
+                                <Smartphone size={16} />
+                                Return to Mobile App
+                            </a>
 
                             <button
                                 type="button"
