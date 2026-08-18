@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
-import { Novu } from "@novu/node"; 
+import { Novu } from "@novu/node";
 import { inventoryAdjustment } from "@/lib/inventory";
 
 // ✅ 1. SAFELY Initialize Novu (Prevents entire webhook from crashing if key is missing)
@@ -9,7 +9,7 @@ const novuApiKey = process.env.NOVU_API_KEY || process.env.NOVU_SECRET_KEY;
 const novu = novuApiKey ? new Novu(novuApiKey) : null;
 const novuWorkflowId = process.env.NOVU_WORKFLOW_ID?.trim();
 
-export const runtime = 'nodejs'; 
+export const runtime = 'nodejs';
 
 // ✅ Helper function to safely trigger Novu
 async function triggerNovuNotification(userId: string, title: string, body: string, actionUrl: string, actionLabel: string, priority: string) {
@@ -33,18 +33,18 @@ async function triggerNovuNotification(userId: string, title: string, body: stri
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const orderRef = searchParams.get('orderReference') || searchParams.get('reference');
-  
+
   const redirectUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  
+
   if (orderRef?.startsWith("PARTNER_")) {
     return NextResponse.redirect(`${redirectUrl}/dashboard?tab=partner&reference=${orderRef}`);
   }
-  
-  // ✅ ADDED: Redirect to payouts tab after withdrawal
+
+  // ✅ Redirect to payouts tab after withdrawal
   if (orderRef?.startsWith("PAYOUT_")) {
     return NextResponse.redirect(`${redirectUrl}/dashboard?tab=payouts&reference=${orderRef}`);
   }
-  
+
   return NextResponse.redirect(`${redirectUrl}/dashboard?tab=overview&reference=${orderRef}`);
 }
 
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
     console.log("🔥 [WEBHOOK HIT] Raw Body:", rawBody);
-    
+
     let payload;
     try {
       payload = JSON.parse(rawBody);
@@ -63,49 +63,60 @@ export async function POST(request: NextRequest) {
 
     const eventType = String(payload?.event_type || "").toUpperCase();
     const transaction = payload?.data?.transaction || payload?.transaction || {};
-    const orderRef = 
-      payload?.data?.order?.orderReference || 
-      payload?.order?.orderReference || 
+    const orderRef =
+      payload?.data?.order?.orderReference ||
+      payload?.order?.orderReference ||
       transaction?.merchantTxRef ||
-      payload?.data?.reference || 
-      payload?.reference || 
+      payload?.data?.reference ||
+      payload?.reference ||
       payload?.orderReference;
 
-    const rawStatus = 
-      payload?.data?.order?.status || 
-      payload?.order?.status || 
-      payload?.data?.status || 
+    // Correctly resolve status based on payload fields and event types
+    let rawStatus =
+      payload?.data?.order?.status ||
+      payload?.order?.status ||
+      payload?.data?.status ||
       payload?.status ||
-      (eventType === "PAYOUT_SUCCESS" ? "SUCCESS" : "") ||
-      (eventType === "PAYOUT_FAILED" || eventType === "PAYOUT_REFUND" ? "REFUNDED" : "") ||
-      payload?.event_type;
-      
+      "";
+
+    if (!rawStatus) {
+      if (eventType === "PAYOUT_SUCCESS" || eventType === "PAYMENT_SUCCESS") {
+        rawStatus = "SUCCESS";
+      } else if (eventType === "PAYOUT_FAILED" || eventType === "PAYOUT_REFUND") {
+        rawStatus = "REFUNDED";
+      } else {
+        rawStatus = eventType;
+      }
+    }
+
     const gatewayStatus = String(rawStatus || "").toUpperCase();
-    const providerReference = transaction?.transactionId ||
+    const providerReference =
+      transaction?.transactionId ||
       transaction?.transactionReference ||
       transaction?.reference ||
       transaction?.merchantTxRef ||
       payload?.data?.reference ||
       payload?.transaction?.reference ||
       orderRef;
+
     console.log(`[WEBHOOK] Extracted -> Ref: ${orderRef}, Status: ${gatewayStatus}`);
 
     if (!orderRef) {
       console.error("[WEBHOOK] No reference found. Full payload:", JSON.stringify(payload));
-      return NextResponse.json({ received: true }, { status: 200 }); 
+      return NextResponse.json({ received: true }, { status: 200 });
     }
 
     // Identify Payment Type
     const isBoost = orderRef.startsWith("ZEBBLE_BST_");
-    const isPayout = orderRef.startsWith("PAYOUT_"); // ✅ ADDED FOR WITHDRAWALS
-    const metadata = 
-      payload?.data?.order?.orderMetaData || 
-      payload?.data?.metadata || 
+    const isPayout = orderRef.startsWith("PAYOUT_");
+    const metadata =
+      payload?.data?.order?.orderMetaData ||
+      payload?.data?.metadata ||
       payload?.metadata;
 
     const isPartner = orderRef.startsWith("PARTNER_") || metadata?.type === "partner_subscription";
     const isSubscription = orderRef.startsWith("SUB_");
-    
+
     let collectionName = "orders";
     let docRef;
     let storeIdForPartner = "";
@@ -115,7 +126,6 @@ export async function POST(request: NextRequest) {
       collectionName = "stores";
       docRef = adminDb.collection(collectionName).doc(storeIdForPartner);
     } else if (isPayout) {
-      // ✅ ROUTE PAYOUTS TO THE CORRECT COLLECTION
       collectionName = "payouts";
       docRef = adminDb.collection(collectionName).doc(orderRef);
     } else {
@@ -143,16 +153,14 @@ export async function POST(request: NextRequest) {
     }
 
     const documentRef: FirebaseFirestore.DocumentReference = docSnap.ref;
-
     const localData = docSnap.data()!;
-    // ✅ Added localData.storeId as fallback for payouts
     const targetUserId = isPartner ? storeIdForPartner : (localData.vendorId || localData.storeId || localData.userId);
 
     // ==========================================
     // 🔥 UPDATE STATUS IF SUCCESSFUL
     // ==========================================
     if (["SUCCESS", "APPROVED", "COMPLETED", "PAYMENT_SUCCESS"].includes(gatewayStatus)) {
-      
+
       if (isPayout) {
         // ✅ HANDLE PAYOUT COMPLETION
         const successResult = await adminDb.runTransaction(async (transaction) => {
@@ -160,6 +168,7 @@ export async function POST(request: NextRequest) {
           const payoutData = payoutSnap.data() || {};
           const currentStatus = String(payoutData.status || "").toLowerCase();
           if (!payoutSnap.exists || ["completed", "failed", "refunded"].includes(currentStatus)) return { transitioned: false };
+
           transaction.update(documentRef, {
             status: "completed",
             providerReference,
@@ -167,6 +176,7 @@ export async function POST(request: NextRequest) {
             completedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           });
+
           transaction.set(adminDb.collection("auditLogs").doc(), {
             action: "payout_provider_completed",
             targetType: "payout",
@@ -178,6 +188,7 @@ export async function POST(request: NextRequest) {
           });
           return { transitioned: true };
         });
+
         console.log(`✅ [WEBHOOK SUCCESS] Payout ${orderRef} marked as completed.`);
 
         if (targetUserId && successResult.transitioned) {
@@ -200,11 +211,11 @@ export async function POST(request: NextRequest) {
           });
 
           await triggerNovuNotification(
-            targetUserId, 
-            notifConfig.title, 
-            notifConfig.body, 
-            notifConfig.actionUrl, 
-            notifConfig.actionLabel, 
+            targetUserId,
+            notifConfig.title,
+            notifConfig.body,
+            notifConfig.actionUrl,
+            notifConfig.actionLabel,
             notifConfig.priority
           );
         }
@@ -221,7 +232,7 @@ export async function POST(request: NextRequest) {
           lastPartnerPaymentAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        
+
         console.log(`✅ [WEBHOOK SUCCESS] Store ${storeIdForPartner} upgraded to Marketplace Partner until ${expiryDate.toISOString()}`);
 
         if (targetUserId) {
@@ -243,21 +254,20 @@ export async function POST(request: NextRequest) {
           });
 
           await triggerNovuNotification(
-            targetUserId, 
-            notifConfig.title, 
-            notifConfig.body, 
-            notifConfig.actionUrl, 
-            notifConfig.actionLabel, 
+            targetUserId,
+            notifConfig.title,
+            notifConfig.body,
+            notifConfig.actionUrl,
+            notifConfig.actionLabel,
             notifConfig.priority
           );
         }
 
       } else {
-        // ✅ Determine the correct status based on collection type
-        let newStatus = "active"; // Default for boosts/subscriptions
-        
+        let newStatus = "active";
+
         if (collectionName === "orders") {
-          newStatus = "PAID_HELD"; // ✅ Orders should be PAID_HELD (funds in escrow)
+          newStatus = "PAID_HELD";
         }
 
         const activeDuration = Number(localData.durationDays || localData.durationMonths || 7);
@@ -275,7 +285,9 @@ export async function POST(request: NextRequest) {
             }
 
             const currentFundsState = String(order.fundsState || "").toLowerCase();
-            if (["held", "released", "refunded", "refund_pending"].includes(currentFundsState) || order.escrowReservedAt) return { transitioned: false, amount: orderAmount };
+            if (["held", "released", "refunded", "refund_pending"].includes(currentFundsState) || order.escrowReservedAt) {
+              return { transitioned: false, amount: orderAmount };
+            }
 
             const storeRef = adminDb.collection("stores").doc(vendorId);
             const storeSnap = await transaction.get(storeRef);
@@ -293,9 +305,6 @@ export async function POST(request: NextRequest) {
             let escrowBalance = rawEscrowBalance;
             let ledgerWasRebuilt = false;
             if (escrowBalance < 0) {
-              // Negative escrow is impossible in the current ledger. Rebuild
-              // it from canonical held reservations before crediting this
-              // provider-confirmed payment, atomically.
               const vendorOrders = await transaction.get(
                 adminDb.collection("orders").where("vendorId", "==", vendorId),
               );
@@ -315,10 +324,12 @@ export async function POST(request: NextRequest) {
             const inventory = inventoryAdjustment(productSnap.data() || {}, order, now, docSnap.id);
             if (inventory.error) throw new Error(`${inventory.error} Escrow was not reserved.`);
             if (inventory.tracked) transaction.update(productRef, inventory.productUpdate);
+
             transaction.update(storeRef, {
               escrowBalance: escrowBalance + orderAmount,
               updatedAt: now,
             });
+
             if (ledgerWasRebuilt) {
               transaction.set(adminDb.collection("auditLogs").doc(), {
                 action: "system_escrow_ledger_rebuilt",
@@ -336,6 +347,7 @@ export async function POST(request: NextRequest) {
                 timestamp: now,
               });
             }
+
             transaction.update(docSnap.ref, {
               ...inventory.orderUpdate,
               status: "PAID_HELD",
@@ -345,8 +357,10 @@ export async function POST(request: NextRequest) {
               escrowReservedAt: now,
               updatedAt: now,
             });
+
             return { transitioned: true, amount: orderAmount, ledgerWasRebuilt };
           });
+
           console.log(`✅ [ESCROW] Order ${orderRef} ${holdResult.transitioned ? `reserved ₦${holdResult.amount}` : "was already reserved"}.`);
         } else {
           const expiryDate = new Date();
@@ -363,7 +377,7 @@ export async function POST(request: NextRequest) {
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
         }
-        
+
         console.log(`✅ [WEBHOOK SUCCESS] ${collectionName} ${orderRef} updated to '${newStatus}'!`);
 
         if (targetUserId) {
@@ -414,23 +428,22 @@ export async function POST(request: NextRequest) {
           });
 
           await triggerNovuNotification(
-            targetUserId, 
-            notifConfig.title, 
-            notifConfig.body, 
-            notifConfig.actionUrl, 
-            notifConfig.actionLabel, 
+            targetUserId,
+            notifConfig.title,
+            notifConfig.body,
+            notifConfig.actionUrl,
+            notifConfig.actionLabel,
             notifConfig.priority
           );
         }
       }
-    } 
+    }
     // ==========================================
     // 🔥 UPDATE STATUS IF FAILED
     // ==========================================
     else if (["FAILED", "DECLINED", "REVERSED", "REFUNDED", "CANCELLED"].includes(gatewayStatus)) {
-      
+
       if (isPayout) {
-        // ✅ HANDLE PAYOUT FAILURE & AUTOMATIC REFUND
         const failureResult = await adminDb.runTransaction(async (transaction) => {
           const payoutSnap = await transaction.get(documentRef);
           if (!payoutSnap.exists) return { refunded: false, alreadyFinal: true };
@@ -466,6 +479,7 @@ export async function POST(request: NextRequest) {
             refundedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           });
+
           transaction.set(adminDb.collection("auditLogs").doc(), {
             action: "payout_provider_refunded",
             targetType: "payout",
@@ -475,8 +489,10 @@ export async function POST(request: NextRequest) {
             details: { providerReference, previousStatus: currentStatus, restoredAmount: Number(payoutData.grossAmount || 0) },
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
           });
+
           return { refunded: true, alreadyFinal: false };
         });
+
         console.log(`❌ [WEBHOOK FAILED] Payout ${orderRef} failed.`);
 
         if (failureResult.refunded) {
@@ -502,11 +518,11 @@ export async function POST(request: NextRequest) {
           });
 
           await triggerNovuNotification(
-            targetUserId, 
-            failConfig.title, 
-            failConfig.body, 
-            failConfig.actionUrl, 
-            failConfig.actionLabel, 
+            targetUserId,
+            failConfig.title,
+            failConfig.body,
+            failConfig.actionUrl,
+            failConfig.actionLabel,
             failConfig.priority
           );
         }
@@ -532,11 +548,11 @@ export async function POST(request: NextRequest) {
           });
 
           await triggerNovuNotification(
-            targetUserId, 
-            failConfig.title, 
-            failConfig.body, 
-            failConfig.actionUrl, 
-            failConfig.actionLabel, 
+            targetUserId,
+            failConfig.title,
+            failConfig.body,
+            failConfig.actionUrl,
+            failConfig.actionLabel,
             failConfig.priority
           );
         }
@@ -566,11 +582,11 @@ export async function POST(request: NextRequest) {
           });
 
           await triggerNovuNotification(
-            targetUserId, 
-            failConfig.title, 
-            failConfig.body, 
-            failConfig.actionUrl, 
-            failConfig.actionLabel, 
+            targetUserId,
+            failConfig.title,
+            failConfig.body,
+            failConfig.actionUrl,
+            failConfig.actionLabel,
             failConfig.priority
           );
         }
@@ -580,9 +596,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true }, { status: 200 });
   } catch (error: unknown) {
     console.error("❌ [WEBHOOK CRITICAL ERROR]:", error);
-    // The payment may have succeeded while our ledger update failed. Return a
-    // retryable status so Nomba can deliver the webhook again after the ledger
-    // issue is corrected. All successful paths above are idempotent.
-    return NextResponse.json({ received: false, retryable: true, error: error instanceof Error ? error.message : "Webhook processing failed" }, { status: 500 });
+    return NextResponse.json(
+      {
+        received: false,
+        retryable: true,
+        error: error instanceof Error ? error.message : "Webhook processing failed"
+      },
+      { status: 500 }
+    );
   }
 }
