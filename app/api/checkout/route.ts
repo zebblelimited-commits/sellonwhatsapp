@@ -131,18 +131,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
         // --- STAGE 1: DATA VALIDATION ---
         if (!productId || !storeId) {
-            console.error("ZEBBLE API REJECTED: Missing productId or storeId");
+            console.error("SOWA API REJECTED: Missing productId or storeId");
             return NextResponse.json({ error: "Missing Product ID or Store ID" }, { status: 400 });
         }
 
         // Validate buyerId is present and matches expected format
         if (!buyerId || typeof buyerId !== "string") {
-            console.error("ZEBBLE API REJECTED: Invalid or missing buyerId");
+            console.error("SOWA API REJECTED: Invalid or missing buyerId");
             return NextResponse.json({ error: "Authentication required" }, { status: 401 });
         }
 
         if (isBooking && (!bookingDate || !bookingSlot)) {
-            console.error("ZEBBLE API REJECTED: Missing booking details");
+            console.error("SOWA API REJECTED: Missing booking details");
             return NextResponse.json({ error: "Booking date and slot are required" }, { status: 400 });
         }
 
@@ -151,8 +151,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             return NextResponse.json({ error: "Quantity must be a whole number greater than zero" }, { status: 400 });
         }
 
-        // Give the buyer an immediate availability response. The payment
-        // confirmation transaction performs the authoritative race-safe check.
+        // Give the buyer an immediate availability response.
         const productRef = adminDb.collection("products").doc(productId);
         const productSnapshot = await productRef.get();
         if (!productSnapshot.exists) {
@@ -195,9 +194,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         const nombaOrigin = process.env.NOMBA_SANDBOX_URL || "https://sandbox.nomba.com";
         const isSandbox = Boolean(process.env.NOMBA_SANDBOX_URL) || process.env.NEXT_PUBLIC_ENVIRONMENT === "sandbox";
         const authBaseUrl = `${nombaOrigin}/v1`;
-        // This sandbox account previously worked with /v1/checkout/order.
-        // Keep that route first and fall back to the newer sandbox path when
-        // the account/API version supports it.
         const checkoutBaseUrls = isSandbox
             ? [`${nombaOrigin}/v1`, `${nombaOrigin}/sandbox`]
             : [`${nombaOrigin}/v1`];
@@ -252,7 +248,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // --- STAGE 4: CALCULATION & REFERENCE ---
         const productTotal: number = Number(price || 0) * requestedQuantity;
         const totalAmount: number = productTotal + Number(deliveryFee || 0);
-        const orderReference: string = `ZEBBLE_${isBooking ? 'BK' : 'ORD'}_${Date.now()}`;
+
+        // ✅ Updated prefix to SOWA_
+        const orderReference: string = `SOWA_${isBooking ? 'BK' : 'ORD'}_${Date.now()}`;
 
         console.log('💰 Order details:', {
             orderReference,
@@ -262,7 +260,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             buyerId
         });
 
-        // Build the callback URL properly
+        // Build callback URL
         const appUrl: string = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
         const callbackUrl: string = `${appUrl}/payment/success?reference=${orderReference}`;
 
@@ -281,7 +279,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     amount: totalAmount.toFixed(2),
                     currency: "NGN",
                     callbackUrl: callbackUrl,
-                    customerEmail: customerEmail || "customer@zebble.com",
+                    customerEmail: customerEmail || "customer@sowa.com",
                     description: isBooking
                         ? `Booking: ${productName} (${bookingDate} ${bookingSlot})`
                         : `Order: ${productName}`,
@@ -318,12 +316,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         const orderData: NombaOrderResponse = await orderRes.json();
 
         if (orderData.code === "00" || orderData.status === "success") {
-            console.log('✅ Nomba order created:', orderData.data?.checkoutLink);
+            console.log('✅ Nomba order created raw URL:', orderData.data?.checkoutLink);
 
-            // --- STAGE 6: SAVE INITIAL RECORDS IN FIRESTORE (using Admin SDK) ---
-
+            // --- STAGE 6: SAVE INITIAL RECORDS IN FIRESTORE ---
             try {
-                // 6.1: Soft-lock the slot if it's a booking
                 if (isBooking && slotId) {
                     const bookingDoc: BookingDocument = {
                         orderId: orderReference,
@@ -331,7 +327,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                         bookingDate: bookingDate || "",
                         bookingSlot: bookingSlot || "",
                         totalAmount: totalAmount || 0,
-                        customerEmail: customerEmail || "customer@zebble.com",
+                        customerEmail: customerEmail || "customer@sowa.com",
                         buyerId: buyerId,
                         createdAt: FieldValue.serverTimestamp(),
                         updatedAt: FieldValue.serverTimestamp()
@@ -343,11 +339,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                         .collection("bookings")
                         .doc(slotId)
                         .set(bookingDoc);
-
-                    console.log('📅 Booking slot soft-locked:', slotId);
                 }
 
-                // 6.2: Create the main order record with ALL required fields
                 const productSnap = await adminDb.collection("products").doc(productId).get().catch(() => null);
                 const productData = productSnap?.data() || {};
                 const productImages = Array.isArray(productData.images) ? productData.images : [];
@@ -371,7 +364,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     slotId: slotId || null,
                     bookingDate: bookingDate || null,
                     bookingSlot: bookingSlot || null,
-                    customerEmail: customerEmail || "customer@zebble.com",
+                    customerEmail: customerEmail || "customer@sowa.com",
                     paymentMethod: paymentMethod || "Card",
                     createdAt: FieldValue.serverTimestamp(),
                     updatedAt: FieldValue.serverTimestamp()
@@ -379,9 +372,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
                 await adminDb.collection("orders").doc(orderReference).set(orderDoc);
 
-                console.log('📦 Order record created:', orderReference);
-
-                // 🚀 STAGE 6.3: TRIGGER VENDOR NOTIFICATION
                 try {
                     await sendNotification({
                         vendorId: storeId,
@@ -397,7 +387,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                             amount: totalAmount,
                             productName
                         },
-                        // ✅ Trigger Novu to show in the Inbox
                         novuTriggerId: "new-order-placed",
                         novuPayload: {
                             productName: productName,
@@ -405,20 +394,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                         }
                     });
                 } catch (notifError) {
-                    // We catch this so a notification failure doesn't break the checkout flow
                     console.error("Failed to send order notification:", notifError);
                 }
 
             } catch (firestoreError: any) {
                 console.error("❌ Firestore save failed:", firestoreError.message);
-                // Don't fail the checkout - Nomba already has the order
-                // The webhook will retry saving when payment is confirmed
             }
+
+            // ✅ ATTACH orderRef PARAMETER TO CHECKOUT URL FOR FLUTTER CONSUMPTION
+            const rawCheckoutLink = orderData.data?.checkoutLink || "";
+            const querySeparator = rawCheckoutLink.includes("?") ? "&" : "?";
+            const finalCheckoutLink = rawCheckoutLink
+                ? `${rawCheckoutLink}${querySeparator}orderRef=${orderReference}`
+                : "";
 
             return NextResponse.json({
                 success: true,
-                checkoutLink: orderData.data?.checkoutLink,
-                reference: orderReference
+                checkoutLink: finalCheckoutLink,
+                reference: orderReference,
+                orderId: orderReference
             });
 
         } else {
@@ -427,10 +421,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
 
     } catch (error: any) {
-        console.error("❌ ZEBBLE API ERROR:", error.message);
-        if (error.stack) {
-            console.error("TRACE:", error.stack);
-        }
+        console.error("❌ SOWA API ERROR:", error.message);
         return NextResponse.json({
             error: error.message || "An unexpected error occurred. Please try again."
         }, { status: 500 });
