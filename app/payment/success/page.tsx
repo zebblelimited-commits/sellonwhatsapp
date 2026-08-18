@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { db, auth } from "@/lib/firebase"; 
-import { doc, onSnapshot, updateDoc } from "firebase/firestore"; 
+import { db, auth } from "@/lib/firebase";
+import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { CheckCircle2, Loader2, ArrowRight, ShieldCheck, ShoppingBag, CalendarCheck } from "lucide-react";
 
@@ -19,8 +19,8 @@ type SuccessOrder = {
 export default function SuccessPage() {
     const searchParams = useSearchParams();
     const router = useRouter();
-    
-    const orderReference = searchParams.get("reference") || searchParams.get("orderReference");
+
+    const orderReference = searchParams.get("reference") || searchParams.get("orderReference") || searchParams.get("orderRef");
 
     const [status, setStatus] = useState("verifying");
     const [orderData, setOrderData] = useState<SuccessOrder | null>(null);
@@ -48,11 +48,11 @@ export default function SuccessPage() {
         const unsub = onSnapshot(doc(db, "orders", orderReference), async (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                
+
                 // --- PATCH LOGIC START ---
                 // If the document is missing the buyerId, patch it safely with attached auth header token
                 if (currentUser && !data.buyerId) {
-                    console.log("Fixing missing buyerId for Zebble order...");
+                    console.log("Fixing missing buyerId for order...");
                     try {
                         await updateDoc(doc(db, "orders", orderReference), {
                             buyerId: currentUser.uid
@@ -64,7 +64,7 @@ export default function SuccessPage() {
                 // --- PATCH LOGIC END ---
 
                 setOrderData(data as SuccessOrder);
-                
+
                 if (["PAID_HELD", "PAID", "COMPLETED", "SHIPPED"].includes(String(data.status || "").toUpperCase())) {
                     paymentConfirmedRef.current = true;
                     setStatus("success");
@@ -74,18 +74,13 @@ export default function SuccessPage() {
             }
         }, (error) => {
             console.error("Firestore Listen Error:", error);
-            // The server-side payment verification remains authoritative. A
-            // temporary browser Firestore outage must not turn a confirmed
-            // payment back into an error screen.
             if (!paymentConfirmedRef.current) setStatus("pending");
         });
 
         return () => unsub();
     }, [orderReference, authLoading, currentUser]);
 
-    // Webhooks are the primary payment confirmation path. This authenticated
-    // fallback verifies the receipt with Nomba when a webhook was delayed or
-    // previously acknowledged before escrow was reserved.
+    // 3. Webhooks & authenticated payment verification
     useEffect(() => {
         if (authLoading || !currentUser || !orderReference) return;
         let cancelled = false;
@@ -125,6 +120,36 @@ export default function SuccessPage() {
         };
     }, [authLoading, currentUser, orderReference]);
 
+    // 4. AUTO-DISMISS & MOBILE DEEP LINKING HOOK
+    useEffect(() => {
+        if (status === "success" && orderReference) {
+            // A. Post message if running inside Flutter InAppWebView / WebView
+            if (typeof window !== "undefined" && (window as unknown as { FlutterWebView?: { postMessage: (msg: string) => void } }).FlutterWebView) {
+                (window as unknown as { FlutterWebView: { postMessage: (msg: string) => void } }).FlutterWebView.postMessage(
+                    JSON.stringify({
+                        status: "SUCCESS",
+                        reference: orderReference,
+                        orderRef: orderReference
+                    })
+                );
+            }
+
+            // B. Dispatch custom deep link to trigger mobile app focus
+            if (typeof window !== "undefined") {
+                window.location.href = `sowa://payment-success?reference=${orderReference}`;
+            }
+
+            // C. Fallback: Attempt to close window tab after 2 seconds
+            const closeTimer = setTimeout(() => {
+                if (typeof window !== "undefined") {
+                    window.close();
+                }
+            }, 2000);
+
+            return () => clearTimeout(closeTimer);
+        }
+    }, [status, orderReference]);
+
     const isBooking = orderData?.isBooking === true;
     const viewStatus = !orderReference ? "error" : status;
 
@@ -155,7 +180,7 @@ export default function SuccessPage() {
                     <div className="p-8 text-center space-y-4">
                         <div className="h-12 w-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-xl font-extrabold mx-auto">!</div>
                         <h1 className="text-xl font-extrabold text-slate-900">Issue Locating Order</h1>
-                        <p className="text-slate-500 text-xs text-balance">We couldn&apos;t find order {orderReference}. If you were charged, please contact Zebble support.</p>
+                        <p className="text-slate-500 text-xs text-balance">We couldn&apos;t find order {orderReference}. If you were charged, please contact support.</p>
                         <button onClick={() => router.push('/')} className="text-sm font-bold text-slate-900 underline">Go Back</button>
                     </div>
                 ) : (
@@ -170,7 +195,7 @@ export default function SuccessPage() {
                                 {isBooking ? "Booking Confirmed" : "Payment Secured"}
                             </h1>
                             <p className="text-xs text-white/90 opacity-90">
-                                {isBooking ? "Your appointment is locked in" : "Held safely in Zebble Escrow"}
+                                {isBooking ? "Your appointment is locked in" : "Held safely in Escrow"}
                             </p>
                         </div>
 
@@ -193,8 +218,8 @@ export default function SuccessPage() {
                                         <span className="text-xs font-bold text-slate-700">
                                             {(() => {
                                                 const dateString = orderData?.slotId?.split('_')[0];
-                                                return dateString ? new Date(dateString).toLocaleDateString('en-GB', { 
-                                                    weekday: 'long', day: 'numeric', month: 'short' 
+                                                return dateString ? new Date(dateString).toLocaleDateString('en-GB', {
+                                                    weekday: 'long', day: 'numeric', month: 'short'
                                                 }) : "N/A";
                                             })()}
                                         </span>
@@ -234,7 +259,7 @@ export default function SuccessPage() {
 
                         <div className="bg-slate-50 py-3 text-center border-t border-slate-100">
                             <p className="text-[9px] font-extrabold text-slate-400 tracking-[0.1em] uppercase">
-                                Zebble Technologies Limited
+                                Zebble Quantum Solutions LTD
                             </p>
                         </div>
                     </>
