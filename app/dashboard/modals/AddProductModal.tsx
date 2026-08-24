@@ -325,7 +325,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
             lengthCm: parseFloat(formData.shipping.lengthCm),
             widthCm: parseFloat(formData.shipping.widthCm),
             heightCm: parseFloat(formData.shipping.heightCm),
-            shipbubbleCategoryId: parseInt(formData.shipping.shipbubbleCategoryId) || 1
+            shipbubbleCategoryId: String(formData.shipping.shipbubbleCategoryId)
           }
         }),
         ...(productType === 'service' && { fulfillmentMethod: formData.deliveryType, turnaroundTime: formData.duration }),
