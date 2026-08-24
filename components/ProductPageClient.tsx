@@ -289,13 +289,11 @@ export default function ProductPageClient({ product, store }: { product: any; st
     }
   };
 
-  // 🌟 FIX: Unified to singular 'click' to match the new analytics.ts standard
   const handleTrackClick = () => {
     const storeId = store?.id || store?.uid;
     if (storeId) void trackMetric(storeId, "click", { productId: product?.id || product?.uid });
   };
 
-  // 🌟 NEW: Dedicated handler for WhatsApp premium analytics
   const handleTrackWhatsApp = () => {
     const storeId = store?.id || store?.uid;
     if (storeId) void trackMetric(storeId, "whatsapp_click", { productId: product?.id || product?.uid });
@@ -303,7 +301,6 @@ export default function ProductPageClient({ product, store }: { product: any; st
 
   const whatsappUrl = `https://wa.me/${store?.phone?.replace(/\s/g, "")}?text=${encodeURIComponent(`Hello ${store?.storeName}, I want to ${isBooking ? 'book' : 'order'} ${product?.name}${isBooking ? ` for ${selectedDate || ''} at ${selectedSlot || ''}` : ''}`)}`;
 
-  // Structural hydration safe shell matching design wrappers exactly
   if (!isMounted) {
     return (
       <div className={`${font.className} min-h-screen bg-[#fafafa] flex flex-col text-gray-900`}>
@@ -318,23 +315,18 @@ export default function ProductPageClient({ product, store }: { product: any; st
 
   return (
     <div className={`${font.className} min-h-screen bg-[#fafafa] flex flex-col text-gray-900`}>
-      {/* Include Header with proper store layout flag */}
       <Header isStorePage={true} storeName={store?.storeName} />
 
-      {/* Main Content Wrapper */}
       <main className="flex-1 max-w-5xl mx-auto px-4 py-10 w-full">
-        {/* Responsive Grid Card Layout Container */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 bg-white rounded-[24px] p-6 md:p-8 shadow-xl border border-gray-100 items-start">
           {/* LEFT COLUMN: Media Showcase Frame */}
           <div className="space-y-4 w-full">
             <div className="bg-gray-50/50 rounded-2xl overflow-hidden flex items-center justify-center h-80 md:h-[450px] border border-gray-100 p-4 relative group">
-              {/* TODO: [FUTURE FEATURE] Implement Likes / Wishlist feature (Heart icon toggle + Firestore arrayUnion for user saves) */}
               <img
                 src={images[currentImg]}
                 alt={product?.name}
                 className={`max-h-full max-w-full object-contain group-hover:scale-102 transition-transform duration-300 ${isOutOfStock ? 'grayscale opacity-60' : ''}`}
               />
-              {/* Image Carousel Control Toggles */}
               {images.length > 1 && (
                 <>
                   <button
@@ -354,7 +346,6 @@ export default function ProductPageClient({ product, store }: { product: any; st
                 </>
               )}
             </div>
-            {/* Thumbnail Navigation Rack */}
             {images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                 {images.map((img: string, idx: number) => (
@@ -379,9 +370,6 @@ export default function ProductPageClient({ product, store }: { product: any; st
                 <p className="text-[11px] font-black text-[#00a63e] uppercase tracking-widest">
                   {store?.storeName} Official Store
                 </p>
-                {/* TODO: [FUTURE FEATURE] Implement Product Share functionality (Web Share API / Copy Link modal) */}
-                {/* TODO: [FUTURE FEATURE] Implement Reviews and Ratings system (Star rating component + Firestore subcollection) */}
-                {/* Dynamic Status Badging Block */}
                 <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-extrabold uppercase tracking-tight ${isOutOfStock ? "bg-red-50 border-red-100 text-red-600" :
                   isBooking ? "bg-purple-50 border-purple-100 text-purple-600" :
                     isServiceOrUtility ? "bg-emerald-50 border-emerald-100 text-emerald-600" :
@@ -407,7 +395,6 @@ export default function ProductPageClient({ product, store }: { product: any; st
               </p>
             </div>
 
-            {/* Content Description Frame */}
             <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4 w-full">
               <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Description</h3>
               <p className="text-gray-600 text-sm leading-relaxed font-medium whitespace-pre-line">
@@ -415,7 +402,6 @@ export default function ProductPageClient({ product, store }: { product: any; st
               </p>
             </div>
 
-            {/* BOOKING INTERFACE: Calendar Selector */}
             {isBooking && !isOutOfStock && (
               <div className="space-y-4 bg-gray-50/50 border border-gray-100 rounded-2xl p-4 w-full">
                 <div>
@@ -463,7 +449,6 @@ export default function ProductPageClient({ product, store }: { product: any; st
               </div>
             )}
 
-            {/* Quantity Selector Interface Block */}
             {!hideQuantity && !isOutOfStock && (
               <div className="flex items-center gap-4">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Quantity:</span>
@@ -487,17 +472,14 @@ export default function ProductPageClient({ product, store }: { product: any; st
               </div>
             )}
 
-            {/* Responsive Checkout CTA Processing Controls */}
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <button
                 disabled={isOutOfStock || (isBooking && (!selectedDate || !selectedSlot))}
                 onClick={() => {
-                  // 🌟 FIX: Track the specific click event that OverviewTab.tsx is looking for
                   const storeId = store?.id || store?.uid;
                   if (storeId) {
                     void trackMetric(storeId, "buy_now_click", { productId: product?.id || product?.uid });
                   }
-                  // Continue with your existing checkout drawer state opening mechanism
                   setCheckoutModalOpen(true);
                 }}
                 className="flex-1 w-full bg-black text-white py-3.5 rounded-xl font-extrabold text-xs uppercase tracking-wider hover:bg-gray-900 active:scale-98 transition-all disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm"
@@ -510,7 +492,6 @@ export default function ProductPageClient({ product, store }: { product: any; st
                       ? "Hire Now"
                       : "Buy It Now"}
               </button>
-              {/* 🌟 UPDATED: Now uses the dedicated premium WhatsApp tracking handler */}
               <a
                 href={whatsappUrl}
                 target="_blank"
@@ -522,7 +503,6 @@ export default function ProductPageClient({ product, store }: { product: any; st
               </a>
             </div>
 
-            {/* Merchant Assurances / Trust Indicators */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-gray-100">
               <TrustCard Icon={ShieldCheck} title="Secure Gateway" desc="Verified Nomba Escrow Merchant" />
               <TrustCard
@@ -538,299 +518,348 @@ export default function ProductPageClient({ product, store }: { product: any; st
       {/* CHECKOUT POPUP DIALOG PANEL */}
       {checkoutModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isLoading && setCheckoutModalOpen(false)} />
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => !isLoading && setCheckoutModalOpen(false)}
+          />
 
-          {/* ✅ UPDATED: Rectangular layout (max-w-lg) that fits perfectly on mobile (max-h-[90vh]) and web */}
-          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-gray-50 overflow-y-auto max-h-[90vh] md:max-h-[85vh]">
+          {/* HORIZONTAL CHECKOUT MODAL CONTAINER */}
+          <div className="relative bg-white rounded-3xl w-full max-w-lg md:max-w-4xl p-6 md:p-8 shadow-2xl border border-gray-100 overflow-y-auto max-h-[90vh] md:max-h-[85vh]">
             <button
               type="button"
               onClick={() => setCheckoutModalOpen(false)}
               disabled={isLoading}
-              className="absolute top-4 right-4 p-2 bg-gray-50 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-700 transition-colors active:scale-90"
+              className="absolute top-4 right-4 z-10 p-2 bg-gray-50 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-700 transition-colors active:scale-90"
             >
-              <X size={16} />
+              <X size={18} />
             </button>
-            <p className="text-[10px] font-black uppercase text-[#00a63e] tracking-widest mb-1">Secure Gateway</p>
-            <h2 className="text-xl font-extrabold text-gray-900 mb-5">
-              {isBooking ? "Complete Booking" : isServiceOrUtility ? "Complete Hire" : "Checkout Order"}
-            </h2>
 
-            {/* SHIPBUBBLE DELIVERY DETAILS */}
-            {!isBooking && !isServiceOrUtility && (
-              <div className="mb-5 space-y-4">
-                <div>
-                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
-                    Recipient Full Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter recipient's full name"
-                    value={recipientName}
-                    onChange={(e) => {
-                      setRecipientName(e.target.value);
-                      setSelectedCourier(null);
-                      setShippingRequestToken(null);
-                      setDeliveryFee(0);
-                    }}
-                    disabled={isLoading || isCalculatingShipping}
-                    className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
-                    Recipient Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="08012345678"
-                    value={recipientPhone}
-                    onChange={(e) => {
-                      setRecipientPhone(e.target.value);
-                      setSelectedCourier(null);
-                      setShippingRequestToken(null);
-                      setDeliveryFee(0);
-                    }}
-                    disabled={isLoading || isCalculatingShipping}
-                    className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
-                    Delivery State
-                  </label>
-                  <select
-                    className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900 transition-all cursor-pointer"
-                    value={selectedState}
-                    onChange={(e) => {
-                      setSelectedState(e.target.value);
-                      setShippingCouriers([]);
-                      setSelectedCourier(null);
-                      setShippingRequestToken(null);
-                      setDeliveryFee(0);
-                    }}
-                    disabled={isLoading || isCalculatingShipping}
-                  >
-                    <option value="">Select your State</option>
-                    {NIGERIA_STATES.map((state) => (
-                      <option key={state} value={state}>
-                        {state}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
-                    Full Delivery Address
-                  </label>
-                  <textarea
-                    placeholder="e.g. Plot 6992 Opposite Mining Gate Rantiya Abuja FCT Nigeria"
-                    value={deliveryAddress}
-                    onChange={(e) => {
-                      setDeliveryAddress(e.target.value);
-                      setShippingCouriers([]);
-                      setSelectedCourier(null);
-                      setShippingRequestToken(null);
-                      setDeliveryFee(0);
-                    }}
-                    disabled={isLoading || isCalculatingShipping}
-                    rows={3}
-                    className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900 resize-none"
-                  />
-                </div>
-
-                {/* CALCULATE DELIVERY BUTTON */}
-                <button
-                  type="button"
-                  onClick={handleCalculateShipping}
-                  disabled={
-                    isLoading ||
-                    isCalculatingShipping ||
-                    !selectedState ||
-                    !recipientName.trim() ||
-                    !recipientPhone.trim() ||
-                    !deliveryAddress.trim()
-                  }
-                  className="w-full py-3.5 rounded-xl bg-[#00a63e] text-white font-extrabold text-xs uppercase tracking-wider disabled:bg-gray-200 disabled:text-gray-400 transition-all active:scale-[0.98]"
-                >
-                  {isCalculatingShipping ? "Calculating Delivery..." : "Calculate Delivery"}
-                </button>
-
-                {/* AVAILABLE COURIERS */}
-                {shippingCouriers.length > 0 && (
-                  <div className="space-y-2 pt-1">
-                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider">
-                      Select Delivery Option
-                    </p>
-
-                    {shippingCouriers.map((courier) => {
-                      const isSelected =
-                        selectedCourier?.courierId === courier.courierId &&
-                        selectedCourier?.serviceCode === courier.serviceCode;
-
-                      return (
-                        <button
-                          key={`${courier.courierId}-${courier.serviceCode}`}
-                          type="button"
-                          onClick={() => {
-                            setSelectedCourier(courier);
-                            setDeliveryFee(Number(courier.total));
-                          }}
-                          disabled={isLoading}
-                          className={`w-full text-left p-4 rounded-xl border transition-all ${isSelected
-                            ? "border-[#00a63e] bg-[#f0fff4] ring-1 ring-[#00a63e]/20"
-                            : "border-gray-100 bg-white hover:border-gray-300"
-                            }`}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3 min-w-0">
-                              {courier.courierImage ? (
-                                <img
-                                  src={courier.courierImage}
-                                  alt={courier.courierName}
-                                  className="w-9 h-9 rounded-lg object-contain border border-gray-100 bg-white"
-                                />
-                              ) : (
-                                <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-                                  <Truck size={16} className="text-gray-500" />
-                                </div>
-                              )}
-
-                              <div className="min-w-0">
-                                <p className="font-extrabold text-xs text-gray-900 truncate">
-                                  {courier.courierName}
-                                </p>
-                                <p className="text-[10px] text-gray-500 font-medium mt-0.5">
-                                  {courier.deliveryEta}
-                                </p>
-                                {courier.serviceType === "dropoff" && courier.dropoffStation?.name && (
-                                  <p className="text-[9px] text-orange-600 font-bold mt-1">
-                                    Drop-off required
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="text-right shrink-0">
-                              <p className="font-black text-sm text-[#00a63e]">
-                                ₦{Number(courier.total).toLocaleString()}
-                              </p>
-                              {isSelected && (
-                                <p className="text-[9px] font-black uppercase text-[#00a63e] mt-1">
-                                  Selected
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Input Contact Target Field */}
-            <div className="mb-5 space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block">Contact Email Address:</label>
-              <input
-                type="email"
-                required
-                placeholder="email@example.com"
-                className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900 transition-all"
-                value={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
-                disabled={isLoading}
-              />
-            </div>
-
-            {/* Accounting Subtotal Card Box */}
-            <div className="p-4 border border-gray-100 bg-gray-50/60 rounded-2xl mb-5 space-y-2">
-              <div className="flex justify-between text-xs font-bold text-gray-500">
-                <span>{isBooking ? 'Appointment Base' : isServiceOrUtility ? 'Service Fee' : `${quantity}x Item Units`}</span>
-                <span className="text-gray-900 font-extrabold">₦{productTotal.toLocaleString()}</span>
-              </div>
-              {!isBooking && !isServiceOrUtility && (
-                <div className="flex justify-between text-xs font-bold text-gray-500">
-                  <span>Shipping ({selectedState || "Unselected"})</span>
-                  <span className="text-gray-900 font-extrabold">{deliveryFee > 0 ? `₦${deliveryFee.toLocaleString()}` : "—"}</span>
-                </div>
-              )}
-              {isBooking && (
-                <div className="flex justify-between text-xs font-bold text-[#00a63e] bg-[#f0fff4] px-2.5 py-1.5 rounded-lg border border-green-50/50">
-                  <span>Slot Assignment</span>
-                  <span className="font-extrabold">{selectedDate} @ {selectedSlot}</span>
-                </div>
-              )}
-              <div className="pt-2.5 mt-1 border-t border-gray-100 flex justify-between items-center">
-                <span className="text-xs font-black uppercase tracking-tight text-gray-900">Total Due</span>
-                <span className="text-xl font-black text-gray-950">₦{finalTotal.toLocaleString()}</span>
-              </div>
+            <div className="mb-6 border-b border-gray-100 pb-4">
+              <p className="text-[10px] font-black uppercase text-[#00a63e] tracking-widest mb-1">
+                Secure Gateway
+              </p>
+              <h2 className="text-xl md:text-2xl font-extrabold text-gray-900">
+                {isBooking ? "Complete Booking" : isServiceOrUtility ? "Complete Hire" : "Checkout Order"}
+              </h2>
             </div>
 
             {error && (
-              <div className="mb-4 p-3.5 bg-red-50 text-red-600 text-xs font-bold rounded-xl border border-red-100 flex items-center gap-2">
-                <X size={14} className="shrink-0" /> {error}
+              <div className="mb-6 p-3.5 bg-red-50 border border-red-100 text-red-600 rounded-xl text-xs font-bold">
+                {error}
               </div>
             )}
 
-            {/* ✅ UPDATED: Encrypted Processing Triggers (Only Card Payment) */}
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Select Payment Protocol</h4>
-              <CompactPaymentButton
-                onClick={() => handlePayment("Card")}
-                isLoading={isLoading}
-                icon={<CreditCard size={15} />}
-                label="Pay via Card"
-                variant="dark"
-              />
-            </div>
+            {/* TWO-SECTION HORIZONTAL GRID LAYOUT ON DESKTOP */}
+            <div className={`grid grid-cols-1 ${(!isBooking && !isServiceOrUtility) ? 'md:grid-cols-2 gap-8' : ''} items-start`}>
 
-            <p className="text-center text-[9px] text-gray-400 mt-6 font-extrabold uppercase tracking-widest">Powered by Nomba Commerce Gateway</p>
+              {/* SECTION 1: LEFT COLUMN - DELIVERY DETAILS */}
+              {!isBooking && !isServiceOrUtility && (
+                <div className="space-y-4 md:border-r md:border-gray-100 md:pr-8">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-gray-900 flex items-center gap-2">
+                    <Truck size={14} className="text-[#00a63e]" /> 1. Delivery Details
+                  </h3>
+
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
+                      Recipient Full Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter recipient's full name"
+                      value={recipientName}
+                      onChange={(e) => {
+                        setRecipientName(e.target.value);
+                        setSelectedCourier(null);
+                        setShippingRequestToken(null);
+                        setDeliveryFee(0);
+                      }}
+                      disabled={isLoading || isCalculatingShipping}
+                      className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
+                      Recipient Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="08012345678"
+                      value={recipientPhone}
+                      onChange={(e) => {
+                        setRecipientPhone(e.target.value);
+                        setSelectedCourier(null);
+                        setShippingRequestToken(null);
+                        setDeliveryFee(0);
+                      }}
+                      disabled={isLoading || isCalculatingShipping}
+                      className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
+                      Delivery State
+                    </label>
+                    <select
+                      className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900 transition-all cursor-pointer"
+                      value={selectedState}
+                      onChange={(e) => {
+                        setSelectedState(e.target.value);
+                        setShippingCouriers([]);
+                        setSelectedCourier(null);
+                        setShippingRequestToken(null);
+                        setDeliveryFee(0);
+                      }}
+                      disabled={isLoading || isCalculatingShipping}
+                    >
+                      <option value="">Select your State</option>
+                      {NIGERIA_STATES.map((state) => (
+                        <option key={state} value={state}>
+                          {state}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
+                      Full Delivery Address
+                    </label>
+                    <textarea
+                      placeholder="e.g. Plot 6992 Opposite Mining Gate Rantiya Abuja FCT Nigeria"
+                      value={deliveryAddress}
+                      onChange={(e) => {
+                        setDeliveryAddress(e.target.value);
+                        setShippingCouriers([]);
+                        setSelectedCourier(null);
+                        setShippingRequestToken(null);
+                        setDeliveryFee(0);
+                      }}
+                      disabled={isLoading || isCalculatingShipping}
+                      rows={3}
+                      className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900 resize-none transition-all"
+                    />
+                  </div>
+
+                  {/* CALCULATE DELIVERY BUTTON */}
+                  <button
+                    type="button"
+                    onClick={handleCalculateShipping}
+                    disabled={
+                      isLoading ||
+                      isCalculatingShipping ||
+                      !selectedState ||
+                      !recipientName.trim() ||
+                      !recipientPhone.trim() ||
+                      !deliveryAddress.trim()
+                    }
+                    className="w-full py-3.5 rounded-xl bg-[#00a63e] text-white font-extrabold text-xs uppercase tracking-wider disabled:bg-gray-200 disabled:text-gray-400 transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2"
+                  >
+                    {isCalculatingShipping ? (
+                      <>
+                        <Loader2 className="animate-spin" size={14} /> Calculating Delivery...
+                      </>
+                    ) : (
+                      "Calculate Delivery"
+                    )}
+                  </button>
+
+                  {/* AVAILABLE COURIERS LIST */}
+                  {shippingCouriers.length > 0 && (
+                    <div className="space-y-2 pt-2">
+                      <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                        Select Delivery Option
+                      </p>
+
+                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                        {shippingCouriers.map((courier) => {
+                          const isSelected =
+                            selectedCourier?.courierId === courier.courierId &&
+                            selectedCourier?.serviceCode === courier.serviceCode;
+
+                          return (
+                            <button
+                              key={`${courier.courierId}-${courier.serviceCode}`}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCourier(courier);
+                                setDeliveryFee(Number(courier.total));
+                              }}
+                              disabled={isLoading}
+                              className={`w-full text-left p-3.5 rounded-xl border transition-all ${isSelected
+                                ? "border-[#00a63e] bg-[#f0fff4] ring-1 ring-[#00a63e]/20"
+                                : "border-gray-100 bg-white hover:border-gray-300"
+                                }`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  {courier.courierImage ? (
+                                    <img
+                                      src={courier.courierImage}
+                                      alt={courier.courierName}
+                                      className="w-8 h-8 rounded-lg object-contain border border-gray-100 bg-white"
+                                    />
+                                  ) : (
+                                    <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                                      <Truck size={14} className="text-gray-500" />
+                                    </div>
+                                  )}
+
+                                  <div className="min-w-0">
+                                    <p className="font-extrabold text-xs text-gray-900 truncate">
+                                      {courier.courierName}
+                                    </p>
+                                    <p className="text-[10px] text-gray-500 font-medium mt-0.5">
+                                      {courier.deliveryEta}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="text-right shrink-0">
+                                  <p className="font-black text-xs text-[#00a63e]">
+                                    ₦{Number(courier.total).toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SECTION 2: RIGHT COLUMN - CONTACT, QUANTITY, ORDER SUMMARY & PAY BUTTON */}
+              <div className={`space-y-5 ${(!isBooking && !isServiceOrUtility) ? 'mt-6 md:mt-0' : ''}`}>
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-900 flex items-center gap-2">
+                  <CreditCard size={14} className="text-[#00a63e]" />
+                  {(!isBooking && !isServiceOrUtility) ? "2. Contact & Payment" : "Contact & Payment"}
+                </h3>
+
+                {/* Email Address */}
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
+                    Your Contact Email
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="name@example.com"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    disabled={isLoading}
+                    className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900 transition-all"
+                  />
+                </div>
+
+                {/* Modal Quantity Adjuster */}
+                {!hideQuantity && (
+                  <div className="flex items-center justify-between p-3.5 bg-gray-50/80 rounded-xl border border-gray-100">
+                    <span className="text-xs font-black text-gray-700 uppercase tracking-wider">
+                      Quantity
+                    </span>
+                    <div className="flex items-center border border-gray-200 bg-white rounded-lg overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuantity(Math.max(1, quantity - 1));
+                          setSelectedCourier(null);
+                          setShippingRequestToken(null);
+                          setDeliveryFee(0);
+                        }}
+                        disabled={isLoading || isCalculatingShipping}
+                        className="p-2 hover:bg-gray-50 text-gray-500 active:scale-95 transition-all"
+                      >
+                        <Minus size={12} />
+                      </button>
+                      <span className="px-3 font-bold text-xs text-gray-800">{quantity}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuantity(quantity + 1);
+                          setSelectedCourier(null);
+                          setShippingRequestToken(null);
+                          setDeliveryFee(0);
+                        }}
+                        disabled={isLoading || isCalculatingShipping}
+                        className="p-2 hover:bg-gray-50 text-gray-500 active:scale-95 transition-all"
+                      >
+                        <Plus size={12} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Itemized Price Summary */}
+                <div className="bg-gray-50/80 p-4 rounded-xl border border-gray-100 space-y-2">
+                  <div className="flex justify-between text-xs text-gray-600 font-medium">
+                    <span>Item Price ({activeQuantity}x)</span>
+                    <span className="font-bold text-gray-900">₦{productTotal.toLocaleString()}</span>
+                  </div>
+
+                  {!isBooking && !isServiceOrUtility && (
+                    <div className="flex justify-between text-xs text-gray-600 font-medium">
+                      <span>Delivery Fee</span>
+                      <span className="font-bold text-gray-900">
+                        {deliveryFee > 0 ? `₦${deliveryFee.toLocaleString()}` : "Calculated at quote"}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="border-t border-gray-200/60 pt-2 flex justify-between items-center text-sm font-extrabold text-gray-900">
+                    <span>Total Amount</span>
+                    <span className="text-base text-[#00a63e] font-black">₦{finalTotal.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* PAYMENT BUTTONS */}
+                <div className="space-y-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handlePayment("nomba")}
+                    disabled={
+                      isLoading ||
+                      (!isBooking && !isServiceOrUtility && (!selectedCourier || !shippingRequestToken))
+                    }
+                    className="w-full py-4 rounded-xl bg-black hover:bg-gray-900 text-white font-extrabold text-xs uppercase tracking-wider disabled:bg-gray-200 disabled:text-gray-400 transition-all active:scale-[0.98] shadow-md flex items-center justify-center gap-2"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="animate-spin" size={16} /> Processing Order...
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard size={16} /> Pay ₦{finalTotal.toLocaleString()} Now
+                      </>
+                    )}
+                  </button>
+
+                  <p className="text-[10px] text-center text-gray-400 font-semibold">
+                    🔒 Secured by Nomba Escrow Payment Gateway
+                  </p>
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
       )}
 
-      {/* Include Footer */}
       <Footer />
     </div>
   );
 }
 
-function CompactPaymentButton({ onClick, isLoading, icon, label, variant }: { onClick: () => void; isLoading: boolean; icon: React.ReactNode; label: string; variant: "dark" | "light" | "blue" | "purple" }) {
-  const styles = {
-    dark: "bg-black text-white hover:bg-gray-900 border border-transparent",
-    light: "bg-white border border-gray-100 text-gray-900 hover:border-gray-200 hover:bg-gray-50",
-    blue: "bg-blue-50/70 text-blue-800 border border-blue-100 hover:bg-blue-50",
-    purple: "bg-purple-50/70 text-purple-800 border border-purple-100 hover:bg-purple-50"
-  };
-  return (
-    <button
-      type="button"
-      disabled={isLoading}
-      onClick={onClick}
-      className={`flex items-center justify-between w-full p-3.5 rounded-xl disabled:opacity-50 ${styles[variant]} transition-all active:scale-98 shadow-sm`}
-    >
-      <div className="flex items-center gap-3">
-        {isLoading ? <Loader2 size={15} className="animate-spin" /> : icon}
-        <span className="font-extrabold text-xs tracking-tight">{isLoading ? "Processing..." : label}</span>
-      </div>
-      {!isLoading && <ChevronRight size={14} className="opacity-40" />}
-    </button>
-  );
-}
-
 function TrustCard({ Icon, title, desc }: { Icon: any; title: string; desc: string }) {
   return (
-    <div className="flex items-center gap-3.5 p-4 bg-white border border-gray-100 rounded-2xl shadow-sm w-full">
-      <div className="p-2.5 bg-[#f0fff4] rounded-xl text-[#00a63e] shrink-0">
-        <Icon size={18} />
+    <div className="flex items-center gap-3 p-3 bg-gray-50/50 rounded-xl border border-gray-100/80">
+      <div className="p-2 bg-white rounded-lg text-[#00a63e] shadow-xs">
+        <Icon size={16} />
       </div>
-      <div className="space-y-0.5 overflow-hidden">
-        <p className="text-xs font-black text-gray-900 leading-none tracking-tight truncate">{title}</p>
-        <p className="text-[11px] text-gray-500 font-medium leading-tight line-clamp-2">{desc}</p>
+      <div>
+        <p className="text-xs font-bold text-gray-800">{title}</p>
+        <p className="text-[10px] text-gray-400 font-medium">{desc}</p>
       </div>
     </div>
   );
