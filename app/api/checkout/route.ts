@@ -20,6 +20,17 @@ interface CheckoutRequestBody {
     buyerId: string; // REQUIRED: Must be passed from authenticated client
     storeUsername?: string;
     storeName?: string;
+    deliveryState?: string;
+
+    // SHIPBUBBLE SHIPPING DATA
+    shippingRequestToken?: string | null;
+    shippingCourierId?: string | number | null;
+    shippingServiceCode?: string | null;
+    shippingCourierName?: string | null;
+    shippingServiceType?: string | null;
+    recipientName?: string | null;
+    recipientPhone?: string | null;
+    deliveryAddress?: string | null;
 }
 
 // ✅ Define TypeScript interface for order document
@@ -43,6 +54,18 @@ interface OrderDocument {
     bookingSlot: string | null;
     customerEmail: string;
     paymentMethod: string;
+    deliveryState: string | null;
+
+    // SHIPBUBBLE SHIPPING DATA
+    shippingRequestToken: string | null;
+    shippingCourierId: string | number | null;
+    shippingServiceCode: string | null;
+    shippingCourierName: string | null;
+    shippingServiceType: string | null;
+    recipientName: string | null;
+    recipientPhone: string | null;
+    deliveryAddress: string | null;
+
     createdAt: FieldValue;
     updatedAt: FieldValue;
 }
@@ -124,9 +147,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             bookingDate,
             bookingSlot,
             productId,
-            buyerId,  // REQUIRED: Must be passed from authenticated client
+            buyerId,
             storeUsername,
-            storeName
+            storeName,
+            deliveryState,
+            // SHIPBUBBLE SHIPPING DATA
+            shippingRequestToken,
+            shippingCourierId,
+            shippingServiceCode,
+            shippingCourierName,
+            shippingServiceType,
+            recipientName,
+            recipientPhone,
+            deliveryAddress
         } = body;
 
         // --- STAGE 1: DATA VALIDATION ---
@@ -294,7 +327,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                         storeName: storeName || null,
                         productName: productName,
                         bookingDate: bookingDate || null,
-                        bookingSlot: bookingSlot || null
+                        bookingSlot: bookingSlot || null,
+                        // SHIPBUBBLE DATA (Passed to Webhook)
+                        shippingRequestToken: shippingRequestToken || null,
+                        shippingCourierId: shippingCourierId || null,
+                        shippingServiceCode: shippingServiceCode || null
                     }
                 }
             }),
@@ -366,6 +403,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     bookingSlot: bookingSlot || null,
                     customerEmail: customerEmail || "customer@sowa.com",
                     paymentMethod: paymentMethod || "Card",
+                    deliveryState: deliveryState || null,
+
+                    // SHIPBUBBLE SHIPPING DATA
+                    shippingRequestToken: shippingRequestToken || null,
+                    shippingCourierId: shippingCourierId || null,
+                    shippingServiceCode: shippingServiceCode || null,
+                    shippingCourierName: shippingCourierName || null,
+                    shippingServiceType: shippingServiceType || null,
+                    recipientName: recipientName || null,
+                    recipientPhone: recipientPhone || null,
+                    deliveryAddress: deliveryAddress || null,
+
                     createdAt: FieldValue.serverTimestamp(),
                     updatedAt: FieldValue.serverTimestamp()
                 };

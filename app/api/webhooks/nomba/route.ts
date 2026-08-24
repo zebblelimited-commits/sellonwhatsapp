@@ -270,6 +270,7 @@ export async function POST(request: NextRequest) {
           newStatus = "PAID_HELD";
         }
 
+        // ✅ FIX: Moved these declarations OUTSIDE the if/else block so they are available for notifications below
         const activeDuration = Number(localData.durationDays || localData.durationMonths || 7);
         const durationUnit = localData.durationMonths ? "months" : "days";
 
@@ -362,6 +363,58 @@ export async function POST(request: NextRequest) {
           });
 
           console.log(`✅ [ESCROW] Order ${orderRef} ${holdResult.transitioned ? `reserved ₦${holdResult.amount}` : "was already reserved"}.`);
+
+          // ==========================================
+          // 🔥 SHIPBUBBLE LABEL CREATION (Post-Payment)
+          // ==========================================
+          const hasShippingData = localData.shippingRequestToken && localData.shippingServiceCode && localData.shippingCourierId;
+
+          // Only create label if shipping data exists AND the transaction actually transitioned (prevents duplicate labels on webhook retries)
+          if (hasShippingData && holdResult.transitioned) {
+            try {
+              const shipbubbleApiKey = process.env.SHIPBUBBLE_API_KEY;
+              if (shipbubbleApiKey) {
+                const labelResponse = await fetch("https://api.shipbubble.com/v1/shipping/labels", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${shipbubbleApiKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    request_token: localData.shippingRequestToken,
+                    service_code: localData.shippingServiceCode,
+                    courier_id: localData.shippingCourierId,
+                  }),
+                });
+
+                const labelData = await labelResponse.json();
+
+                if (labelResponse.ok && labelData.status === "success") {
+                  await documentRef.update({
+                    shippingLabelUrl: labelData.data?.label_url || null,
+                    trackingNumber: labelData.data?.tracking_number || null,
+                    shippingStatus: "label_created",
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                  });
+                  console.log(`✅ [SHIPBUBBLE] Label created for order ${orderRef}: ${labelData.data?.tracking_number}`);
+                } else {
+                  console.error(`❌ [SHIPBUBBLE] Label creation failed for order ${orderRef}:`, labelData);
+                  await documentRef.update({
+                    shippingStatus: "label_creation_failed",
+                    shippingError: labelData.message || "Unknown error",
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                  });
+                }
+              }
+            } catch (shipbubbleError) {
+              console.error(`❌ [SHIPBUBBLE] Exception during label creation for order ${orderRef}:`, shipbubbleError);
+              await documentRef.update({
+                shippingStatus: "label_creation_failed",
+                shippingError: shipbubbleError instanceof Error ? shipbubbleError.message : "Unknown error",
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+            }
+          }
         } else {
           const expiryDate = new Date();
           if (durationUnit === "months") {

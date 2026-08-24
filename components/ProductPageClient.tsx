@@ -25,6 +25,28 @@ const NIGERIA_STATES = [
   "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara"
 ];
 
+interface ShippingCourier {
+  courierId: string | number;
+  courierName: string;
+  courierImage: string | null;
+
+  serviceCode: string | null;
+  serviceType: string | null;
+
+  total: number;
+
+  deliveryEta: string;
+  pickupEta: string | null;
+
+  trackingLabel: string | null;
+
+  dropoffStation: {
+    name?: string;
+    address?: string;
+    phone?: string;
+  } | null;
+}
+
 export default function ProductPageClient({ product, store }: { product: any; store: any }) {
   const [isMounted, setIsMounted] = useState(false);
   const [quantity, setQuantity] = useState(1);
@@ -32,8 +54,18 @@ export default function ProductPageClient({ product, store }: { product: any; st
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+
   const [selectedState, setSelectedState] = useState("");
   const [deliveryFee, setDeliveryFee] = useState(0);
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientPhone, setRecipientPhone] = useState("");
+
+  const [shippingCouriers, setShippingCouriers] = useState<ShippingCourier[]>([]);
+  const [selectedCourier, setSelectedCourier] = useState<ShippingCourier | null>(null);
+  const [shippingRequestToken, setShippingRequestToken] = useState<string | null>(null);
+  const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [customerEmail, setCustomerEmail] = useState("");
@@ -71,10 +103,82 @@ export default function ProductPageClient({ product, store }: { product: any; st
   const productTotal = productPrice * activeQuantity;
   const finalTotal = productTotal + deliveryFee;
 
-  const handleStateChange = (state: string) => {
-    setSelectedState(state);
-    const isLocal = state.toLowerCase() === (store?.state || "lagos").toLowerCase();
-    setDeliveryFee(isLocal ? 2500 : 5000);
+  const handleCalculateShipping = async () => {
+    const productId = product?.id || product?.uid;
+    const storeId = store?.id || store?.uid;
+
+    if (!productId || !storeId) {
+      setError("Product or store information is missing.");
+      return;
+    }
+
+    if (
+      !recipientName.trim() ||
+      !customerEmail.trim() ||
+      !recipientPhone.trim() ||
+      !deliveryAddress.trim()
+    ) {
+      setError(
+        "Please enter your name, email, phone number, and complete delivery address."
+      );
+      return;
+    }
+
+    setIsCalculatingShipping(true);
+    setError(null);
+
+    // Clear any old quote when requesting a new one
+    setShippingCouriers([]);
+    setSelectedCourier(null);
+    setShippingRequestToken(null);
+    setDeliveryFee(0);
+
+    try {
+      const response = await fetch("/api/shipping/quote", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          storeId,
+          recipientName: recipientName.trim(),
+          recipientEmail: customerEmail.trim(),
+          recipientPhone: recipientPhone.trim(),
+          deliveryState: selectedState,
+          recipientAddress: deliveryAddress.trim(),
+          productId,
+          quantity: activeQuantity,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "Unable to calculate delivery options."
+        );
+      }
+
+      setShippingCouriers(data.couriers || []);
+      setShippingRequestToken(data.requestToken || null);
+
+      // Automatically select the first/cheapest returned option.
+      if (data.couriers?.length) {
+        const cheapest = [...data.couriers].sort(
+          (a: ShippingCourier, b: ShippingCourier) =>
+            Number(a.total) - Number(b.total)
+        )[0];
+
+        setSelectedCourier(cheapest);
+        setDeliveryFee(Number(cheapest.total));
+      }
+    } catch (err: any) {
+      setError(
+        err.message || "Unable to calculate delivery."
+      );
+    } finally {
+      setIsCalculatingShipping(false);
+    }
   };
 
   const handlePayment = async (method: string) => {
@@ -87,10 +191,34 @@ export default function ProductPageClient({ product, store }: { product: any; st
       setError("Please select a booking date and time.");
       return;
     }
-    if (!isBooking && !isServiceOrUtility && !selectedState) {
-      setError("Please select a delivery location first.");
-      return;
+
+    if (!isBooking && !isServiceOrUtility) {
+      if (!selectedState) {
+        setError("Please select your delivery state.");
+        return;
+      }
+
+      if (!deliveryAddress.trim()) {
+        setError("Please enter your full delivery address.");
+        return;
+      }
+
+      if (!recipientName.trim()) {
+        setError("Please enter the recipient's full name.");
+        return;
+      }
+
+      if (!recipientPhone.trim()) {
+        setError("Please enter the recipient's phone number.");
+        return;
+      }
+
+      if (!selectedCourier || !shippingRequestToken) {
+        setError("Please calculate and select a delivery option first.");
+        return;
+      }
     }
+
     if (!customerEmail) {
       setError("Please provide a valid contact email address.");
       return;
@@ -109,7 +237,6 @@ export default function ProductPageClient({ product, store }: { product: any; st
 
     setIsLoading(true);
     setError(null);
-
     try {
       const response = await fetch("/api/checkout", {
         method: "POST",
@@ -119,21 +246,38 @@ export default function ProductPageClient({ product, store }: { product: any; st
           productName: product.name,
           price: productPrice,
           quantity: activeQuantity,
+
           deliveryFee: (isBooking || isServiceOrUtility) ? 0 : deliveryFee,
+
           storeId,
           storeUsername: store.username,
           storeName: store.storeName,
+
           vendorNombaAccountId: store.nombaAccountId,
+
           paymentMethod: method,
+
           deliveryState: (isBooking || isServiceOrUtility) ? "Digital Service" : selectedState,
+
           bookingDate: selectedDate,
           bookingSlot: selectedSlot,
-          isBooking: isBooking,
-          customerEmail: customerEmail,
-          buyerId: buyer.uid
+
+          isBooking,
+
+          customerEmail,
+          buyerId: buyer.uid,
+
+          // SHIPBUBBLE SHIPPING DATA
+          shippingRequestToken: shippingRequestToken,
+          shippingCourierId: selectedCourier?.courierId || null,
+          shippingServiceCode: selectedCourier?.serviceCode || null,
+          shippingCourierName: selectedCourier?.courierName || null,
+          shippingServiceType: selectedCourier?.serviceType || null,
+          recipientName: recipientName || null,
+          recipientPhone: recipientPhone || null,
+          deliveryAddress: deliveryAddress || null,
         }),
       });
-
       const data = await response.json();
       if (data.checkoutLink) {
         window.location.href = data.checkoutLink;
@@ -158,9 +302,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
     if (storeId) void trackMetric(storeId, "whatsapp_click", { productId: product?.id || product?.uid });
   };
 
-  const whatsappUrl = `https://wa.me/${store?.phone?.replace(/\s/g, "")}?text=${encodeURIComponent(
-    `Hello ${store?.storeName}, I want to ${isBooking ? 'book' : 'order'} ${product?.name}${isBooking ? ` for ${selectedDate || ''} at ${selectedSlot || ''}` : ''}`
-  )}`;
+  const whatsappUrl = `https://wa.me/${store?.phone?.replace(/\s/g, "")}?text=${encodeURIComponent(`Hello ${store?.storeName}, I want to ${isBooking ? 'book' : 'order'} ${product?.name}${isBooking ? ` for ${selectedDate || ''} at ${selectedSlot || ''}` : ''}`)}`;
 
   // Structural hydration safe shell matching design wrappers exactly
   if (!isMounted) {
@@ -187,9 +329,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
           {/* LEFT COLUMN: Media Showcase Frame */}
           <div className="space-y-4 w-full">
             <div className="bg-gray-50/50 rounded-2xl overflow-hidden flex items-center justify-center h-80 md:h-[450px] border border-gray-100 p-4 relative group">
-              
               {/* TODO: [FUTURE FEATURE] Implement Likes / Wishlist feature (Heart icon toggle + Firestore arrayUnion for user saves) */}
-              
               <img
                 src={images[currentImg]}
                 alt={product?.name}
@@ -223,9 +363,8 @@ export default function ProductPageClient({ product, store }: { product: any; st
                     key={idx}
                     type="button"
                     onClick={() => setCurrentImg(idx)}
-                    className={`relative w-14 h-14 rounded-xl overflow-hidden border bg-white shrink-0 p-1 transition-all ${
-                      currentImg === idx ? "border-[#00a63e] ring-2 ring-[#00a63e]/10 scale-95" : "border-gray-100 hover:border-gray-300"
-                    }`}
+                    className={`relative w-14 h-14 rounded-xl overflow-hidden border bg-white shrink-0 p-1 transition-all ${currentImg === idx ? "border-[#00a63e] ring-2 ring-[#00a63e]/10 scale-95" : "border-gray-100 hover:border-gray-300"
+                      }`}
                   >
                     <img src={img} className="w-full h-full object-contain rounded-lg" alt="" />
                   </button>
@@ -241,17 +380,14 @@ export default function ProductPageClient({ product, store }: { product: any; st
                 <p className="text-[11px] font-black text-[#00a63e] uppercase tracking-widest">
                   {store?.storeName} Official Store
                 </p>
-                
                 {/* TODO: [FUTURE FEATURE] Implement Product Share functionality (Web Share API / Copy Link modal) */}
                 {/* TODO: [FUTURE FEATURE] Implement Reviews and Ratings system (Star rating component + Firestore subcollection) */}
-
                 {/* Dynamic Status Badging Block */}
-                <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-extrabold uppercase tracking-tight ${
-                  isOutOfStock ? "bg-red-50 border-red-100 text-red-600" :
-                  isBooking ? "bg-purple-50 border-purple-100 text-purple-600" :
-                  isServiceOrUtility ? "bg-emerald-50 border-emerald-100 text-emerald-600" :
-                  "bg-orange-50 border-orange-100 text-orange-600"
-                }`}>
+                <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-extrabold uppercase tracking-tight ${isOutOfStock ? "bg-red-50 border-red-100 text-red-600" :
+                    isBooking ? "bg-purple-50 border-purple-100 text-purple-600" :
+                      isServiceOrUtility ? "bg-emerald-50 border-emerald-100 text-emerald-600" :
+                        "bg-orange-50 border-orange-100 text-orange-600"
+                  }`}>
                   <Box size={10} />
                   <span>
                     {isOutOfStock
@@ -293,11 +429,10 @@ export default function ProductPageClient({ product, store }: { product: any; st
                         key={date}
                         type="button"
                         onClick={() => setSelectedDate(date)}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
-                          selectedDate === date
+                        className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${selectedDate === date
                             ? "bg-black text-white border-black shadow-sm scale-98"
                             : "bg-white text-gray-600 border-gray-100 hover:border-gray-200"
-                        }`}
+                          }`}
                       >
                         {new Date(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
                       </button>
@@ -315,11 +450,10 @@ export default function ProductPageClient({ product, store }: { product: any; st
                           key={slot}
                           type="button"
                           onClick={() => setSelectedSlot(slot)}
-                          className={`py-2 rounded-xl text-[11px] font-extrabold border transition-all ${
-                            selectedSlot === slot
+                          className={`py-2 rounded-xl text-[11px] font-extrabold border transition-all ${selectedSlot === slot
                               ? "bg-[#00a63e] text-white border-[#00a63e] shadow-sm scale-95"
                               : "bg-white text-gray-600 border-gray-100 hover:bg-gray-50"
-                          }`}
+                            }`}
                         >
                           {slot}
                         </button>
@@ -364,7 +498,6 @@ export default function ProductPageClient({ product, store }: { product: any; st
                   if (storeId) {
                     void trackMetric(storeId, "buy_now_click", { productId: product?.id || product?.uid });
                   }
-                  
                   // Continue with your existing checkout drawer state opening mechanism
                   setCheckoutModalOpen(true);
                 }}
@@ -373,12 +506,11 @@ export default function ProductPageClient({ product, store }: { product: any; st
                 {isOutOfStock
                   ? "Unavailable"
                   : isBooking
-                  ? "Confirm Booking"
-                  : isServiceOrUtility
-                  ? "Hire Now"
-                  : "Buy It Now"}
+                    ? "Confirm Booking"
+                    : isServiceOrUtility
+                      ? "Hire Now"
+                      : "Buy It Now"}
               </button>
-              
               {/* 🌟 UPDATED: Now uses the dedicated premium WhatsApp tracking handler */}
               <a
                 href={whatsappUrl}
@@ -422,19 +554,180 @@ export default function ProductPageClient({ product, store }: { product: any; st
               {isBooking ? "Complete Booking" : isServiceOrUtility ? "Complete Hire" : "Checkout Order"}
             </h2>
 
-            {/* Shipping State Picker */}
+            {/* SHIPBUBBLE DELIVERY DETAILS */}
             {!isBooking && !isServiceOrUtility && (
-              <div className="mb-4 space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block">Ship Destination State:</label>
-                <select
-                  className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900 transition-all cursor-pointer"
-                  value={selectedState}
-                  onChange={(e) => handleStateChange(e.target.value)}
-                  disabled={isLoading}
+              <div className="mb-5 space-y-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
+                    Recipient Full Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Enter recipient's full name"
+                    value={recipientName}
+                    onChange={(e) => {
+                      setRecipientName(e.target.value);
+                      setSelectedCourier(null);
+                      setShippingRequestToken(null);
+                      setDeliveryFee(0);
+                    }}
+                    disabled={isLoading || isCalculatingShipping}
+                    className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
+                    Recipient Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="08012345678"
+                    value={recipientPhone}
+                    onChange={(e) => {
+                      setRecipientPhone(e.target.value);
+                      setSelectedCourier(null);
+                      setShippingRequestToken(null);
+                      setDeliveryFee(0);
+                    }}
+                    disabled={isLoading || isCalculatingShipping}
+                    className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
+                    Delivery State
+                  </label>
+                  <select
+                    className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900 transition-all cursor-pointer"
+                    value={selectedState}
+                    onChange={(e) => {
+                      setSelectedState(e.target.value);
+                      setShippingCouriers([]);
+                      setSelectedCourier(null);
+                      setShippingRequestToken(null);
+                      setDeliveryFee(0);
+                    }}
+                    disabled={isLoading || isCalculatingShipping}
+                  >
+                    <option value="">Select your State</option>
+                    {NIGERIA_STATES.map((state) => (
+                      <option key={state} value={state}>
+                        {state}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
+                    Full Delivery Address
+                  </label>
+                  <textarea
+                    placeholder="House number, street, area, city, state"
+                    value={deliveryAddress}
+                    onChange={(e) => {
+                      setDeliveryAddress(e.target.value);
+                      setShippingCouriers([]);
+                      setSelectedCourier(null);
+                      setShippingRequestToken(null);
+                      setDeliveryFee(0);
+                    }}
+                    disabled={isLoading || isCalculatingShipping}
+                    rows={3}
+                    className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900 resize-none"
+                  />
+                </div>
+
+                {/* CALCULATE DELIVERY BUTTON */}
+                <button
+                  type="button"
+                  onClick={handleCalculateShipping}
+                  disabled={
+                    isLoading ||
+                    isCalculatingShipping ||
+                    !selectedState ||
+                    !recipientName.trim() ||
+                    !recipientPhone.trim() ||
+                    !deliveryAddress.trim()
+                  }
+                  className="w-full py-3.5 rounded-xl bg-[#00a63e] text-white font-extrabold text-xs uppercase tracking-wider disabled:bg-gray-200 disabled:text-gray-400 transition-all active:scale-[0.98]"
                 >
-                  <option value="">Select your State</option>
-                  {NIGERIA_STATES.map(state => <option key={state} value={state}>{state}</option>)}
-                </select>
+                  {isCalculatingShipping ? "Calculating Delivery..." : "Calculate Delivery"}
+                </button>
+
+                {/* AVAILABLE COURIERS */}
+                {shippingCouriers.length > 0 && (
+                  <div className="space-y-2 pt-1">
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider">
+                      Select Delivery Option
+                    </p>
+
+                    {shippingCouriers.map((courier) => {
+                      const isSelected =
+                        selectedCourier?.courierId === courier.courierId &&
+                        selectedCourier?.serviceCode === courier.serviceCode;
+
+                      return (
+                        <button
+                          key={`${courier.courierId}-${courier.serviceCode}`}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCourier(courier);
+                            setDeliveryFee(Number(courier.total));
+                          }}
+                          disabled={isLoading}
+                          className={`w-full text-left p-4 rounded-xl border transition-all ${isSelected
+                              ? "border-[#00a63e] bg-[#f0fff4] ring-1 ring-[#00a63e]/20"
+                              : "border-gray-100 bg-white hover:border-gray-300"
+                            }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              {courier.courierImage ? (
+                                <img
+                                  src={courier.courierImage}
+                                  alt={courier.courierName}
+                                  className="w-9 h-9 rounded-lg object-contain border border-gray-100 bg-white"
+                                />
+                              ) : (
+                                <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
+                                  <Truck size={16} className="text-gray-500" />
+                                </div>
+                              )}
+
+                              <div className="min-w-0">
+                                <p className="font-extrabold text-xs text-gray-900 truncate">
+                                  {courier.courierName}
+                                </p>
+                                <p className="text-[10px] text-gray-500 font-medium mt-0.5">
+                                  {courier.deliveryEta}
+                                </p>
+                                {courier.serviceType === "dropoff" && courier.dropoffStation?.name && (
+                                  <p className="text-[9px] text-orange-600 font-bold mt-1">
+                                    Drop-off required
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <p className="font-black text-sm text-[#00a63e]">
+                                ₦{Number(courier.total).toLocaleString()}
+                              </p>
+                              {isSelected && (
+                                <p className="text-[9px] font-black uppercase text-[#00a63e] mt-1">
+                                  Selected
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -492,7 +785,6 @@ export default function ProductPageClient({ product, store }: { product: any; st
                 <CompactPaymentButton onClick={() => handlePayment("Nomba QR")} isLoading={isLoading} icon={<QrCode size={15} />} label="Scan QR" variant="purple" />
               </div>
             </div>
-
             <p className="text-center text-[9px] text-gray-400 mt-6 font-extrabold uppercase tracking-widest">Powered by Nomba Commerce Gateway</p>
           </div>
         </div>
@@ -511,7 +803,6 @@ function CompactPaymentButton({ onClick, isLoading, icon, label, variant }: { on
     blue: "bg-blue-50/70 text-blue-800 border border-blue-100 hover:bg-blue-50",
     purple: "bg-purple-50/70 text-purple-800 border border-purple-100 hover:bg-purple-50"
   };
-
   return (
     <button
       type="button"

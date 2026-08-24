@@ -1,20 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
+import {
   X, Upload, Plus, Trash2, Package,
-  Globe, Zap, Calendar, Truck, Box, Clock, CheckCircle, MapPin, Layers, Info, Loader2, ArrowUpRight
+  Globe, Zap, Calendar, Truck, Box, Clock, CheckCircle, MapPin, Layers, Info, Loader2, ArrowUpRight, Ruler, Weight
 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, increment, query, where, getCountFromServer, getDoc } from 'firebase/firestore';
 import AvailabilityManager from './AvailabilityManager';
 import { showToast } from '@/lib/toast';
+import { STORE_CATEGORIES } from '../nigeriaData';
 
-// ✅ 1. IMPORT THE COMPREHENSIVE CATEGORIES FROM YOUR DATA FILE
-// ⚠️ Adjust the path '../nigeriaData' if your file is located elsewhere (e.g., '@/lib/nigeriaData')
-import { STORE_CATEGORIES } from '../nigeriaData'; 
-
-// ✅ 2. MAP TABS TO SPECIFIC CATEGORY GROUPS
-// This ensures users only see relevant categories for the type of product they are adding
 type ProductType = 'physical' | 'service' | 'booking' | 'utility';
 type ProductImage = { file?: File; preview: string; isExisting: boolean };
 type ProductVariant = { type: string; value: string };
@@ -24,8 +19,22 @@ type ProductRecord = {
   images?: string[];
   features?: string[];
   variants?: ProductVariant[];
+  shipping?: {
+    weightKg?: number;
+    lengthCm?: number;
+    widthCm?: number;
+    heightCm?: number;
+    shipbubbleCategoryId?: number;
+  };
+  // Fallbacks for older flat structure
+  weightKg?: number;
+  packageLength?: number;
+  packageWidth?: number;
+  packageHeight?: number;
+  shipbubbleCategoryId?: number;
   [key: string]: any;
 };
+
 type ProductFormData = {
   name: string;
   description: string;
@@ -39,7 +48,16 @@ type ProductFormData = {
   metricType: string;
   unitLabel: string;
   locationType: string;
+  // NESTED SHIPPING DETAILS
+  shipping: {
+    weightKg: string;
+    lengthCm: string;
+    widthCm: string;
+    heightCm: string;
+    shipbubbleCategoryId: string;
+  };
 };
+
 type AddProductModalProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -66,28 +84,32 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [savedProductId, setSavedProductId] = useState<string | null>(null);
 
-  // --- Subscription Limit States ---
   const [currentCount, setCurrentCount] = useState(0);
   const [productLimit, setProductLimit] = useState(20);
   const [loadingLimits, setLoadingLimits] = useState(true);
 
-  // ✅ 3. UPDATED FORM STATE (Replaced 'category' with 'mainCategory' & 'subCategory')
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
     description: '',
     price: '',
     discountPrice: '',
-    mainCategory: '', 
+    mainCategory: '',
     subCategory: '',
     stockCount: '1',
     deliveryType: 'state',
     duration: '1 Hour',
     metricType: 'flat',
     unitLabel: 'Service',
-    locationType: 'remote'
+    locationType: 'remote',
+    shipping: {
+      weightKg: '',
+      lengthCm: '',
+      widthCm: '',
+      heightCm: '',
+      shipbubbleCategoryId: '1'
+    }
   });
 
-  // ✅ 4. HELPER FUNCTIONS FOR CASCADING DROPDOWNS
   const getAvailableCategories = () => {
     const allowedIds = TAB_CATEGORY_MAP[productType] || [];
     return STORE_CATEGORIES.filter(cat => allowedIds.includes(cat.id));
@@ -109,14 +131,22 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         description: initialData.description || '',
         price: initialData.price || '',
         discountPrice: initialData.discountPrice || '',
-        mainCategory: initialData.mainCategory || '', 
+        mainCategory: initialData.mainCategory || '',
         subCategory: initialData.subCategory || '',
         stockCount: initialData.stockCount || '1',
         deliveryType: initialData.deliveryType || 'state',
         duration: initialData.duration || '1 Hour',
         metricType: initialData.metricType || 'flat',
         unitLabel: initialData.unitLabel || 'Service',
-        locationType: initialData.locationType || 'remote'
+        locationType: initialData.locationType || 'remote',
+        // Map nested structure, with fallbacks for legacy flat fields
+        shipping: {
+          weightKg: String(initialData.shipping?.weightKg || initialData.weightKg || ''),
+          lengthCm: String(initialData.shipping?.lengthCm || initialData.packageLength || ''),
+          widthCm: String(initialData.shipping?.widthCm || initialData.packageWidth || ''),
+          heightCm: String(initialData.shipping?.heightCm || initialData.packageHeight || ''),
+          shipbubbleCategoryId: String(initialData.shipping?.shipbubbleCategoryId || initialData.shipbubbleCategoryId || '1')
+        }
       });
     } else if (isOpen) {
       setProductType('physical');
@@ -127,16 +157,15 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
       setFormData({
         name: '', description: '', price: '', discountPrice: '',
         mainCategory: '', subCategory: '', stockCount: '1', deliveryType: 'state',
-        duration: '1 Hour', metricType: 'flat', unitLabel: 'Service', locationType: 'remote'
+        duration: '1 Hour', metricType: 'flat', unitLabel: 'Service', locationType: 'remote',
+        shipping: { weightKg: '', lengthCm: '', widthCm: '', heightCm: '', shipbubbleCategoryId: '1' }
       });
     }
 
-    // --- Fetch Real-time Subscription Limits ---
     const fetchUsageAndLimits = async () => {
       if (!isOpen) return;
       const user = auth.currentUser;
       if (!user) return;
-
       try {
         setLoadingLimits(true);
         const userDocRef = doc(db, "users", user.uid);
@@ -144,7 +173,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         if (userDocSnap.exists() && userDocSnap.data().productLimit !== undefined) {
           setProductLimit(userDocSnap.data().productLimit);
         }
-
         const productsRef = collection(db, "products");
         const q = query(productsRef, where("storeId", "==", user.uid));
         const countSnapshot = await getCountFromServer(q);
@@ -155,7 +183,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         setLoadingLimits(false);
       }
     };
-
     fetchUsageAndLimits();
   }, [initialData, isOpen]);
 
@@ -166,7 +193,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
     const data = new FormData();
     data.append("file", file);
     data.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-
     try {
       const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
         method: "POST",
@@ -184,7 +210,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.currentTarget.files || []);
     if (files.length === 0) return;
-
     const newImages = files.map(file => ({
       file,
       preview: URL.createObjectURL(file as Blob),
@@ -199,22 +224,29 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>) => {
     if (e) e.preventDefault();
-
     if (currentCount >= productLimit && !initialData) {
       showToast("error", `You have reached your limit of ${productLimit} products. Please upgrade to add more.`);
       router.push('/pricing');
       return;
     }
 
-    setLoading(true);
+    // STRICT VALIDATION FOR PHYSICAL PRODUCTS
+    if (productType === 'physical') {
+      const { weightKg, lengthCm, widthCm, heightCm } = formData.shipping;
+      if (!weightKg || !lengthCm || !widthCm || !heightCm ||
+        Number(weightKg) <= 0 || Number(lengthCm) <= 0 || Number(widthCm) <= 0 || Number(heightCm) <= 0) {
+        showToast("error", "Please enter valid package weight and dimensions for physical products.");
+        return;
+      }
+    }
 
+    setLoading(true);
     const user = auth.currentUser;
     if (!user) {
       showToast("error", "You must be logged in to publish a product.");
       setLoading(false);
       return;
     }
-
     try {
       const imageUrls = await Promise.all(
         images.map(async (img) => {
@@ -224,7 +256,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         })
       );
 
-      // ✅ 5. UPDATED PAYLOAD TO INCLUDE MAIN & SUB CATEGORIES
       const payload = {
         name: formData.name,
         description: formData.description,
@@ -232,7 +263,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         discountPrice: formData.discountPrice ? parseFloat(formData.discountPrice) : null,
         mainCategory: formData.mainCategory,
         subCategory: formData.subCategory,
-        category: formData.subCategory, // Kept for backward compatibility with older queries
+        category: formData.subCategory,
         productType,
         trackInventory: productType === 'physical',
         images: imageUrls.filter((url): url is string => url !== null),
@@ -241,15 +272,24 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         storeId: user.uid,
         updatedAt: serverTimestamp(),
         stockCount: parseInt(formData.stockCount) || 0,
-
         ...(productType === 'utility' && { metricType: formData.metricType, unitLabel: formData.unitLabel }),
-        ...(productType === 'physical' && { deliveryType: formData.deliveryType, stockCount: parseInt(formData.stockCount) }),
+        ...(productType === 'physical' && {
+          deliveryType: formData.deliveryType,
+          stockCount: parseInt(formData.stockCount),
+          // NESTED SHIPPING OBJECT
+          shipping: {
+            weightKg: parseFloat(formData.shipping.weightKg),
+            lengthCm: parseFloat(formData.shipping.lengthCm),
+            widthCm: parseFloat(formData.shipping.widthCm),
+            heightCm: parseFloat(formData.shipping.heightCm),
+            shipbubbleCategoryId: parseInt(formData.shipping.shipbubbleCategoryId) || 1
+          }
+        }),
         ...(productType === 'service' && { fulfillmentMethod: formData.deliveryType, turnaroundTime: formData.duration }),
         ...(productType === 'booking' && { duration: formData.duration, locationType: formData.locationType, maxDaily: parseInt(formData.stockCount) }),
       };
 
       let productId = initialData?.id;
-
       if (initialData?.id) {
         await updateDoc(doc(db, "products", initialData.id), payload);
       } else {
@@ -258,7 +298,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
           createdAt: serverTimestamp(),
         });
         productId = docRef.id;
-
         const storeRef = doc(db, "stores", user.uid);
         await updateDoc(storeRef, {
           productCount: increment(1)
@@ -283,15 +322,10 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 text-slate-900">
       <div className="bg-white w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
-
         {savedProductId ? (
-          <AvailabilityManager
-            productId={savedProductId}
-            onSaveSuccess={onClose}
-          />
+          <AvailabilityManager productId={savedProductId} onSaveSuccess={onClose} />
         ) : (
           <>
-            {/* Header */}
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">{initialData ? 'Update Listing' : 'Create New Listing'}</h2>
@@ -302,7 +336,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
               </button>
             </div>
 
-            {/* Tabs */}
             <div className="flex bg-gray-100 p-1 mx-6 mt-4 rounded-xl">
               {(['physical', 'service', 'booking', 'utility'] as ProductType[]).map((type) => (
                 <button
@@ -311,7 +344,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                   disabled={!!initialData}
                   onClick={() => {
                     setProductType(type);
-                    // ✅ Reset categories when switching tabs so they don't mismatch
                     setFormData(prev => ({ ...prev, mainCategory: '', subCategory: '' }));
                   }}
                   className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-bold uppercase tracking-tight rounded-lg transition-all ${productType === type
@@ -331,7 +363,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
 
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-
                 {/* Column 1: Media & Price */}
                 <div className="space-y-6">
                   <div className="space-y-2">
@@ -367,7 +398,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                 <div className="space-y-6">
                   <input required placeholder="Product Title" className="text-xl font-bold w-full outline-none border-b border-gray-100 pb-2" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                   <textarea placeholder="Description..." className="w-full h-32 text-sm text-gray-600 outline-none bg-gray-50/50 p-3 rounded-xl border border-transparent focus:border-gray-100" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
-
                   <div className="space-y-3">
                     <label className="text-[9px] font-bold text-gray-400 uppercase flex items-center gap-1"><Layers size={12} /> Variations (Attributes)</label>
                     {variants.map((v, i) => (
@@ -402,19 +432,53 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                 {/* Column 3: SETTINGS */}
                 <div className="space-y-4">
                   {productType === 'physical' && (
-                    <div className="animate-in slide-in-from-right-4 p-4 bg-emerald-50/30 rounded-2xl border border-emerald-100 space-y-3">
+                    <div className="animate-in slide-in-from-right-4 p-4 bg-emerald-50/30 rounded-2xl border border-emerald-100 space-y-4">
                       <label className="text-[9px] font-bold text-emerald-600 uppercase flex items-center gap-1"><Box size={12} /> Inventory & Shipping</label>
+
                       <div>
                         <label className="text-[10px] text-gray-500 block mb-1">Available Stock Quantity</label>
                         <input type="number" className="w-full bg-white border border-emerald-100 rounded-lg p-2 text-xs outline-none" value={formData.stockCount} onChange={e => setFormData({ ...formData, stockCount: e.target.value })} />
                       </div>
-                      <div className="pt-2">
+
+                      <div className="pt-2 border-t border-emerald-100">
                         <label className="text-[10px] text-gray-500 block mb-2">Fulfillment Region</label>
                         <div className="flex flex-col gap-2">
                           {['state', 'nationwide'].map(opt => (
-                            <label key={opt} className="flex items-center gap-2 text-xs cursor-pointer"><input type="radio" checked={formData.deliveryType === opt} onChange={() => setFormData({ ...formData, deliveryType: opt })} style={{ accentColor: BRAND_GREEN }} /> {opt} Delivery</label>
+                            <label key={opt} className="flex items-center gap-2 text-xs cursor-pointer">
+                              <input type="radio" checked={formData.deliveryType === opt} onChange={() => setFormData({ ...formData, deliveryType: opt })} style={{ accentColor: BRAND_GREEN }} /> {opt} Delivery
+                            </label>
                           ))}
                         </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-emerald-100 space-y-3">
+                        <label className="text-[9px] font-bold text-emerald-600 uppercase flex items-center gap-1"><Ruler size={12} /> Package Dimensions & Weight</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="col-span-2">
+                            <label className="text-[9px] text-gray-500 block mb-1">Weight (kg) *</label>
+                            <input type="number" step="0.1" required className="w-full bg-white border border-emerald-100 rounded-lg p-2 text-xs outline-none" value={formData.shipping.weightKg} onChange={e => setFormData({ ...formData, shipping: { ...formData.shipping, weightKg: e.target.value } })} />
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-gray-500 block mb-1">Length (cm) *</label>
+                            <input type="number" required className="w-full bg-white border border-emerald-100 rounded-lg p-2 text-xs outline-none" value={formData.shipping.lengthCm} onChange={e => setFormData({ ...formData, shipping: { ...formData.shipping, lengthCm: e.target.value } })} />
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-gray-500 block mb-1">Width (cm) *</label>
+                            <input type="number" required className="w-full bg-white border border-emerald-100 rounded-lg p-2 text-xs outline-none" value={formData.shipping.widthCm} onChange={e => setFormData({ ...formData, shipping: { ...formData.shipping, widthCm: e.target.value } })} />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="text-[9px] text-gray-500 block mb-1">Height (cm) *</label>
+                            <input type="number" required className="w-full bg-white border border-emerald-100 rounded-lg p-2 text-xs outline-none" value={formData.shipping.heightCm} onChange={e => setFormData({ ...formData, shipping: { ...formData.shipping, heightCm: e.target.value } })} />
+                          </div>
+                        </div>
+                        <div className="mt-2">
+                          <label className="text-[9px] text-gray-500 block mb-1">Shipbubble Category ID</label>
+                          <input type="number" className="w-full bg-white border border-emerald-100 rounded-lg p-2 text-xs outline-none" value={formData.shipping.shipbubbleCategoryId} onChange={e => setFormData({ ...formData, shipping: { ...formData.shipping, shipbubbleCategoryId: e.target.value } })} />
+                        </div>
+                        <p className="text-[9px] text-emerald-700/70 mt-1 flex items-start gap-1">
+                          <Info size={10} className="mt-0.5 shrink-0" />
+                          Accurate dimensions prevent unexpected courier surcharges.
+                        </p>
                       </div>
                     </div>
                   )}
@@ -423,12 +487,11 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                     <div className="animate-in slide-in-from-right-4 p-4 bg-purple-50/30 rounded-2xl border border-purple-100 space-y-3">
                       <label className="text-[9px] font-bold text-purple-600 uppercase flex items-center gap-1"><Calendar size={12} /> Session Capacity</label>
                       <input type="number" className="w-full bg-white border border-purple-100 rounded-lg p-2 text-xs" placeholder="Max daily bookings" value={formData.stockCount} onChange={e => setFormData({ ...formData, stockCount: e.target.value })} />
-
                       <label className="text-[9px] font-bold text-purple-600 uppercase flex items-center gap-1"><MapPin size={12} /> Location</label>
                       <select className="w-full bg-white border border-purple-100 rounded-lg p-2 text-xs outline-none" value={formData.locationType} onChange={e => setFormData({ ...formData, locationType: e.target.value })}>
-                        <option value="remote">Remote / Digital</option><option value="physical">Physical Address</option>
+                        <option value="remote">Remote / Digital</option>
+                        <option value="physical">Physical Address</option>
                       </select>
-
                       <div className="mt-4 p-3 bg-white/60 border border-purple-200 rounded-xl flex gap-2 items-start shadow-sm">
                         <Info size={14} className="text-purple-600 mt-0.5 flex-shrink-0" />
                         <p className="text-[10px] text-purple-800 leading-tight">
@@ -442,7 +505,9 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                     <div className="animate-in slide-in-from-right-4 p-4 bg-blue-50/30 rounded-2xl border border-blue-100 space-y-3">
                       <label className="text-[9px] font-bold text-blue-600 uppercase flex items-center gap-1"><Globe size={12} /> Delivery Method</label>
                       <select className="w-full bg-white border border-blue-100 rounded-lg p-2 text-xs outline-none" value={formData.deliveryType} onChange={e => setFormData({ ...formData, deliveryType: e.target.value })}>
-                        <option value="whatsapp">WhatsApp Document</option><option value="email">Email</option><option value="link">Direct Link</option>
+                        <option value="whatsapp">WhatsApp Document</option>
+                        <option value="email">Email</option>
+                        <option value="link">Direct Link</option>
                       </select>
                       <label className="text-[9px] font-bold text-blue-600 uppercase flex items-center gap-1"><Clock size={12} /> Turnaround Time</label>
                       <input className="w-full bg-white border border-blue-100 rounded-lg p-2 text-xs" placeholder="Ex: 24 Hours" value={formData.duration} onChange={e => setFormData({ ...formData, duration: e.target.value })} />
@@ -453,21 +518,20 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                     <div className="animate-in slide-in-from-right-4 p-4 bg-orange-50/30 rounded-2xl border border-orange-100 space-y-3">
                       <label className="text-[9px] font-bold text-orange-600 uppercase flex items-center gap-1"><Zap size={12} /> Billing Type</label>
                       <select className="w-full bg-white border border-orange-100 rounded-lg p-2 text-xs outline-none" value={formData.metricType} onChange={e => setFormData({ ...formData, metricType: e.target.value })}>
-                        <option value="flat">Flat Fee</option><option value="hourly">Hourly</option><option value="usage">Per Unit</option>
+                        <option value="flat">Flat Fee</option>
+                        <option value="hourly">Hourly</option>
+                        <option value="usage">Per Unit</option>
                       </select>
                       <input className="w-full bg-white border border-orange-100 rounded-lg p-2 text-xs" placeholder="Unit (e.g. KM, Hour)" value={formData.unitLabel} onChange={e => setFormData({ ...formData, unitLabel: e.target.value })} />
                     </div>
                   )}
 
-                  {/* ✅ 6. NEW CASCADING CATEGORY DROPDOWNS */}
                   <div className="space-y-3 pt-2">
                     <label className="text-[9px] font-bold text-gray-400 uppercase block mb-1">Global Category</label>
-                    
-                    {/* Main Category Dropdown */}
-                    <select 
-                      required 
-                      className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-xs outline-none font-medium" 
-                      value={formData.mainCategory} 
+                    <select
+                      required
+                      className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-xs outline-none font-medium"
+                      value={formData.mainCategory}
                       onChange={e => setFormData({ ...formData, mainCategory: e.target.value, subCategory: '' })}
                     >
                       <option value="">Select Main Category</option>
@@ -475,13 +539,11 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </select>
-
-                    {/* Subcategory Dropdown (Animates in when Main is selected) */}
                     {formData.mainCategory && (
-                      <select 
-                        required 
-                        className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-xs outline-none font-medium animate-in fade-in slide-in-from-top-2 duration-200" 
-                        value={formData.subCategory} 
+                      <select
+                        required
+                        className="w-full bg-gray-50 border border-gray-100 rounded-xl p-3 text-xs outline-none font-medium animate-in fade-in slide-in-from-top-2 duration-200"
+                        value={formData.subCategory}
                         onChange={e => setFormData({ ...formData, subCategory: e.target.value })}
                       >
                         <option value="">Select Subcategory</option>
@@ -495,7 +557,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
               </div>
             </form>
 
-            {/* Footer with Limit Tracking */}
             <div className="flex flex-col items-stretch gap-4 border-t border-gray-100 bg-gray-50/30 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:p-6">
               <div className="flex min-w-0 max-w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                 {loadingLimits ? (
@@ -515,7 +576,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                   </div>
                 )}
               </div>
-
               <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:gap-3">
                 <button onClick={onClose} type="button" className="flex-1 px-3 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-900 transition-colors sm:flex-none sm:px-6">Discard</button>
                 <button
