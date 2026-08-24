@@ -2,8 +2,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Plus, Minus, ShieldCheck, Truck, ChevronLeft, ChevronRight,
-  CreditCard, Banknote, X, Box, Loader2, Smartphone, QrCode,
-  Calendar, CheckCircle2, MessageCircle
+  CreditCard, X, Box, Loader2, Calendar, MessageCircle, CheckCircle2
 } from "lucide-react";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { trackMetric } from "@/lib/analytics";
@@ -384,9 +383,9 @@ export default function ProductPageClient({ product, store }: { product: any; st
                 {/* TODO: [FUTURE FEATURE] Implement Reviews and Ratings system (Star rating component + Firestore subcollection) */}
                 {/* Dynamic Status Badging Block */}
                 <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-extrabold uppercase tracking-tight ${isOutOfStock ? "bg-red-50 border-red-100 text-red-600" :
-                    isBooking ? "bg-purple-50 border-purple-100 text-purple-600" :
-                      isServiceOrUtility ? "bg-emerald-50 border-emerald-100 text-emerald-600" :
-                        "bg-orange-50 border-orange-100 text-orange-600"
+                  isBooking ? "bg-purple-50 border-purple-100 text-purple-600" :
+                    isServiceOrUtility ? "bg-emerald-50 border-emerald-100 text-emerald-600" :
+                      "bg-orange-50 border-orange-100 text-orange-600"
                   }`}>
                   <Box size={10} />
                   <span>
@@ -430,8 +429,8 @@ export default function ProductPageClient({ product, store }: { product: any; st
                         type="button"
                         onClick={() => setSelectedDate(date)}
                         className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${selectedDate === date
-                            ? "bg-black text-white border-black shadow-sm scale-98"
-                            : "bg-white text-gray-600 border-gray-100 hover:border-gray-200"
+                          ? "bg-black text-white border-black shadow-sm scale-98"
+                          : "bg-white text-gray-600 border-gray-100 hover:border-gray-200"
                           }`}
                       >
                         {new Date(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
@@ -451,8 +450,8 @@ export default function ProductPageClient({ product, store }: { product: any; st
                           type="button"
                           onClick={() => setSelectedSlot(slot)}
                           className={`py-2 rounded-xl text-[11px] font-extrabold border transition-all ${selectedSlot === slot
-                              ? "bg-[#00a63e] text-white border-[#00a63e] shadow-sm scale-95"
-                              : "bg-white text-gray-600 border-gray-100 hover:bg-gray-50"
+                            ? "bg-[#00a63e] text-white border-[#00a63e] shadow-sm scale-95"
+                            : "bg-white text-gray-600 border-gray-100 hover:bg-gray-50"
                             }`}
                         >
                           {slot}
@@ -540,7 +539,9 @@ export default function ProductPageClient({ product, store }: { product: any; st
       {checkoutModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isLoading && setCheckoutModalOpen(false)} />
-          <div className="relative bg-white rounded-[24px] w-full max-w-md p-6 shadow-2xl border border-gray-50 overflow-y-auto max-h-[92vh]">
+
+          {/* ✅ UPDATED: Rectangular layout (max-w-lg) that fits perfectly on mobile (max-h-[90vh]) and web */}
+          <div className="relative bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-gray-50 overflow-y-auto max-h-[90vh] md:max-h-[85vh]">
             <button
               type="button"
               onClick={() => setCheckoutModalOpen(false)}
@@ -625,7 +626,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
                     Full Delivery Address
                   </label>
                   <textarea
-                    placeholder="House number, street, area, city, state"
+                    placeholder="e.g. Plot 6992 Opposite Mining Gate Rantiya Abuja FCT Nigeria"
                     value={deliveryAddress}
                     onChange={(e) => {
                       setDeliveryAddress(e.target.value);
@@ -679,8 +680,8 @@ export default function ProductPageClient({ product, store }: { product: any; st
                           }}
                           disabled={isLoading}
                           className={`w-full text-left p-4 rounded-xl border transition-all ${isSelected
-                              ? "border-[#00a63e] bg-[#f0fff4] ring-1 ring-[#00a63e]/20"
-                              : "border-gray-100 bg-white hover:border-gray-300"
+                            ? "border-[#00a63e] bg-[#f0fff4] ring-1 ring-[#00a63e]/20"
+                            : "border-gray-100 bg-white hover:border-gray-300"
                             }`}
                         >
                           <div className="flex items-center justify-between gap-3">
@@ -775,16 +776,18 @@ export default function ProductPageClient({ product, store }: { product: any; st
               </div>
             )}
 
-            {/* Encrypted Processing Triggers */}
-            <div className="space-y-2">
+            {/* ✅ UPDATED: Encrypted Processing Triggers (Only Card Payment) */}
+            <div className="space-y-3">
               <h4 className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Select Payment Protocol</h4>
-              <CompactPaymentButton onClick={() => handlePayment("Card")} isLoading={isLoading} icon={<CreditCard size={15} />} label="Pay via Card" variant="dark" />
-              <CompactPaymentButton onClick={() => handlePayment("Transfer")} isLoading={isLoading} icon={<Banknote size={15} />} label="Bank Instant Transfer" variant="light" />
-              <div className="grid grid-cols-2 gap-2">
-                <CompactPaymentButton onClick={() => handlePayment("USSD")} isLoading={isLoading} icon={<Smartphone size={15} />} label="USSD Code" variant="blue" />
-                <CompactPaymentButton onClick={() => handlePayment("Nomba QR")} isLoading={isLoading} icon={<QrCode size={15} />} label="Scan QR" variant="purple" />
-              </div>
+              <CompactPaymentButton
+                onClick={() => handlePayment("Card")}
+                isLoading={isLoading}
+                icon={<CreditCard size={15} />}
+                label="Pay via Card"
+                variant="dark"
+              />
             </div>
+
             <p className="text-center text-[9px] text-gray-400 mt-6 font-extrabold uppercase tracking-widest">Powered by Nomba Commerce Gateway</p>
           </div>
         </div>
