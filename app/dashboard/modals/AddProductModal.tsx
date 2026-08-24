@@ -206,7 +206,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
       try {
         const response = await fetch('/api/shipping/categories');
         const data = await response.json();
-        
+
         if (response.ok && data.success && data.categories?.length > 0) {
           setShipbubbleCategories(data.categories);
         } else {
@@ -220,7 +220,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         setIsLoadingCategories(false);
       }
     };
-    
+
     if (isOpen) {
       fetchShipbubbleCategories();
     }
