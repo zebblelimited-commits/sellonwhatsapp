@@ -28,8 +28,8 @@ const DEFAULT_SHIPBUBBLE_CATEGORIES: ShipbubbleCategory[] = [
   { id: "70830897", name: "Electronic gadgets" },
   { id: "66484941", name: "Jewelry" },
   { id: "69709726", name: "Food" },
-  { id: "98246239", name: "Fashion wears" },
-  { id: "1", name: "General / Other" }
+  { id: "98246239", name: "Fashion wears" }
+
 ];
 
 type ProductRecord = {
