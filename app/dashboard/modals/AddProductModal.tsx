@@ -13,6 +13,18 @@ import { STORE_CATEGORIES } from '../nigeriaData';
 type ProductType = 'physical' | 'service' | 'booking' | 'utility';
 type ProductImage = { file?: File; preview: string; isExisting: boolean };
 type ProductVariant = { type: string; value: string };
+
+// ✅ VALID SHIPBUBBLE CATEGORIES
+const SHIPBUBBLE_CATEGORIES = [
+  { id: "90097994", name: "Accessories" },
+  { id: "3035980", name: "Electronics" },
+  { id: "70830897", name: "Electronic gadgets" },
+  { id: "66484941", name: "Jewelry" },
+  { id: "69709726", name: "Food" },
+  { id: "98246239", name: "Fashion wears" },
+  { id: "1", name: "General / Other" } // Fallback
+];
+
 type ProductRecord = {
   id?: string;
   productType?: ProductType;
@@ -26,12 +38,6 @@ type ProductRecord = {
     heightCm?: number;
     shipbubbleCategoryId?: number;
   };
-  // Fallbacks for older flat structure
-  weightKg?: number;
-  packageLength?: number;
-  packageWidth?: number;
-  packageHeight?: number;
-  shipbubbleCategoryId?: number;
   [key: string]: any;
 };
 
@@ -48,7 +54,6 @@ type ProductFormData = {
   metricType: string;
   unitLabel: string;
   locationType: string;
-  // NESTED SHIPPING DETAILS
   shipping: {
     weightKg: string;
     lengthCm: string;
@@ -106,7 +111,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
       lengthCm: '',
       widthCm: '',
       heightCm: '',
-      shipbubbleCategoryId: '1'
+      shipbubbleCategoryId: '1' // Default to General/Other
     }
   });
 
@@ -139,13 +144,12 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         metricType: initialData.metricType || 'flat',
         unitLabel: initialData.unitLabel || 'Service',
         locationType: initialData.locationType || 'remote',
-        // Map nested structure, with fallbacks for legacy flat fields
         shipping: {
-          weightKg: String(initialData.shipping?.weightKg || initialData.weightKg || ''),
-          lengthCm: String(initialData.shipping?.lengthCm || initialData.packageLength || ''),
-          widthCm: String(initialData.shipping?.widthCm || initialData.packageWidth || ''),
-          heightCm: String(initialData.shipping?.heightCm || initialData.packageHeight || ''),
-          shipbubbleCategoryId: String(initialData.shipping?.shipbubbleCategoryId || initialData.shipbubbleCategoryId || '1')
+          weightKg: String(initialData.shipping?.weightKg || ''),
+          lengthCm: String(initialData.shipping?.lengthCm || ''),
+          widthCm: String(initialData.shipping?.widthCm || ''),
+          heightCm: String(initialData.shipping?.heightCm || ''),
+          shipbubbleCategoryId: String(initialData.shipping?.shipbubbleCategoryId || '1')
         }
       });
     } else if (isOpen) {
@@ -232,10 +236,14 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
 
     // STRICT VALIDATION FOR PHYSICAL PRODUCTS
     if (productType === 'physical') {
-      const { weightKg, lengthCm, widthCm, heightCm } = formData.shipping;
+      const { weightKg, lengthCm, widthCm, heightCm, shipbubbleCategoryId } = formData.shipping;
       if (!weightKg || !lengthCm || !widthCm || !heightCm ||
         Number(weightKg) <= 0 || Number(lengthCm) <= 0 || Number(widthCm) <= 0 || Number(heightCm) <= 0) {
         showToast("error", "Please enter valid package weight and dimensions for physical products.");
+        return;
+      }
+      if (!shipbubbleCategoryId) {
+        showToast("error", "Please select a valid Shipbubble package category.");
         return;
       }
     }
@@ -276,7 +284,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         ...(productType === 'physical' && {
           deliveryType: formData.deliveryType,
           stockCount: parseInt(formData.stockCount),
-          // NESTED SHIPPING OBJECT
           shipping: {
             weightKg: parseFloat(formData.shipping.weightKg),
             lengthCm: parseFloat(formData.shipping.lengthCm),
@@ -471,13 +478,25 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                             <input type="number" required className="w-full bg-white border border-emerald-100 rounded-lg p-2 text-xs outline-none" value={formData.shipping.heightCm} onChange={e => setFormData({ ...formData, shipping: { ...formData.shipping, heightCm: e.target.value } })} />
                           </div>
                         </div>
+
+                        {/* ✅ UPDATED: Dropdown for Valid Shipbubble Categories */}
                         <div className="mt-2">
-                          <label className="text-[9px] text-gray-500 block mb-1">Shipbubble Category ID</label>
-                          <input type="number" className="w-full bg-white border border-emerald-100 rounded-lg p-2 text-xs outline-none" value={formData.shipping.shipbubbleCategoryId} onChange={e => setFormData({ ...formData, shipping: { ...formData.shipping, shipbubbleCategoryId: e.target.value } })} />
+                          <label className="text-[9px] text-gray-500 block mb-1">Shipbubble Category *</label>
+                          <select
+                            required
+                            className="w-full bg-white border border-emerald-100 rounded-lg p-2 text-xs outline-none"
+                            value={formData.shipping.shipbubbleCategoryId}
+                            onChange={e => setFormData({ ...formData, shipping: { ...formData.shipping, shipbubbleCategoryId: e.target.value } })}
+                          >
+                            {SHIPBUBBLE_CATEGORIES.map(cat => (
+                              <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
+                          </select>
                         </div>
+
                         <p className="text-[9px] text-emerald-700/70 mt-1 flex items-start gap-1">
                           <Info size={10} className="mt-0.5 shrink-0" />
-                          Accurate dimensions prevent unexpected courier surcharges.
+                          Accurate dimensions and category prevent unexpected courier surcharges.
                         </p>
                       </div>
                     </div>
