@@ -122,7 +122,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
       lengthCm: '',
       widthCm: '',
       heightCm: '',
-      shipbubbleCategoryId: '1' // Default to General/Other
+      shipbubbleCategoryId: '90097994' // Default to General/Other
     }
   });
 
@@ -160,7 +160,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
           lengthCm: String(initialData.shipping?.lengthCm || ''),
           widthCm: String(initialData.shipping?.widthCm || ''),
           heightCm: String(initialData.shipping?.heightCm || ''),
-          shipbubbleCategoryId: String(initialData.shipping?.shipbubbleCategoryId || '1')
+          shipbubbleCategoryId: String(initialData.shipping?.shipbubbleCategoryId || '90097994')
         }
       });
     } else if (isOpen) {
@@ -173,7 +173,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         name: '', description: '', price: '', discountPrice: '',
         mainCategory: '', subCategory: '', stockCount: '1', deliveryType: 'state',
         duration: '1 Hour', metricType: 'flat', unitLabel: 'Service', locationType: 'remote',
-        shipping: { weightKg: '', lengthCm: '', widthCm: '', heightCm: '', shipbubbleCategoryId: '1' }
+        shipping: { weightKg: '', lengthCm: '', widthCm: '', heightCm: '', shipbubbleCategoryId: '90097994' }
       });
     }
 
