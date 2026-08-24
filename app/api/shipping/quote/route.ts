@@ -299,7 +299,7 @@ export async function POST(req: NextRequest) {
         const packageLength = Number(shipping.lengthCm);
         const packageWidth = Number(shipping.widthCm);
         const packageHeight = Number(shipping.heightCm);
-        const shipbubbleCategoryId = Number(shipping.shipbubbleCategoryId || 1);
+        const shipbubbleCategoryId = String(shipping.shipbubbleCategoryId || "1");
 
         // Shipbubble pickup date format: yyyy-mm-dd
         const pickupDate = new Date().toISOString().split("T")[0];
