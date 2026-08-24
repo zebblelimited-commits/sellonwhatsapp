@@ -14,15 +14,22 @@ type ProductType = 'physical' | 'service' | 'booking' | 'utility';
 type ProductImage = { file?: File; preview: string; isExisting: boolean };
 type ProductVariant = { type: string; value: string };
 
-// ✅ VALID SHIPBUBBLE CATEGORIES
-const SHIPBUBBLE_CATEGORIES = [
+interface ShipbubbleCategory {
+  id: string | number;
+  name: string;
+  description?: string | null;
+  isActive?: boolean;
+}
+
+// Default fallback categories (used if API fetch fails)
+const DEFAULT_SHIPBUBBLE_CATEGORIES: ShipbubbleCategory[] = [
   { id: "90097994", name: "Accessories" },
   { id: "3035980", name: "Electronics" },
   { id: "70830897", name: "Electronic gadgets" },
   { id: "66484941", name: "Jewelry" },
   { id: "69709726", name: "Food" },
   { id: "98246239", name: "Fashion wears" },
-  { id: "1", name: "General / Other" } // Fallback
+  { id: "1", name: "General / Other" }
 ];
 
 type ProductRecord = {
@@ -92,6 +99,10 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
   const [currentCount, setCurrentCount] = useState(0);
   const [productLimit, setProductLimit] = useState(20);
   const [loadingLimits, setLoadingLimits] = useState(true);
+
+  // Shipbubble categories state - fetch from API on mount
+  const [shipbubbleCategories, setShipbubbleCategories] = useState<ShipbubbleCategory[]>(DEFAULT_SHIPBUBBLE_CATEGORIES);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
 
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
@@ -188,6 +199,31 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
       }
     };
     fetchUsageAndLimits();
+
+    // Fetch Shipbubble categories from API
+    const fetchShipbubbleCategories = async () => {
+      setIsLoadingCategories(true);
+      try {
+        const response = await fetch('/api/shipping/categories');
+        const data = await response.json();
+        
+        if (response.ok && data.success && data.categories?.length > 0) {
+          setShipbubbleCategories(data.categories);
+        } else {
+          console.warn('Failed to fetch Shipbubble categories, using defaults:', data);
+          // Keep default categories
+        }
+      } catch (error) {
+        console.error('Error fetching Shipbubble categories:', error);
+        // Keep default categories on error
+      } finally {
+        setIsLoadingCategories(false);
+      }
+    };
+    
+    if (isOpen) {
+      fetchShipbubbleCategories();
+    }
   }, [initialData, isOpen]);
 
   if (!isOpen) return null;
@@ -488,9 +524,13 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                             value={formData.shipping.shipbubbleCategoryId}
                             onChange={e => setFormData({ ...formData, shipping: { ...formData.shipping, shipbubbleCategoryId: e.target.value } })}
                           >
-                            {SHIPBUBBLE_CATEGORIES.map(cat => (
-                              <option key={cat.id} value={cat.id}>{cat.name}</option>
-                            ))}
+                            {isLoadingCategories ? (
+                              <option value="" disabled>Loading categories...</option>
+                            ) : (
+                              shipbubbleCategories.map(cat => (
+                                <option key={cat.id} value={String(cat.id)}>{cat.name}</option>
+                              ))
+                            )}
                           </select>
                         </div>
 
