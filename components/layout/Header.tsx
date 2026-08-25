@@ -4,12 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
-import { Search, LayoutDashboard, LogOut, ExternalLink, Store, Menu, X, ShoppingBag } from "lucide-react"; // ✅ Added ShoppingBag
+import { Search, LayoutDashboard, LogOut, ExternalLink, Store, Menu, X, ShoppingBag } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { collection, query as firestoreQuery, getDocs, getDoc, doc, limit } from "firebase/firestore";
 import { useCart } from "@/contexts/CartContext";
-import OffCanvasCart from "@/components/cart/OffCanvasCart"; // Adjust path
+import OffCanvasCart from "@/components/cart/OffCanvasCart";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
@@ -22,7 +22,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   const [isBuyer, setIsBuyer] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
+
   const { cartCount, toggleCart } = useCart();
 
   useEffect(() => {
@@ -145,19 +145,18 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   };
 
   const dashboardUrl = isAdmin ? "/admin" : isBuyer ? "/buyer/dashboard" : "/dashboard";
-  
 
-  // ✅ Reusable Cart Icon Component with Badge
-  const CartIcon = () => (
-  <button onClick={toggleCart} className="relative p-2 text-gray-600 hover:text-[#00a63e] transition-colors">
-    <ShoppingBag size={20} />
-    {cartCount > 0 && (
-      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#00a63e] text-[10px] font-bold text-white shadow-sm">
-        {cartCount > 9 ? "9+" : cartCount}
-      </span>
-    )}
-  </button>
-);
+  // Reusable Cart Icon Component with Badge
+  const CartIcon = ({ className = "" }: { className?: string }) => (
+    <button onClick={toggleCart} className={`relative p-2 text-gray-600 hover:text-[#00a63e] transition-colors ${className}`}>
+      <ShoppingBag size={20} />
+      {cartCount > 0 && (
+        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#00a63e] text-[10px] font-bold text-white shadow-sm">
+          {cartCount > 9 ? "9+" : cartCount}
+        </span>
+      )}
+    </button>
+  );
 
   return (
     <header className={`${font.className} flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 lg:px-6 py-3.5 border-b border-gray-200 bg-white sticky top-0 z-50`}>
@@ -185,9 +184,8 @@ export default function Header({ isStorePage = false, storeName = "" }) {
           </Link>
         </div>
 
-        {/* Mobile Action Buttons */}
+        {/* Mobile Action Buttons (Dashboard / Login / Logout) */}
         <div className="flex lg:hidden gap-1">
-          <CartIcon /> {/* ✅ Added to Mobile */}
           {user ? (
             <>
               <Link href={dashboardUrl} className="px-3 py-1.5 text-xs font-bold border border-gray-200 rounded-lg">
@@ -229,68 +227,73 @@ export default function Header({ isStorePage = false, storeName = "" }) {
         </div>
       )}
 
-      {/* Global Search with AJAX Overlay */}
-      <div ref={searchRef} className="w-full flex-1 min-w-[200px] lg:max-w-xs xl:max-w-md relative">
-        <form onSubmit={handleSearch} className="relative group z-[60]">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-green-600 transition-colors">
-            <Search size={18} strokeWidth={2.5} />
-          </div>
-          <input
-            value={query}
-            onFocus={() => setIsFocused(true)}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={isStorePage ? `Search in ${storeName}...` : "Search store @foodexpress or product..."}
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-600 transition-all bg-gray-50/50 focus:bg-white"
-          />
-        </form>
+      {/* Search Bar & Mobile Cart Icon Wrapper */}
+      <div className="flex items-center gap-2 w-full flex-1 min-w-[200px] lg:max-w-xs xl:max-w-md">
+        <div ref={searchRef} className="w-full flex-1 relative">
+          <form onSubmit={handleSearch} className="relative group z-[60]">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-green-600 transition-colors">
+              <Search size={18} strokeWidth={2.5} />
+            </div>
+            <input
+              value={query}
+              onFocus={() => setIsFocused(true)}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={isStorePage ? `Search in ${storeName}...` : "Search store @foodexpress or product..."}
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-600 transition-all bg-gray-50/50 focus:bg-white"
+            />
+          </form>
 
-        {/* AJAX DROPDOWN */}
-        {isFocused && (query.length > 0 || isSearching) && (
-          <div className="absolute top-full left-0 w-full bg-white mt-2 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-[50] animate-in fade-in slide-in-from-top-1">
-            {isSearching ? (
-              <div className="p-4 text-center text-xs text-gray-400">Searching...</div>
-            ) : (results.stores.length > 0 || results.products.length > 0) ? (
-              <div className="max-h-[400px] overflow-y-auto">
-                {results.stores.length > 0 && (
-                  <>
-                    <div className="px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Stores</div>
-                    {results.stores.map(s => (
-                      <Link key={s.id} href={`/${s.username}`} onClick={() => setIsFocused(false)} className="flex items-center gap-3 p-3 hover:bg-green-50 transition-colors border-b border-gray-50 last:border-0">
-                        <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600"><Store size={14} /></div>
-                        <div>
-                          <p className="text-xs font-bold text-gray-900">{s.storeName}</p>
-                          <p className="text-[10px] text-green-600">@{s.username}</p>
-                        </div>
-                      </Link>
-                    ))}
-                  </>
-                )}
+          {/* AJAX DROPDOWN */}
+          {isFocused && (query.length > 0 || isSearching) && (
+            <div className="absolute top-full left-0 w-full bg-white mt-2 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-[50] animate-in fade-in slide-in-from-top-1">
+              {isSearching ? (
+                <div className="p-4 text-center text-xs text-gray-400">Searching...</div>
+              ) : (results.stores.length > 0 || results.products.length > 0) ? (
+                <div className="max-h-[400px] overflow-y-auto">
+                  {results.stores.length > 0 && (
+                    <>
+                      <div className="px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Stores</div>
+                      {results.stores.map(s => (
+                        <Link key={s.id} href={`/${s.username}`} onClick={() => setIsFocused(false)} className="flex items-center gap-3 p-3 hover:bg-green-50 transition-colors border-b border-gray-50 last:border-0">
+                          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600"><Store size={14} /></div>
+                          <div>
+                            <p className="text-xs font-bold text-gray-900">{s.storeName}</p>
+                            <p className="text-[10px] text-green-600">@{s.username}</p>
+                          </div>
+                        </Link>
+                      ))}
+                    </>
+                  )}
 
-                {results.products.length > 0 && (
-                  <>
-                    <div className="px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Products</div>
-                    {results.products.map(p => (
-                      <Link key={p.id} href={`/products/${p.id}`} onClick={() => setIsFocused(false)} className="flex items-center gap-3 p-3 hover:bg-green-50 transition-colors border-b border-gray-50 last:border-0">
-                        <div className="w-8 h-8 rounded-lg bg-gray-100 overflow-hidden shrink-0">
-                          <img src={p.images?.[0] || p.image || "/placeholder.png"} className="w-full h-full object-cover" alt="" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-gray-900 truncate">{p.name}</p>
-                          <p className="text-[10px] text-gray-500">₦{Number(p.price).toLocaleString()}</p>
-                        </div>
-                      </Link>
-                    ))}
-                  </>
-                )}
-                <button onClick={handleSearch} className="w-full p-3 text-[11px] font-bold text-center text-gray-500 hover:bg-gray-50 border-t border-gray-50">
-                  Press Enter for all results
-                </button>
-              </div>
-            ) : (
-              <div className="p-6 text-center text-xs text-gray-400">No stores or products found</div>
-            )}
-          </div>
-        )}
+                  {results.products.length > 0 && (
+                    <>
+                      <div className="px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Products</div>
+                      {results.products.map(p => (
+                        <Link key={p.id} href={`/products/${p.id}`} onClick={() => setIsFocused(false)} className="flex items-center gap-3 p-3 hover:bg-green-50 transition-colors border-b border-gray-50 last:border-0">
+                          <div className="w-8 h-8 rounded-lg bg-gray-100 overflow-hidden shrink-0">
+                            <img src={p.images?.[0] || p.image || "/placeholder.png"} className="w-full h-full object-cover" alt="" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-gray-900 truncate">{p.name}</p>
+                            <p className="text-[10px] text-gray-500">₦{Number(p.price).toLocaleString()}</p>
+                          </div>
+                        </Link>
+                      ))}
+                    </>
+                  )}
+                  <button onClick={handleSearch} className="w-full p-3 text-[11px] font-bold text-center text-gray-500 hover:bg-gray-50 border-t border-gray-50">
+                    Press Enter for all results
+                  </button>
+                </div>
+              ) : (
+                <div className="p-6 text-center text-xs text-gray-400">No stores or products found</div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Mobile Cart Icon (positioned right next to search bar on mobile, hidden on desktop) */}
+        <CartIcon className="lg:hidden shrink-0" />
       </div>
 
       {/* Desktop Navigation Links */}
@@ -303,9 +306,9 @@ export default function Header({ isStorePage = false, storeName = "" }) {
         <Link href="/faq" className="hover:text-green-600 transition-colors whitespace-nowrap">FAQ</Link>
       </nav>
 
-      {/* Desktop Auth Buttons */}
+      {/* Desktop Auth & Cart Buttons */}
       <div className="hidden lg:flex items-center gap-2 shrink-0">
-        <CartIcon /> {/* ✅ Added to Desktop */}
+        <CartIcon />
         {user ? (
           <>
             {vendorUsername && (
