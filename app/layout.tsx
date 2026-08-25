@@ -3,9 +3,10 @@ import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { Suspense } from "react";
 import "./globals.css";
 
-// ✅ FIX: Pointed to the correct file in the /contexts folder
 import { AuthProvider } from "@/contexts/AuthContext";
+import { CartProvider } from "@/contexts/CartContext";
 import GlobalToast from "@/components/ui/GlobalToast";
+import OffCanvasCart from "@/components/cart/OffCanvasCart"; // ✅ Import it here
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -38,14 +39,18 @@ export default function RootLayout({
     <html lang="en" className={`${plusJakarta.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col font-sans" suppressHydrationWarning>
         <AuthProvider>
-          <GlobalToast />
-          <Suspense fallback={
-            <div className="min-h-screen flex items-center justify-center bg-white">
-              <div className="w-6 h-6 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
-            </div>
-          }>
-            {children}
-          </Suspense>
+          <CartProvider>
+            <GlobalToast />
+            <Suspense fallback={
+              <div className="min-h-screen flex items-center justify-center bg-white">
+                <div className="w-6 h-6 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+              </div>
+            }>
+              {children}
+            </Suspense>
+            {/* ✅ Add OffCanvasCart here so it's globally available */}
+            <OffCanvasCart />
+          </CartProvider>
         </AuthProvider>
       </body>
     </html>

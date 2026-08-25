@@ -5,7 +5,8 @@ import {
   CreditCard, X, Box, Loader2, Calendar, MessageCircle, CheckCircle2
 } from "lucide-react";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
-import { trackMetric } from "@/lib/analytics";
+import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
+import { useCart } from "@/contexts/CartContext"; // ✅ Import useCart
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import Header from "@/components/layout/Header";
@@ -28,17 +29,12 @@ interface ShippingCourier {
   courierId: string | number;
   courierName: string;
   courierImage: string | null;
-
   serviceCode: string | null;
   serviceType: string | null;
-
   total: number;
-
   deliveryEta: string;
   pickupEta: string | null;
-
   trackingLabel: string | null;
-
   dropoffStation: {
     name?: string;
     address?: string;
@@ -47,6 +43,8 @@ interface ShippingCourier {
 }
 
 export default function ProductPageClient({ product, store }: { product: any; store: any }) {
+  const { addToCart } = useCart(); // ✅ Initialize cart context
+  
   const [isMounted, setIsMounted] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [currentImg, setCurrentImg] = useState(0);
@@ -472,32 +470,73 @@ export default function ProductPageClient({ product, store }: { product: any; st
               </div>
             )}
 
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
-              <button
-                disabled={isOutOfStock || (isBooking && (!selectedDate || !selectedSlot))}
-                onClick={() => {
-                  const storeId = store?.id || store?.uid;
-                  if (storeId) {
-                    void trackMetric(storeId, "buy_now_click", { productId: product?.id || product?.uid });
-                  }
-                  setCheckoutModalOpen(true);
-                }}
-                className="flex-1 w-full bg-black text-white py-3.5 rounded-xl font-extrabold text-xs uppercase tracking-wider hover:bg-gray-900 active:scale-98 transition-all disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm"
-              >
-                {isOutOfStock
-                  ? "Unavailable"
-                  : isBooking
-                    ? "Confirm Booking"
-                    : isServiceOrUtility
-                      ? "Hire Now"
-                      : "Buy It Now"}
-              </button>
+            {/* ✅ UPDATED: Dual Button Layout with Real Cart Integration */}
+            <div className="flex flex-col gap-3 pt-4">
+              <div className="flex gap-3">
+                <button
+                  disabled={isOutOfStock || (isBooking && (!selectedDate || !selectedSlot))}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const storeId = store?.id || store?.uid;
+                    const productId = product?.id || product?.uid;
+                    if (!isOutOfStock && storeId && productId) {
+                      // 1. Track the analytics event
+                      void trackAddToCartClick(storeId, productId);
+                      
+                      // 2. Add to cart using context (auto-opens the off-canvas drawer)
+                      addToCart({
+                        id: `${storeId}-${productId}`,
+                        productId,
+                        name: product?.name || "Product",
+                        price: productPrice,
+                        image: product?.images?.[0] || product?.image || "/placeholder.png",
+                        storeId,
+                        storeName: store?.storeName || "Store",
+                        username: store?.username,
+                      });
+                    }
+                  }}
+                  className={`flex-1 w-full py-3.5 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all active:scale-98 shadow-sm border ${
+                    isOutOfStock || (isBooking && (!selectedDate || !selectedSlot))
+                      ? "pointer-events-none cursor-not-allowed bg-gray-100 text-gray-400 border-gray-100"
+                      : "bg-white text-gray-900 border-gray-200 hover:border-[#00a63e] hover:bg-gray-50 hover:text-[#00a63e]"
+                  }`}
+                >
+                  Add to Cart
+                </button>
+
+                <button
+                  disabled={isOutOfStock || (isBooking && (!selectedDate || !selectedSlot))}
+                  onClick={() => {
+                    const storeId = store?.id || store?.uid;
+                    const productId = product?.id || product?.uid;
+                    if (storeId && productId) {
+                      void trackMetric(storeId, "buy_now_click", { productId });
+                    }
+                    setCheckoutModalOpen(true);
+                  }}
+                  className={`flex-1 w-full py-3.5 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all active:scale-98 shadow-sm ${
+                    isOutOfStock || (isBooking && (!selectedDate || !selectedSlot))
+                      ? "pointer-events-none cursor-not-allowed bg-gray-100 text-gray-400"
+                      : "bg-black text-white hover:bg-[#00a63e]"
+                  }`}
+                >
+                  {isOutOfStock
+                    ? "Unavailable"
+                    : isBooking
+                      ? "Confirm Booking"
+                      : isServiceOrUtility
+                        ? "Hire Now"
+                        : "Buy It Now"}
+                </button>
+              </div>
+
               <a
                 href={whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={handleTrackWhatsApp}
-                className="flex-1 w-full bg-[#00a63e] text-white py-3.5 rounded-xl font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-[#008c34] transition-all active:scale-98 shadow-sm"
+                className="w-full bg-[#00a63e] text-white py-3.5 rounded-xl font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-[#008c34] transition-all active:scale-98 shadow-sm"
               >
                 <MessageCircle size={14} /> Chat on WhatsApp
               </a>

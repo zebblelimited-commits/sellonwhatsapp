@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, use, useMemo } from "react";
-import { useSearchParams } from "next/navigation"; // Added for URL search sync
+import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
@@ -11,7 +11,8 @@ import {
 
 // Firebase/Analytics
 import { db } from "@/lib/firebase";
-import { trackMetric } from "@/lib/analytics";
+import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
+import { useCart } from "@/contexts/CartContext"; // ✅ Import useCart
 
 // Components
 import Header from "@/components/layout/Header";
@@ -44,10 +45,11 @@ const toPlainObject = (obj: any) => {
 export default function PublicStorePage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = use(params);
   const searchParams = useSearchParams();
-  const urlQuery = searchParams.get("q") || ""; // Pull search from URL
-  // Add this state alongside your other useState hooks
+  const urlQuery = searchParams.get("q") || "";
+  
+  const { addToCart } = useCart(); // ✅ Initialize cart context
+  
   const [followerCount, setFollowerCount] = useState(0);
-
   const [storeData, setStoreData] = useState<any>(null);
   const [vendorId, setVendorId] = useState<string | null>(null);
   const [products, setProducts] = useState<any[]>([]);
@@ -93,7 +95,6 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
     void fetchData();
   }, [username]);
 
-  // Filter products based on search
   const filteredProducts = useMemo(() => {
     return products.filter(p => 
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -166,7 +167,6 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
               </div>
 
               <div className="flex gap-2.5 justify-center md:justify-start">
-                {/* Updated list to include 'x' and improved mapping logic */}
                 {['instagram', 'facebook', 'tiktok', 'youtube', 'twitter', 'x'].map(s => storeData?.socials?.[s] && (
                   <SocialIcon
                     key={s}
@@ -189,22 +189,20 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
             <div className="md:col-span-6 flex flex-col items-center md:items-start lg:pl-10">
               <div className="flex flex-col items-start w-full">
                 <div className="flex items-center gap-2 mb-3">
-                  {/* Conditionally render and pass callbacks to sync follower count */}
-                    {vendorId && (
-                      <FollowButton 
-                        vendorId={vendorId} 
-                        currentCount={followerCount}
-                        onFollowChange={(nextCount) => {
-                          setFollowerCount(nextCount);
-                          trackStoreClick();
-                        }}
-                      />
-                    )}
-                  {/* ✅ FIXED: Added onClick to track the WhatsApp click */}
+                  {vendorId && (
+                    <FollowButton 
+                      vendorId={vendorId} 
+                      currentCount={followerCount}
+                      onFollowChange={(nextCount) => {
+                        setFollowerCount(nextCount);
+                        trackStoreClick();
+                      }}
+                    />
+                  )}
                   <TrackedLink
                     href={whatsappUrl}
                     storeId={vendorId!}
-                    eventType="whatsapp_click" // ✅ Automatically tracks WhatsApp click!
+                    eventType="whatsapp_click"
                     className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#00a63e] px-4 py-2.5 text-[11px] font-extrabold text-white shadow-sm transition-all hover:bg-[#008c34] active:scale-95"
                   >
                     <Image src="/icons/whatsapplogo.svg" width={14} height={14} alt="wa" className="brightness-0 invert" />
@@ -264,10 +262,6 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
               const stockVal = p.stockCount ?? p.stock ?? 0;
               const isOutOfStock = stockVal <= 0;
 
-              const waLink = normalizedPhone ? `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(
-                `Hello ${storeData.storeName}, I'm interested in "${p.name}"`
-              )}` : "#";
-
               return (
                 <div key={p.id} className="group flex flex-col h-full bg-white rounded-[24px] border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden relative">
                   <button
@@ -305,32 +299,51 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
                       </span>
                     </div>
 
-                    <div className="space-y-2 mt-auto">
-                    {/* ✅ FIXED: Buy Now / Book Now Button */}
-                    <Link
-                      href={productPath}
-                      onClick={() => !isOutOfStock && vendorId && void trackMetric(vendorId, "buy_now_click", { productId: p.id })}
-                      className={`flex min-h-10 w-full items-center justify-center rounded-xl px-4 py-2.5 text-[11px] font-extrabold transition-all active:scale-95 ${
-                        isOutOfStock 
-                        ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
-                        : "bg-black text-white hover:bg-gray-800"
-                      }`}
-                    >
-                      {isBooking ? "Book Now" : isService ? "Hire Service" : "Buy Now"}
-                    </Link>
+                    {/* ✅ UPDATED: Dual Button Layout with Real Cart Integration */}
+                    <div className="mt-auto flex gap-2">
+                      <button
+                        type="button"
+                        disabled={isOutOfStock}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (!isOutOfStock && vendorId) {
+                            // 1. Track the analytics event
+                            trackAddToCartClick(vendorId, p.id);
+                            
+                            // 2. Add to cart using context (auto-opens the off-canvas drawer)
+                            addToCart({
+                              id: `${vendorId}-${p.id}`,
+                              productId: p.id,
+                              name: p.name,
+                              price: Number(p.price || 0),
+                              image: p.images?.[0] || p.image || "/placeholder.png",
+                              storeId: vendorId,
+                              storeName: storeData?.storeName || "Store",
+                              username: storeData?.username,
+                            });
+                          }
+                        }}
+                        className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2.5 text-[11px] font-extrabold uppercase tracking-wide transition-all active:scale-95 ${
+                          isOutOfStock
+                            ? "pointer-events-none cursor-not-allowed bg-gray-100 text-gray-400"
+                            : "border border-gray-200 bg-white text-gray-900 hover:border-[#00a63e] hover:bg-gray-50 hover:text-[#00a63e]"
+                        }`}
+                      >
+                        Add to Cart
+                      </button>
 
-                    {/* ✅ FIXED: WhatsApp Shop Button */}
-                    <TrackedLink
-                      href={waLink}
-                      storeId={vendorId!}
-                      productId={p.id}
-                      eventType="whatsapp_click" // ✅ Automatically tracks WhatsApp click!
-                      className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#00a63e] px-4 py-2.5 text-[11px] font-extrabold text-white transition-all hover:bg-[#008c34] active:scale-95"
-                    >
-                      <Image src="/icons/whatsapplogo.svg" width={14} height={14} alt="wa" className="brightness-0 invert" />
-                      WhatsApp Shop
-                    </TrackedLink>
-                  </div>
+                      <Link 
+                        href={productPath} 
+                        onClick={() => !isOutOfStock && vendorId && void trackMetric(vendorId, "buy_now_click", { productId: p.id })} 
+                        className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2.5 text-[11px] font-extrabold uppercase tracking-wide transition-all active:scale-95 ${
+                          isOutOfStock 
+                            ? "pointer-events-none cursor-not-allowed bg-gray-100 text-gray-400" 
+                            : "bg-black text-white hover:bg-[#00a63e]"
+                        }`}
+                      >
+                        {isOutOfStock ? "Unavailable" : (isBooking ? "Book Now" : isService ? "Hire Service" : "Buy Now")}
+                      </Link>
+                    </div>
                   </div>
                 </div>
               );

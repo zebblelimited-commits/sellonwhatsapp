@@ -5,10 +5,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { Calendar, CheckCircle2, Package, Search } from "lucide-react";
-import { collection, doc, getDoc, getDocs, limit, query } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
-import { useCart } from "@/contexts/CartContext"; // ✅ Import useCart hook
+import { useCart } from "@/contexts/CartContext"; // ✅ Import useCart
 
 const font = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -43,8 +43,12 @@ type Product = {
   createdAt?: unknown;
 };
 
-type PopularProps = {
-  fullPage?: boolean;
+type ProductSectionProps = {
+  title: string;
+  description?: string;
+  viewAllLink?: string;
+  maxItems?: number;
+  sectionType?: "trending" | "newest" | "popular" | "recommended" | "default";
 };
 
 function timestampValue(value: unknown) {
@@ -78,11 +82,28 @@ function productImage(product: Product) {
   return product.images?.[0] || product.imageUrl || product.image || "/images/placeholder-cover.svg";
 }
 
-export default function Popular({ fullPage = false }: PopularProps) {
+export default function ProductSection({ 
+  title, 
+  description, 
+  viewAllLink = "/products",
+  maxItems = 6,
+  sectionType = "default"
+}: ProductSectionProps) {
   const { addToCart } = useCart(); // ✅ Initialize cart context
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // ✅ DYNAMIC GRID COLUMNS: This is what fixes the "6 spaces" issue!
+  const getGridCols = () => {
+    switch (maxItems) {
+      case 3: return "md:grid-cols-3";
+      case 4: return "md:grid-cols-4";
+      case 5: return "md:grid-cols-5"; // <-- Forces 5 columns when maxItems is 5
+      case 6: return "md:grid-cols-6";
+      default: return "md:grid-cols-5";
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +113,23 @@ export default function Popular({ fullPage = false }: PopularProps) {
       setError("");
 
       try {
-        const productSnapshot = await getDocs(query(collection(db, "products"), limit(60)));
+        let productsQuery;
+        
+        switch (sectionType) {
+          case "trending":
+            productsQuery = query(collection(db, "products"), orderBy("views", "desc"), limit(60));
+            break;
+          case "newest":
+            productsQuery = query(collection(db, "products"), orderBy("createdAt", "desc"), limit(60));
+            break;
+          case "popular":
+          case "recommended":
+          default:
+            productsQuery = query(collection(db, "products"), limit(60));
+            break;
+        }
+
+        const productSnapshot = await getDocs(productsQuery);
         const rawProducts = productSnapshot.docs
           .map((item) => ({ id: item.id, ...(item.data() as Omit<Product, "id">) }))
           .filter(productIsVisible);
@@ -104,23 +141,28 @@ export default function Popular({ fullPage = false }: PopularProps) {
         }));
         const stores = new Map(storeEntries);
 
-        const enrichedProducts = rawProducts
-          .map((product) => {
-            const storeId = product.storeId || product.vendorId || product.ownerId;
-            const store = storeId ? stores.get(storeId) : null;
-            return {
-              ...product,
-              storeId,
-              vendorName: product.vendorName || store?.storeName || store?.name || "Marketplace seller",
-              username: product.username || store?.username || "",
-              popularityScore: Number(product.popularityScore ?? product.salesCount ?? product.orderCount ?? product.views ?? product.clicks ?? 0),
-            };
-          })
-          .sort((left, right) => right.popularityScore! - left.popularityScore! || timestampValue(right.createdAt) - timestampValue(left.createdAt));
+        const enrichedProducts = rawProducts.map((product) => {
+          const storeId = product.storeId || product.vendorId || product.ownerId;
+          const store = storeId ? stores.get(storeId) : null;
+          return {
+            ...product,
+            storeId,
+            vendorName: product.vendorName || store?.storeName || store?.name || "Marketplace seller",
+            username: product.username || store?.username || "",
+            popularityScore: Number(product.popularityScore ?? product.salesCount ?? product.orderCount ?? product.views ?? product.clicks ?? 0),
+          };
+        });
 
-        if (!cancelled) setProducts(enrichedProducts.slice(0, fullPage ? 60 : 5));
+        const sortedProducts = enrichedProducts.sort((left, right) => {
+          if (sectionType === "popular" || sectionType === "recommended") {
+            return right.popularityScore! - left.popularityScore! || timestampValue(right.createdAt) - timestampValue(left.createdAt);
+          }
+          return 0;
+        });
+
+        if (!cancelled) setProducts(sortedProducts.slice(0, maxItems));
       } catch (loadError) {
-        console.error("Popular products could not be loaded:", loadError);
+        console.error(`${title} could not be loaded:`, loadError);
         if (!cancelled) setError("Products could not be loaded right now.");
       } finally {
         if (!cancelled) setLoading(false);
@@ -129,24 +171,28 @@ export default function Popular({ fullPage = false }: PopularProps) {
 
     void loadProducts();
     return () => { cancelled = true; };
-  }, [fullPage]);
+  }, [title, maxItems, sectionType]);
 
   return (
     <section className={`${font.className} mx-auto w-full max-w-[1800px] px-4 py-8 sm:px-6 lg:px-8`}>
       <div className="mb-5 flex items-center justify-between gap-4">
         <div>
-          {fullPage && <Link href="/" className="mb-2 inline-flex text-xs font-bold text-gray-500 hover:text-green-600">← Back to home</Link>}
-          <h2 className="text-lg font-bold text-gray-900 sm:text-xl">Popular Products</h2>
-          {fullPage && <p className="mt-1 text-sm font-medium text-gray-500">Discover products and services from marketplace sellers.</p>}
+          <h2 className="text-lg font-bold text-gray-900 sm:text-xl">{title}</h2>
+          {description && <p className="mt-1 text-sm font-medium text-gray-500">{description}</p>}
         </div>
-        {!fullPage && <Link href="/products" className="flex items-center gap-1 text-xs font-semibold text-[#00d95f] transition-colors hover:text-[#00a63e] sm:text-sm">View all <span className="text-sm">›</span></Link>}
+        <Link href={viewAllLink} className="flex items-center gap-1 text-xs font-semibold text-[#00d95f] transition-colors hover:text-[#00a63e] sm:text-sm">
+          View all <span className="text-sm">›</span>
+        </Link>
       </div>
 
       {error ? (
         <div className="rounded-2xl bg-red-50 p-6 text-center text-sm font-medium text-red-700">{error}</div>
       ) : loading ? (
-        <div className={fullPage ? "grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6" : "flex gap-4 overflow-hidden"}>
-          {[1, 2, 3, 4, 5].map((item) => <div key={item} className={`${fullPage ? "min-h-72" : "min-w-[220px]"} animate-pulse rounded-2xl bg-gray-100`} />)}
+        <div className="flex gap-4 overflow-hidden">
+          {/* ✅ Skeleton count matches maxItems */}
+          {Array.from({ length: maxItems }).map((_, i) => (
+            <div key={i} className="min-w-[220px] min-h-72 animate-pulse rounded-2xl bg-gray-100" />
+          ))}
         </div>
       ) : products.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-12 text-center">
@@ -154,7 +200,8 @@ export default function Popular({ fullPage = false }: PopularProps) {
           <p className="mt-3 text-sm font-bold text-gray-700">No products are available yet.</p>
         </div>
       ) : (
-        <div className={fullPage ? "grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6" : "flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth md:grid md:grid-cols-6 md:overflow-visible"}>
+        // ✅ USE getGridCols() HERE INSTEAD OF HARDCODED md:grid-cols-6
+        <div className={`flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth md:grid ${getGridCols()} md:overflow-visible`}>
           {products.map((product) => {
             const action = productAction(product);
             const unavailable = productIsUnavailable(product);
@@ -162,9 +209,9 @@ export default function Popular({ fullPage = false }: PopularProps) {
             const stock = Number(product.stockCount ?? product.stock ?? 0);
 
             return (
-              <article key={product.id} className={`${fullPage ? "min-w-0" : "min-w-[220px] flex-1 md:min-w-0"} group flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white transition-all duration-200 hover:-translate-y-1 hover:shadow-lg`}>
+              <article key={product.id} className="min-w-[220px] flex-1 md:min-w-0 group flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white transition-all duration-200 hover:-translate-y-1 hover:shadow-lg">
                 <Link href={productPath} onClick={() => product.storeId && void trackMetric(product.storeId, "click", { productId: product.id })} className="relative aspect-[4/3] w-full overflow-hidden bg-[#f6f5f3]">
-                  <Image src={productImage(product)} alt={product.name || "Product"} fill sizes={fullPage ? "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw" : "(max-width: 768px) 220px, 20vw"} className="object-cover object-center transition-transform duration-300 group-hover:scale-105" />
+                  <Image src={productImage(product)} alt={product.name || "Product"} fill sizes="(max-width: 768px) 220px, 20vw" className="object-cover object-center transition-transform duration-300 group-hover:scale-105" />
                 </Link>
 
                 <div className="flex flex-1 flex-col justify-between p-4">
@@ -180,7 +227,6 @@ export default function Popular({ fullPage = false }: PopularProps) {
                     </div>
                   </div>
 
-                  {/* ✅ UPDATED: Dual Button Layout with Real Cart Integration */}
                   <div className="mt-4 flex gap-2">
                     <button
                       type="button"
@@ -188,7 +234,7 @@ export default function Popular({ fullPage = false }: PopularProps) {
                       onClick={(e) => {
                         e.preventDefault();
                         if (!unavailable && product.storeId) {
-                          // 1. Track analytics
+                          // 1. Track the analytics event
                           trackAddToCartClick(product.storeId, product.id);
                           
                           // 2. Add to cart using context (auto-opens the off-canvas drawer)

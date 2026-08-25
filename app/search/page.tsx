@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { MessageCircle, Search, SlidersHorizontal } from "lucide-react";
+import { MessageCircle, Search, SlidersHorizontal, TrendingUp } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
 import ProductCard from "@/components/sections/ProductCard";
@@ -12,12 +12,15 @@ import Footer from "@/components/layout/Footer";
 import { getAllSubcategories } from "@/app/dashboard/nigeriaData";
 import Image from "next/image";
 import FollowButton from "@/components/store/FollowButton";
-import { trackMetric } from "@/lib/analytics";
+import { trackMetric, trackSearch } from "@/lib/analytics";
 
 const CATEGORY_OPTIONS = getAllSubcategories();
 const PRICE_SLIDER_MAX = 1000000;
 
-// --- MINI STORE CARD COMPONENT (Matching NewStores design) ---
+// Trending searches to show users what others are looking for
+const TRENDING_SEARCHES = ["iPhone 15", "Nike Air Max", "Rice 50kg", "Bluetooth Speaker", "Generator"];
+
+// --- MINI STORE CARD COMPONENT ---
 const MiniStoreCard = ({ store }: { store: any }) => {
   const filterBlue = "invert(42%) sepia(93%) saturate(1352%) hue-rotate(190deg) brightness(103%) contrast(105%)";
   const [followerCount, setFollowerCount] = useState(Number(store.followerCount || 0));
@@ -35,7 +38,6 @@ const MiniStoreCard = ({ store }: { store: any }) => {
 
   return (
     <div className="bg-white border border-gray-100 rounded-[24px] shadow-sm overflow-hidden p-3 hover:shadow-md transition-all group">
-      {/* Banner */}
       <Link href={`/${username}`} onClick={trackStoreClick} className="relative block h-24 w-full rounded-xl overflow-hidden">
         <Image
           src={store.bannerUrl || store.coverImage || "/images/placeholder-cover.svg"}
@@ -46,7 +48,6 @@ const MiniStoreCard = ({ store }: { store: any }) => {
         />
       </Link>
 
-      {/* Header with Overlapping Logo */}
       <div className="flex items-start gap-3 px-1 -mt-5 relative z-10">
         <div className="p-0.5 bg-white rounded-full shadow-sm">
           <div className="relative w-12 h-12 rounded-full overflow-hidden border border-gray-50 bg-gray-100">
@@ -62,9 +63,7 @@ const MiniStoreCard = ({ store }: { store: any }) => {
 
         <div className="pt-6 flex-1 min-w-0">
           <div className="flex items-center gap-1">
-            <h3 className="font-bold text-sm text-gray-900 leading-tight truncate">
-              {storeName}
-            </h3>
+            <h3 className="font-bold text-sm text-gray-900 leading-tight truncate">{storeName}</h3>
             {(store.isVerified || store.verified) && (
               <Image src="/icons/badge.svg" width={12} height={12} alt="verified" style={{ filter: filterBlue }} />
             )}
@@ -73,7 +72,6 @@ const MiniStoreCard = ({ store }: { store: any }) => {
         </div>
       </div>
 
-      {/* Store actions */}
       <div className="mt-3 grid grid-cols-2 gap-2 border-t border-gray-50 pt-3">
         <a href={whatsappUrl} target={directWhatsAppLink || whatsappPhone ? "_blank" : undefined} rel={directWhatsAppLink || whatsappPhone ? "noopener noreferrer" : undefined} onClick={trackWhatsAppClick} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-green-700">
           <MessageCircle size={13} /> WhatsApp
@@ -82,11 +80,7 @@ const MiniStoreCard = ({ store }: { store: any }) => {
           View Store
         </Link>
         <div className="col-span-2">
-          <FollowButton
-            vendorId={store.id}
-            currentCount={followerCount}
-            onFollowChange={setFollowerCount}
-          />
+          <FollowButton vendorId={store.id} currentCount={followerCount} onFollowChange={setFollowerCount} />
         </div>
       </div>
     </div>
@@ -122,6 +116,9 @@ function SearchResultsContent() {
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (searchInput.trim()) {
+      trackSearch(searchInput.trim()); // ✅ Track search analytics
+    }
 
     const params = new URLSearchParams();
     if (searchInput.trim()) params.set("q", searchInput.trim());
@@ -130,6 +127,13 @@ function SearchResultsContent() {
     if (maxPriceInput) params.set("maxPrice", maxPriceInput);
 
     router.push(params.toString() ? `/search?${params.toString()}` : "/search");
+  };
+
+  const handleTrendingClick = (term: string) => {
+    setSearchInput(term);
+    const params = new URLSearchParams();
+    params.set("q", term);
+    router.push(`/search?${params.toString()}`);
   };
 
   const clearFilters = () => {
@@ -159,7 +163,6 @@ function SearchResultsContent() {
         setLoading(true);
         setError(null);
 
-        // Search products
         let productQuery: any = collection(db, "products");
 
         if (queryParam) {
@@ -169,16 +172,14 @@ function SearchResultsContent() {
             where("name", "<=", queryParam + "\uf8ff")
           );
         } else if (categoryParam) {
-          productQuery = query(
-            productQuery,
-            where("category", "==", categoryParam)
-          );
+          productQuery = query(productQuery, where("category", "==", categoryParam));
         }
 
         const [productSnap, recommendedSnap] = await Promise.all([
           getDocs(productQuery),
           getDocs(query(collection(db, "products"), limit(6)))
         ]);
+        
         let productResults = productSnap.docs
           .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
           .filter((product: any) => !["inactive", "banned"].includes(product.status));
@@ -199,7 +200,6 @@ function SearchResultsContent() {
         }
         setProducts(productResults.slice(0, 50));
 
-        // Fetch stores
         const storeSnap = await getDocs(collection(db, "stores"));
         const storeResults = storeSnap.docs
           .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
@@ -207,8 +207,7 @@ function SearchResultsContent() {
           .filter((store: any) => {
             if (!queryParam) return true;
             const searchTerm = queryParam.toLowerCase();
-            return [store.storeName, store.name, store.username]
-              .some(value => value?.toLowerCase().includes(searchTerm));
+            return [store.storeName, store.name, store.username].some(value => value?.toLowerCase().includes(searchTerm));
           });
         setStores(storeResults.slice(0, 20));
 
@@ -236,11 +235,30 @@ function SearchResultsContent() {
               {queryParam ? `Search Results for "${queryParam}"` : "Browse Products"}
             </h1>
             <p className="text-gray-500 mt-2">Find products and stores from verified WhatsApp sellers.</p>
+            
+            {/* ✅ NEW: TRENDING SEARCHES SECTION */}
+            {!queryParam && (
+              <div className="mt-6 flex flex-wrap items-center gap-2">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  <TrendingUp size={14} /> Trending:
+                </span>
+                {TRENDING_SEARCHES.map((term) => (
+                  <button
+                    key={term}
+                    onClick={() => handleTrendingClick(term)}
+                    className="px-3 py-1.5 rounded-full bg-white border border-gray-200 text-xs font-semibold text-gray-700 hover:border-green-600 hover:text-green-600 transition-all"
+                  >
+                    {term}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </section>
 
         <div className="w-full px-4 py-8 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+            {/* LEFT SIDEBAR: FILTERS */}
             <aside className="w-full shrink-0 lg:sticky lg:top-6 lg:w-72">
               <form onSubmit={handleSearchSubmit} className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-5">
@@ -297,6 +315,7 @@ function SearchResultsContent() {
               </form>
             </aside>
 
+            {/* MAIN CONTENT: RESULTS */}
             <section className="min-w-0 flex-1">
               <div className="mb-8">
                 {categoryParam && <p className="text-gray-600 mt-2">Category: {categoryParam}</p>}
@@ -340,13 +359,15 @@ function SearchResultsContent() {
               {!loading && products.length > 0 && (
                 <section>
                   <h2 className="text-xl font-semibold text-gray-900 mb-4">Products</h2>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+                  {/* ✅ Uses the updated ProductCard with dual buttons */}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                     {products.map((product) => <ProductCard key={product.id} product={product} compact />)}
                   </div>
                 </section>
               )}
             </section>
 
+            {/* RIGHT SIDEBAR: RECOMMENDED */}
             <aside className="h-fit w-full shrink-0 rounded-3xl border border-gray-100 bg-white p-5 shadow-sm lg:sticky lg:top-6 lg:w-72">
               <div className="mb-5">
                 <p className="text-[10px] font-black uppercase tracking-widest text-green-600">You may also like</p>

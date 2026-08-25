@@ -1,5 +1,6 @@
 "use client";
 
+import Footer from "@/components/layout/Dashboardfooter";
 import React, { useState, useEffect, useCallback } from "react";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { useRouter } from "next/navigation";
@@ -18,6 +19,10 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 
+// ✅ NEW: Import Cart Context and Off-Canvas Cart Component
+import { useCart } from "@/contexts/CartContext";
+import OffCanvasCart from "@/components/cart/OffCanvasCart";
+
 // --- BUYER TABS ---
 import { BuyerPurchases as PurchasesTab } from "@/components/buyer/BuyerPurchases";
 import { BuyerOrders as OrdersTab } from "@/components/buyer/BuyerOrders";
@@ -28,7 +33,6 @@ import { BuyerDisputesTab } from "@/components/buyer/BuyerDisputesTab";
 import { BuyerNotification } from "@/components/buyer/BuyerNotification";
 import BuyerSupportChat from "@/components/buyer/BuyerSupportChat";
 import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
-// ⚠️ We will create this file in the next step once you supply your profile code!
 import { BuyerProfile as ProfileTab } from "@/components/buyer/BuyerProfile";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
@@ -46,6 +50,8 @@ type RecommendedStore = {
 
 export default function BuyerDashboard() {
   const router = useRouter();
+  const { cartCount, toggleCart } = useCart(); // ✅ Initialize cart context
+  
   const [activeTab, setActiveTab] = useState("home");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -153,10 +159,9 @@ export default function BuyerDashboard() {
             ),
             (snapshot) => {
               const orders = snapshot.docs.map(doc => doc.data());
-
               const totalOrders = orders.length;
               const pendingDeliveries = orders.filter(o =>
-                ["PAID_HELD", "SHIPPED"].includes(o.status)
+                o.status === "SHIPPED" // Only count orders that are actually on their way
               ).length;
               const totalSpent = orders
                 .filter(o => o.status === "COMPLETED")
@@ -338,6 +343,7 @@ export default function BuyerDashboard() {
           </aside>
         </div>
       )}
+      
       {/* Sidebar */}
       <aside className="sticky top-0 hidden h-screen w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
         <div className="flex items-center px-2 py-2 mb-6">
@@ -356,7 +362,6 @@ export default function BuyerDashboard() {
             onClick={() => setActiveTab("disputes")}
             badge={buyerDisputeStats.open > 0 ? buyerDisputeStats.open : null}
           />
-
           <NavItem
             icon={<Bell size={18} />}
             label="Notifications"
@@ -371,8 +376,6 @@ export default function BuyerDashboard() {
             onClick={() => setActiveTab("support-chat")}
             badge={chatStats.unread > 0 ? chatStats.unread : null}
           />
-
-          {/* ✅ NEW: Profile Tab added under Notifications */}
           <NavItem
             icon={<IdCard size={18} />}
             label="Profile"
@@ -382,7 +385,6 @@ export default function BuyerDashboard() {
         </nav>
 
         <div className="pt-6 border-t border-gray-100">
-          {/* ❌ REMOVED: Edit Profile Link */}
           <NavItem icon={<Settings size={18} />} label="Settings" active={activeTab === "settings"} onClick={() => setActiveTab("settings")} />
           <NavItem icon={<User size={18} />} label="Account" active={activeTab === "account"} onClick={() => setActiveTab("account")} />
           <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-500 hover:bg-red-50 mt-1 transition-colors">
@@ -424,6 +426,19 @@ export default function BuyerDashboard() {
                 </button>
               )}
 
+              {/* ✅ NEW: Shopping Bag Cart Button */}
+              <button 
+                onClick={toggleCart} 
+                className="relative p-2.5 bg-white border border-gray-200 text-gray-500 rounded-2xl hover:text-green-600 hover:border-green-200 transition-all shadow-sm cursor-pointer"
+              >
+                <ShoppingBag size={18} />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#00a63e] text-[10px] font-bold text-white shadow-sm">
+                    {cartCount > 9 ? "9+" : cartCount}
+                  </span>
+                )}
+              </button>
+
               <div className="p-2.5 bg-white border border-gray-200 text-gray-500 rounded-2xl hover:text-green-600 transition-all shadow-sm cursor-pointer">
                 <Bell size={18} />
               </div>
@@ -453,7 +468,6 @@ export default function BuyerDashboard() {
                 onDisputeAction={handleBuyerDisputeAction}
               />
             )}
-            {/* ✅ Pass the tab switcher to Account so the Edit Profile button works */}
             {activeTab === "account" && <AccountTab onEditProfile={() => setActiveTab("profile")} />}
             {activeTab === "settings" && <SettingsTab />}
             {activeTab === "disputes" && (
@@ -465,10 +479,7 @@ export default function BuyerDashboard() {
             )}
             {activeTab === "notifications" && <BuyerNotification />}
             {activeTab === "support-chat" && <BuyerSupportChat buyerId={auth.currentUser?.uid || ""} />}
-
-            {/* ✅ Render Profile Tab */}
             {activeTab === "profile" && <ProfileTab />}
-
           </div>
 
           <DisputeResponseModal
@@ -483,11 +494,10 @@ export default function BuyerDashboard() {
             onSubmit={submitDisputeResponse}
           />
 
-          <footer className="border-t border-gray-100 py-8 text-center">
-            <p className="text-[9px] uppercase tracking-[0.3em] font-black text-gray-600">
-              Powered by Zebble Quantum Technologies LTD
-            </p>
-          </footer>
+          {/* ✅ NEW: Off-Canvas Cart Component */}
+          <OffCanvasCart />
+          
+          <Footer /> 
         </div>
       </main>
     </div>

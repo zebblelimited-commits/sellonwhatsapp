@@ -7,7 +7,8 @@ import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { Calendar, CheckCircle2, Package, Search } from "lucide-react";
 import { collection, doc, getDoc, limit, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { trackMetric } from "@/lib/analytics";
+import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
+import { useCart } from "@/contexts/CartContext"; // ✅ Import useCart
 
 const font = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -75,6 +76,8 @@ function productIsUnavailable(product: SponsoredProduct) {
 }
 
 function SponsoredCard({ product }: { product: SponsoredProduct }) {
+  const { addToCart } = useCart(); // ✅ Initialize cart context
+  
   const action = productAction(product);
   const unavailable = productIsUnavailable(product);
   const storeId = product.storeId || product.vendorId || product.ownerId;
@@ -101,9 +104,52 @@ function SponsoredCard({ product }: { product: SponsoredProduct }) {
           </div>
         </div>
 
-        <Link href={productPath} onClick={() => !unavailable && storeId && void trackMetric(storeId, "buy_now_click", { productId: product.id })} className={`mt-3 flex min-h-9 w-full items-center justify-center rounded-xl px-2 py-2 text-[10px] font-extrabold transition-all active:scale-95 ${unavailable ? "pointer-events-none cursor-not-allowed bg-gray-100 text-gray-400" : "bg-black text-white hover:bg-gray-800"}`} aria-disabled={unavailable}>
-          {unavailable ? "Unavailable" : action.label}
-        </Link>
+        {/* ✅ UPDATED: Dual Button Layout with Real Cart Integration */}
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            disabled={unavailable}
+            onClick={(e) => {
+              e.preventDefault();
+              if (!unavailable && storeId) {
+                // 1. Track the analytics event
+                trackAddToCartClick(storeId, product.id);
+                
+                // 2. Add to cart using context (auto-opens the off-canvas drawer)
+                addToCart({
+                  id: `${storeId}-${product.id}`,
+                  productId: product.id,
+                  name: product.name || "Product",
+                  price: Number(product.price || 0),
+                  image: productImage(product),
+                  storeId: storeId,
+                  storeName: product.vendorName || "Marketplace seller",
+                  username: product.username,
+                });
+              }
+            }}
+            className={`flex flex-1 items-center justify-center rounded-xl px-2 py-2 text-[10px] font-extrabold uppercase tracking-wide transition-all active:scale-95 ${
+              unavailable
+                ? "pointer-events-none cursor-not-allowed bg-gray-100 text-gray-400"
+                : "border border-gray-200 bg-white text-gray-900 hover:border-[#00d95f] hover:bg-gray-50 hover:text-[#00d95f]"
+            }`}
+          >
+            Add to Cart
+          </button>
+
+          <Link 
+            href={productPath} 
+            onClick={() => !unavailable && storeId && void trackMetric(storeId, "buy_now_click", { productId: product.id })} 
+            className={`flex flex-1 items-center justify-center rounded-xl px-2 py-2 text-[10px] font-extrabold uppercase tracking-wide transition-all active:scale-95 ${
+              unavailable 
+                ? "pointer-events-none cursor-not-allowed bg-gray-100 text-gray-400" 
+                : "bg-black text-white hover:bg-[#00d95f]"
+            }`}
+            aria-disabled={unavailable}
+          >
+            {unavailable ? "Unavailable" : action.label}
+          </Link>
+        </div>
       </div>
     </article>
   );

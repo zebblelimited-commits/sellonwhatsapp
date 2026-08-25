@@ -4,10 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
-import { Search, LayoutDashboard, LogOut, ExternalLink, Store, Menu, X } from "lucide-react";
+import { Search, LayoutDashboard, LogOut, ExternalLink, Store, Menu, X, ShoppingBag } from "lucide-react"; // ✅ Added ShoppingBag
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { collection, query as firestoreQuery, getDocs, getDoc, doc, limit } from "firebase/firestore";
+import { useCart } from "@/contexts/CartContext";
+import OffCanvasCart from "@/components/cart/OffCanvasCart"; // Adjust path
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
@@ -20,6 +22,8 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   const [isBuyer, setIsBuyer] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  const { cartCount, toggleCart } = useCart();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -141,6 +145,19 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   };
 
   const dashboardUrl = isAdmin ? "/admin" : isBuyer ? "/buyer/dashboard" : "/dashboard";
+  
+
+  // ✅ Reusable Cart Icon Component with Badge
+  const CartIcon = () => (
+  <button onClick={toggleCart} className="relative p-2 text-gray-600 hover:text-[#00a63e] transition-colors">
+    <ShoppingBag size={20} />
+    {cartCount > 0 && (
+      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#00a63e] text-[10px] font-bold text-white shadow-sm">
+        {cartCount > 9 ? "9+" : cartCount}
+      </span>
+    )}
+  </button>
+);
 
   return (
     <header className={`${font.className} flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 lg:px-6 py-3.5 border-b border-gray-200 bg-white sticky top-0 z-50`}>
@@ -169,7 +186,8 @@ export default function Header({ isStorePage = false, storeName = "" }) {
         </div>
 
         {/* Mobile Action Buttons */}
-        <div className="flex lg:hidden gap-2">
+        <div className="flex lg:hidden gap-1">
+          <CartIcon /> {/* ✅ Added to Mobile */}
           {user ? (
             <>
               <Link href={dashboardUrl} className="px-3 py-1.5 text-xs font-bold border border-gray-200 rounded-lg">
@@ -287,6 +305,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
 
       {/* Desktop Auth Buttons */}
       <div className="hidden lg:flex items-center gap-2 shrink-0">
+        <CartIcon /> {/* ✅ Added to Desktop */}
         {user ? (
           <>
             {vendorUsername && (
