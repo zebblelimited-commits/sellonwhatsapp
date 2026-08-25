@@ -8,7 +8,7 @@ import { Calendar, CheckCircle2, Package, Search } from "lucide-react";
 import { collection, doc, getDoc, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
-import { useCart } from "@/contexts/CartContext"; // ✅ Import useCart
+import { useCart } from "@/contexts/CartContext";
 
 const font = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -89,17 +89,16 @@ export default function ProductSection({
   maxItems = 6,
   sectionType = "default"
 }: ProductSectionProps) {
-  const { addToCart } = useCart(); // ✅ Initialize cart context
+  const { addToCart } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // ✅ DYNAMIC GRID COLUMNS: This is what fixes the "6 spaces" issue!
   const getGridCols = () => {
     switch (maxItems) {
       case 3: return "md:grid-cols-3";
       case 4: return "md:grid-cols-4";
-      case 5: return "md:grid-cols-5"; // <-- Forces 5 columns when maxItems is 5
+      case 5: return "md:grid-cols-5";
       case 6: return "md:grid-cols-6";
       default: return "md:grid-cols-5";
     }
@@ -189,7 +188,6 @@ export default function ProductSection({
         <div className="rounded-2xl bg-red-50 p-6 text-center text-sm font-medium text-red-700">{error}</div>
       ) : loading ? (
         <div className="flex gap-4 overflow-hidden">
-          {/* ✅ Skeleton count matches maxItems */}
           {Array.from({ length: maxItems }).map((_, i) => (
             <div key={i} className="min-w-[220px] min-h-72 animate-pulse rounded-2xl bg-gray-100" />
           ))}
@@ -200,7 +198,6 @@ export default function ProductSection({
           <p className="mt-3 text-sm font-bold text-gray-700">No products are available yet.</p>
         </div>
       ) : (
-        // ✅ USE getGridCols() HERE INSTEAD OF HARDCODED md:grid-cols-6
         <div className={`flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth md:grid ${getGridCols()} md:overflow-visible`}>
           {products.map((product) => {
             const action = productAction(product);
@@ -227,17 +224,16 @@ export default function ProductSection({
                     </div>
                   </div>
 
-                  <div className="mt-4 flex gap-2">
+                  {/* Vertically stacked on mobile (<640px), side-by-side on desktop */}
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                     <button
                       type="button"
                       disabled={unavailable}
                       onClick={(e) => {
                         e.preventDefault();
                         if (!unavailable && product.storeId) {
-                          // 1. Track the analytics event
                           trackAddToCartClick(product.storeId, product.id);
                           
-                          // 2. Add to cart using context (auto-opens the off-canvas drawer)
                           addToCart({
                             id: `${product.storeId}-${product.id}`,
                             productId: product.id,

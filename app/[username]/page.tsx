@@ -12,7 +12,7 @@ import {
 // Firebase/Analytics
 import { db } from "@/lib/firebase";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
-import { useCart } from "@/contexts/CartContext"; // ✅ Import useCart
+import { useCart } from "@/contexts/CartContext";
 
 // Components
 import Header from "@/components/layout/Header";
@@ -47,7 +47,7 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
   const searchParams = useSearchParams();
   const urlQuery = searchParams.get("q") || "";
   
-  const { addToCart } = useCart(); // ✅ Initialize cart context
+  const { addToCart } = useCart();
   
   const [followerCount, setFollowerCount] = useState(0);
   const [storeData, setStoreData] = useState<any>(null);
@@ -299,18 +299,16 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
                       </span>
                     </div>
 
-                    {/* ✅ UPDATED: Dual Button Layout with Real Cart Integration */}
-                    <div className="mt-auto flex gap-2">
+                    {/* Responsive Dual Button Layout */}
+                    <div className="mt-auto flex flex-col gap-2 sm:flex-row sm:gap-1.5">
                       <button
                         type="button"
                         disabled={isOutOfStock}
                         onClick={(e) => {
                           e.preventDefault();
                           if (!isOutOfStock && vendorId) {
-                            // 1. Track the analytics event
                             trackAddToCartClick(vendorId, p.id);
                             
-                            // 2. Add to cart using context (auto-opens the off-canvas drawer)
                             addToCart({
                               id: `${vendorId}-${p.id}`,
                               productId: p.id,
@@ -323,7 +321,7 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
                             });
                           }
                         }}
-                        className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2.5 text-[11px] font-extrabold uppercase tracking-wide transition-all active:scale-95 ${
+                        className={`flex flex-1 items-center justify-center whitespace-nowrap rounded-xl px-3 py-2.5 text-[11px] font-extrabold uppercase tracking-wide transition-all active:scale-95 sm:px-1.5 sm:py-2 sm:text-[9.5px] sm:tracking-tighter ${
                           isOutOfStock
                             ? "pointer-events-none cursor-not-allowed bg-gray-100 text-gray-400"
                             : "border border-gray-200 bg-white text-gray-900 hover:border-[#00a63e] hover:bg-gray-50 hover:text-[#00a63e]"
@@ -335,7 +333,7 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
                       <Link 
                         href={productPath} 
                         onClick={() => !isOutOfStock && vendorId && void trackMetric(vendorId, "buy_now_click", { productId: p.id })} 
-                        className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2.5 text-[11px] font-extrabold uppercase tracking-wide transition-all active:scale-95 ${
+                        className={`flex flex-1 items-center justify-center whitespace-nowrap rounded-xl px-3 py-2.5 text-[11px] font-extrabold uppercase tracking-wide transition-all active:scale-95 sm:px-1.5 sm:py-2 sm:text-[9.5px] sm:tracking-tighter ${
                           isOutOfStock 
                             ? "pointer-events-none cursor-not-allowed bg-gray-100 text-gray-400" 
                             : "bg-black text-white hover:bg-[#00a63e]"

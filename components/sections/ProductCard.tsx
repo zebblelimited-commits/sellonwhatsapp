@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Calendar, CheckCircle2, Package } from "lucide-react";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
-import { useCart } from "@/contexts/CartContext"; // ✅ Import useCart
+import { useCart } from "@/contexts/CartContext";
 
 type ProductCardProps = {
   product: any;
@@ -12,7 +12,7 @@ type ProductCardProps = {
 };
 
 export default function ProductCard({ product, compact = false }: ProductCardProps) {
-  const { addToCart } = useCart(); // ✅ Initialize cart context
+  const { addToCart } = useCart();
   
   const storeId = product.storeId || product.vendorId || product.ownerId;
   const productId = product.id;
@@ -22,7 +22,6 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
   const isService = product.productType === "service" || product.productType === "utility";
   const stock = Number(product.stockCount ?? product.stock ?? 0);
   
-  // ✅ Define isOutOfStock (this was causing the "unavailable is not defined" error)
   const isOutOfStock = stock <= 0 || product.availability === "out_of_stock";
   
   const image = product.images?.[0] || product.imageUrl || product.image || "/images/placeholder-cover.svg";
@@ -67,18 +66,16 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
           </div>
         </div>
 
-        {/* ✅ DUAL BUTTON LAYOUT */}
-        <div className="mt-4 flex gap-2">
+        {/* Vertically stacked on mobile (<640px), side-by-side on desktop */}
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            disabled={isOutOfStock} // ✅ Fixed: uses isOutOfStock instead of unavailable
+            disabled={isOutOfStock}
             onClick={(e) => {
               e.preventDefault();
               if (!isOutOfStock && storeId) {
-                // 1. Track analytics
                 trackAddToCartClick(storeId, productId);
                 
-                // 2. Add to cart (auto-opens the off-canvas drawer)
                 addToCart({
                   id: `${storeId}-${productId}`,
                   productId,

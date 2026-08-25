@@ -8,7 +8,7 @@ import { Calendar, CheckCircle2, Package, Search } from "lucide-react";
 import { collection, doc, getDoc, getDocs, limit, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
-import { useCart } from "@/contexts/CartContext"; // ✅ Import useCart hook
+import { useCart } from "@/contexts/CartContext";
 
 const font = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -79,7 +79,7 @@ function productImage(product: Product) {
 }
 
 export default function Popular({ fullPage = false }: PopularProps) {
-  const { addToCart } = useCart(); // ✅ Initialize cart context
+  const { addToCart } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -180,18 +180,15 @@ export default function Popular({ fullPage = false }: PopularProps) {
                     </div>
                   </div>
 
-                  {/* ✅ UPDATED: Dual Button Layout with Real Cart Integration */}
-                  <div className="mt-4 flex gap-2">
+                  {/* Vertically stacked on mobile, horizontally aligned on desktop */}
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                     <button
                       type="button"
                       disabled={unavailable}
                       onClick={(e) => {
                         e.preventDefault();
                         if (!unavailable && product.storeId) {
-                          // 1. Track analytics
                           trackAddToCartClick(product.storeId, product.id);
-                          
-                          // 2. Add to cart using context (auto-opens the off-canvas drawer)
                           addToCart({
                             id: `${product.storeId}-${product.id}`,
                             productId: product.id,

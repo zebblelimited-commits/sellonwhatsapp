@@ -8,7 +8,7 @@ import { Calendar, CheckCircle2, Package, Search } from "lucide-react";
 import { collection, doc, getDoc, limit, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
-import { useCart } from "@/contexts/CartContext"; // ✅ Import useCart
+import { useCart } from "@/contexts/CartContext";
 
 const font = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -76,7 +76,7 @@ function productIsUnavailable(product: SponsoredProduct) {
 }
 
 function SponsoredCard({ product }: { product: SponsoredProduct }) {
-  const { addToCart } = useCart(); // ✅ Initialize cart context
+  const { addToCart } = useCart();
   
   const action = productAction(product);
   const unavailable = productIsUnavailable(product);
@@ -104,18 +104,16 @@ function SponsoredCard({ product }: { product: SponsoredProduct }) {
           </div>
         </div>
 
-        {/* ✅ UPDATED: Dual Button Layout with Real Cart Integration */}
-        <div className="mt-3 flex gap-2">
+        {/* Vertically stacked on mobile (<640px), side-by-side on desktop */}
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
             disabled={unavailable}
             onClick={(e) => {
               e.preventDefault();
               if (!unavailable && storeId) {
-                // 1. Track the analytics event
                 trackAddToCartClick(storeId, product.id);
                 
-                // 2. Add to cart using context (auto-opens the off-canvas drawer)
                 addToCart({
                   id: `${storeId}-${product.id}`,
                   productId: product.id,
