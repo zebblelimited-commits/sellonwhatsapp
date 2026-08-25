@@ -15,6 +15,11 @@ const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
 export default function Header({ isStorePage = false, storeName = "" }) {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const [query, setQuery] = useState("");
   const [user, setUser] = useState<User | null>(null);
@@ -150,7 +155,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   const CartIcon = ({ className = "" }: { className?: string }) => (
     <button onClick={toggleCart} className={`relative p-2 text-gray-600 hover:text-[#00a63e] transition-colors ${className}`}>
       <ShoppingBag size={20} />
-      {cartCount > 0 && (
+      {mounted && cartCount > 0 && (
         <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#00a63e] text-[10px] font-bold text-white shadow-sm">
           {cartCount > 9 ? "9+" : cartCount}
         </span>
