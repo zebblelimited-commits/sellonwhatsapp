@@ -4,7 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
-import { Search, LayoutDashboard, LogOut, ExternalLink, Store, Menu, X, ShoppingBag } from "lucide-react";
+import {
+  Search, LayoutDashboard, LogOut, ExternalLink, Store, Menu, X, ShoppingBag, QrCode, Sparkles
+} from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { collection, query as firestoreQuery, getDocs, getDoc, doc, limit } from "firebase/firestore";
@@ -27,6 +29,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   const [isBuyer, setIsBuyer] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
   const { cartCount, toggleCart } = useCart();
 
@@ -151,6 +154,18 @@ export default function Header({ isStorePage = false, storeName = "" }) {
 
   const dashboardUrl = isAdmin ? "/admin" : isBuyer ? "/buyer/dashboard" : "/dashboard";
 
+  // QR Code Icon Component Trigger
+  const QrIconButton = ({ className = "" }: { className?: string }) => (
+    <button
+      type="button"
+      onClick={() => setIsQrModalOpen(true)}
+      aria-label="Scan Store QR Code"
+      className={`p-2 text-gray-600 hover:text-[#00a63e] transition-colors rounded-xl hover:bg-gray-50 active:scale-95 ${className}`}
+    >
+      <QrCode size={20} />
+    </button>
+  );
+
   // Reusable Cart Icon Component with Badge
   const CartIcon = ({ className = "" }: { className?: string }) => (
     <button onClick={toggleCart} className={`relative p-2 text-gray-600 hover:text-[#00a63e] transition-colors ${className}`}>
@@ -164,177 +179,223 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   );
 
   return (
-    <header className={`${font.className} flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 lg:px-6 py-3.5 border-b border-gray-200 bg-white sticky top-0 z-50`}>
+    <>
+      <header className={`${font.className} flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 lg:px-6 py-3.5 border-b border-gray-200 bg-white sticky top-0 z-50`}>
 
-      {/* Logo & Mobile Menu Toggle */}
-      <div className="flex w-full items-center justify-between lg:w-auto shrink-0">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
-            aria-expanded={isMobileMenuOpen}
-            onClick={() => setIsMobileMenuOpen((open) => !open)}
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-700 transition-colors hover:bg-gray-100 lg:hidden"
-          >
-            {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
-          <Link href="/" onClick={() => setIsMobileMenuOpen(false)}>
-            <div className="flex items-center px-1">
-              <img
-                src="/icons/sowa.png"
-                alt="Sowa Logo"
-                className="h-8 lg:h-11 w-auto object-contain"
-              />
-            </div>
-          </Link>
+        {/* Logo & Mobile Menu Toggle */}
+        <div className="flex w-full items-center justify-between lg:w-auto shrink-0">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={isMobileMenuOpen}
+              onClick={() => setIsMobileMenuOpen((open) => !open)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-700 transition-colors hover:bg-gray-100 lg:hidden"
+            >
+              {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
+            <Link href="/" onClick={() => setIsMobileMenuOpen(false)}>
+              <div className="flex items-center px-1">
+                <img
+                  src="/icons/sowa.png"
+                  alt="Sowa Logo"
+                  className="h-8 lg:h-11 w-auto object-contain"
+                />
+              </div>
+            </Link>
+          </div>
+
+          {/* Mobile Action Buttons (Dashboard / Login / Logout) */}
+          <div className="flex lg:hidden gap-1">
+            {user ? (
+              <>
+                <Link href={dashboardUrl} className="px-3 py-1.5 text-xs font-bold border border-gray-200 rounded-lg">
+                  Dashboard
+                </Link>
+                <button onClick={handleLogout} className="px-3 py-1.5 text-xs font-bold border border-red-200 text-red-600 rounded-lg">
+                  Logout
+                </button>
+              </>
+            ) : (
+              <Link href="/login" className="px-3 py-1.5 text-xs font-bold border border-gray-200 rounded-lg">
+                Login
+              </Link>
+            )}
+          </div>
         </div>
 
-        {/* Mobile Action Buttons (Dashboard / Login / Logout) */}
-        <div className="flex lg:hidden gap-1">
+        {/* Mobile Drawer Menu */}
+        {isMobileMenuOpen && (
+          <div className="w-full space-y-1 border-t border-gray-100 pt-3 lg:hidden">
+            <Link href="/explore" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Explore</Link>
+            <Link href="/categories" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Categories</Link>
+            <Link href="/search" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Search</Link>
+            <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Pricing</Link>
+            <Link href="/boost-store" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Boost Store</Link>
+            <Link href="/faq" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">FAQ</Link>
+            {user && vendorUsername && <Link href={`/${vendorUsername}`} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-green-700 hover:bg-green-50">Visit Store</Link>}
+            {user ? (
+              <>
+                <Link href={dashboardUrl} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100">Dashboard</Link>
+                <button type="button" onClick={() => { setIsMobileMenuOpen(false); void handleLogout(); }} className="block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-red-600 hover:bg-red-50">Logout</button>
+              </>
+            ) : (
+              <>
+                <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100">Login</Link>
+                <Link href="/register" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl bg-green-600 px-3 py-2.5 text-center text-sm font-bold text-white hover:bg-green-700">Get Started</Link>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Search Bar & Mobile Quick Actions Wrapper */}
+        <div className="flex items-center gap-2 w-full flex-1 min-w-[200px] lg:max-w-xs xl:max-w-md">
+          <div ref={searchRef} className="w-full flex-1 relative">
+            <form onSubmit={handleSearch} className="relative group z-[60]">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-green-600 transition-colors">
+                <Search size={18} strokeWidth={2.5} />
+              </div>
+              <input
+                value={query}
+                onFocus={() => setIsFocused(true)}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={isStorePage ? `Search in ${storeName}...` : "Search store @foodexpress or product..."}
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-600 transition-all bg-gray-50/50 focus:bg-white"
+              />
+            </form>
+
+            {/* AJAX DROPDOWN */}
+            {isFocused && (query.length > 0 || isSearching) && (
+              <div className="absolute top-full left-0 w-full bg-white mt-2 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-[50] animate-in fade-in slide-in-from-top-1">
+                {isSearching ? (
+                  <div className="p-4 text-center text-xs text-gray-400">Searching...</div>
+                ) : (results.stores.length > 0 || results.products.length > 0) ? (
+                  <div className="max-h-[400px] overflow-y-auto">
+                    {results.stores.length > 0 && (
+                      <>
+                        <div className="px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Stores</div>
+                        {results.stores.map(s => (
+                          <Link key={s.id} href={`/${s.username}`} onClick={() => setIsFocused(false)} className="flex items-center gap-3 p-3 hover:bg-green-50 transition-colors border-b border-gray-50 last:border-0">
+                            <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600"><Store size={14} /></div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-900">{s.storeName}</p>
+                              <p className="text-[10px] text-green-600">@{s.username}</p>
+                            </div>
+                          </Link>
+                        ))}
+                      </>
+                    )}
+
+                    {results.products.length > 0 && (
+                      <>
+                        <div className="px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Products</div>
+                        {results.products.map(p => (
+                          <Link key={p.id} href={`/products/${p.id}`} onClick={() => setIsFocused(false)} className="flex items-center gap-3 p-3 hover:bg-green-50 transition-colors border-b border-gray-50 last:border-0">
+                            <div className="w-8 h-8 rounded-lg bg-gray-100 overflow-hidden shrink-0">
+                              <img src={p.images?.[0] || p.image || "/placeholder.png"} className="w-full h-full object-cover" alt="" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-gray-900 truncate">{p.name}</p>
+                              <p className="text-[10px] text-gray-500">₦{Number(p.price).toLocaleString()}</p>
+                            </div>
+                          </Link>
+                        ))}
+                      </>
+                    )}
+                    <button onClick={handleSearch} className="w-full p-3 text-[11px] font-bold text-center text-gray-500 hover:bg-gray-50 border-t border-gray-50">
+                      Press Enter for all results
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-xs text-gray-400">No stores or products found</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Mobile Quick Action Buttons (QR scanner placed directly before Shopping Bag) */}
+          <div className="flex items-center lg:hidden shrink-0">
+            <QrIconButton />
+            <CartIcon />
+          </div>
+        </div>
+
+        {/* Desktop Navigation Links */}
+        <nav className="hidden lg:flex items-center gap-4 xl:gap-6 text-xs xl:text-sm font-semibold text-gray-600 shrink-0">
+          <Link href="/explore" className="hover:text-green-600 transition-colors whitespace-nowrap">Explore</Link>
+          <Link href="/categories" className="hover:text-green-600 transition-colors whitespace-nowrap">Categories</Link>
+          <Link href="/search" className="hover:text-green-600 transition-colors whitespace-nowrap">Search</Link>
+          <Link href="/pricing" className="hover:text-green-600 transition-colors whitespace-nowrap">Pricing</Link>
+          <Link href="/boost-store" className="hover:text-green-600 transition-colors whitespace-nowrap">Boost Store</Link>
+          <Link href="/faq" className="hover:text-green-600 transition-colors whitespace-nowrap">FAQ</Link>
+        </nav>
+
+        {/* Desktop Quick Actions (QR scanner placed directly before Shopping Bag) */}
+        <div className="hidden lg:flex items-center gap-2 shrink-0">
+          <QrIconButton />
+          <CartIcon />
           {user ? (
             <>
-              <Link href={dashboardUrl} className="px-3 py-1.5 text-xs font-bold border border-gray-200 rounded-lg">
-                Dashboard
+              {vendorUsername && (
+                <Link href={`/${vendorUsername}`} target="_blank" className="flex items-center gap-1.5 px-3.5 py-2 text-xs xl:text-sm font-bold border border-green-100 text-[#00a63e] rounded-xl hover:bg-green-50 transition-all whitespace-nowrap">
+                  <ExternalLink size={15} /> Visit Store
+                </Link>
+              )}
+              <Link href={dashboardUrl} className="flex items-center gap-1.5 px-3.5 py-2 text-xs xl:text-sm font-bold border border-gray-200 rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap">
+                <LayoutDashboard size={15} /> Dashboard
               </Link>
-              <button onClick={handleLogout} className="px-3 py-1.5 text-xs font-bold border border-red-200 text-red-600 rounded-lg">
-                Logout
+              <button onClick={handleLogout} className="flex items-center gap-1.5 px-3.5 py-2 text-xs xl:text-sm font-bold border border-red-100 text-red-600 rounded-xl hover:bg-red-50 transition-all active:scale-95 whitespace-nowrap">
+                <LogOut size={15} /> Logout
               </button>
             </>
           ) : (
-            <Link href="/login" className="px-3 py-1.5 text-xs font-bold border border-gray-200 rounded-lg">
-              Login
-            </Link>
+            <>
+              <Link href="/login" className="px-4 py-2 text-xs xl:text-sm font-bold border border-gray-200 rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap">Login</Link>
+              <Link href="/register" className="px-4 py-2 text-xs xl:text-sm font-bold bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all shadow-sm whitespace-nowrap">Get Started</Link>
+            </>
           )}
         </div>
-      </div>
+      </header>
 
-      {/* Mobile Drawer Menu */}
-      {isMobileMenuOpen && (
-        <div className="w-full space-y-1 border-t border-gray-100 pt-3 lg:hidden">
-          <Link href="/explore" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Explore</Link>
-          <Link href="/categories" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Categories</Link>
-          <Link href="/search" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Search</Link>
-          <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Pricing</Link>
-          <Link href="/boost-store" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Boost Store</Link>
-          <Link href="/faq" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">FAQ</Link>
-          {user && vendorUsername && <Link href={`/${vendorUsername}`} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-green-700 hover:bg-green-50">Visit Store</Link>}
-          {user ? (
-            <>
-              <Link href={dashboardUrl} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100">Dashboard</Link>
-              <button type="button" onClick={() => { setIsMobileMenuOpen(false); void handleLogout(); }} className="block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-red-600 hover:bg-red-50">Logout</button>
-            </>
-          ) : (
-            <>
-              <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100">Login</Link>
-              <Link href="/register" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl bg-green-600 px-3 py-2.5 text-center text-sm font-bold text-white hover:bg-green-700">Get Started</Link>
-            </>
-          )}
+      {/* COMING SOON QR SCANNER MODAL */}
+      {isQrModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setIsQrModalOpen(false)}
+          />
+          <div className="relative bg-white rounded-3xl w-full max-w-sm p-6 text-center shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+            <button
+              type="button"
+              onClick={() => setIsQrModalOpen(false)}
+              className="absolute top-4 right-4 p-2 bg-gray-50 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-700 transition-colors"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="w-16 h-16 bg-green-50 text-[#00a63e] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-green-100 shadow-inner">
+              <QrCode size={32} />
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 bg-green-100/60 text-[#00a63e] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3">
+              <Sparkles size={12} /> Coming Soon
+            </div>
+
+            <h3 className="text-lg font-extrabold text-gray-900 mb-2">Instant Store QR Scanner</h3>
+            <p className="text-xs text-gray-500 leading-relaxed mb-6 font-medium">
+              We are building a seamless QR scanning experience that allows you to scan physical store codes, instantly browse vendor catalogs, and complete checkouts on the spot.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setIsQrModalOpen(false)}
+              className="w-full py-3.5 rounded-xl bg-[#00a63e] hover:bg-[#008c34] text-white font-extrabold text-xs uppercase tracking-wider transition-all active:scale-95 shadow-md shadow-green-600/10"
+            >
+              Got it
+            </button>
+          </div>
         </div>
       )}
-
-      {/* Search Bar & Mobile Cart Icon Wrapper */}
-      <div className="flex items-center gap-2 w-full flex-1 min-w-[200px] lg:max-w-xs xl:max-w-md">
-        <div ref={searchRef} className="w-full flex-1 relative">
-          <form onSubmit={handleSearch} className="relative group z-[60]">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-green-600 transition-colors">
-              <Search size={18} strokeWidth={2.5} />
-            </div>
-            <input
-              value={query}
-              onFocus={() => setIsFocused(true)}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={isStorePage ? `Search in ${storeName}...` : "Search store @foodexpress or product..."}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-green-500/10 focus:border-green-600 transition-all bg-gray-50/50 focus:bg-white"
-            />
-          </form>
-
-          {/* AJAX DROPDOWN */}
-          {isFocused && (query.length > 0 || isSearching) && (
-            <div className="absolute top-full left-0 w-full bg-white mt-2 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-[50] animate-in fade-in slide-in-from-top-1">
-              {isSearching ? (
-                <div className="p-4 text-center text-xs text-gray-400">Searching...</div>
-              ) : (results.stores.length > 0 || results.products.length > 0) ? (
-                <div className="max-h-[400px] overflow-y-auto">
-                  {results.stores.length > 0 && (
-                    <>
-                      <div className="px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Stores</div>
-                      {results.stores.map(s => (
-                        <Link key={s.id} href={`/${s.username}`} onClick={() => setIsFocused(false)} className="flex items-center gap-3 p-3 hover:bg-green-50 transition-colors border-b border-gray-50 last:border-0">
-                          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600"><Store size={14} /></div>
-                          <div>
-                            <p className="text-xs font-bold text-gray-900">{s.storeName}</p>
-                            <p className="text-[10px] text-green-600">@{s.username}</p>
-                          </div>
-                        </Link>
-                      ))}
-                    </>
-                  )}
-
-                  {results.products.length > 0 && (
-                    <>
-                      <div className="px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Products</div>
-                      {results.products.map(p => (
-                        <Link key={p.id} href={`/products/${p.id}`} onClick={() => setIsFocused(false)} className="flex items-center gap-3 p-3 hover:bg-green-50 transition-colors border-b border-gray-50 last:border-0">
-                          <div className="w-8 h-8 rounded-lg bg-gray-100 overflow-hidden shrink-0">
-                            <img src={p.images?.[0] || p.image || "/placeholder.png"} className="w-full h-full object-cover" alt="" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-gray-900 truncate">{p.name}</p>
-                            <p className="text-[10px] text-gray-500">₦{Number(p.price).toLocaleString()}</p>
-                          </div>
-                        </Link>
-                      ))}
-                    </>
-                  )}
-                  <button onClick={handleSearch} className="w-full p-3 text-[11px] font-bold text-center text-gray-500 hover:bg-gray-50 border-t border-gray-50">
-                    Press Enter for all results
-                  </button>
-                </div>
-              ) : (
-                <div className="p-6 text-center text-xs text-gray-400">No stores or products found</div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Mobile Cart Icon (positioned right next to search bar on mobile, hidden on desktop) */}
-        <CartIcon className="lg:hidden shrink-0" />
-      </div>
-
-      {/* Desktop Navigation Links */}
-      <nav className="hidden lg:flex items-center gap-4 xl:gap-6 text-xs xl:text-sm font-semibold text-gray-600 shrink-0">
-        <Link href="/explore" className="hover:text-green-600 transition-colors whitespace-nowrap">Explore</Link>
-        <Link href="/categories" className="hover:text-green-600 transition-colors whitespace-nowrap">Categories</Link>
-        <Link href="/search" className="hover:text-green-600 transition-colors whitespace-nowrap">Search</Link>
-        <Link href="/pricing" className="hover:text-green-600 transition-colors whitespace-nowrap">Pricing</Link>
-        <Link href="/boost-store" className="hover:text-green-600 transition-colors whitespace-nowrap">Boost Store</Link>
-        <Link href="/faq" className="hover:text-green-600 transition-colors whitespace-nowrap">FAQ</Link>
-      </nav>
-
-      {/* Desktop Auth & Cart Buttons */}
-      <div className="hidden lg:flex items-center gap-2 shrink-0">
-        <CartIcon />
-        {user ? (
-          <>
-            {vendorUsername && (
-              <Link href={`/${vendorUsername}`} target="_blank" className="flex items-center gap-1.5 px-3.5 py-2 text-xs xl:text-sm font-bold border border-green-100 text-[#00a63e] rounded-xl hover:bg-green-50 transition-all whitespace-nowrap">
-                <ExternalLink size={15} /> Visit Store
-              </Link>
-            )}
-            <Link href={dashboardUrl} className="flex items-center gap-1.5 px-3.5 py-2 text-xs xl:text-sm font-bold border border-gray-200 rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap">
-              <LayoutDashboard size={15} /> Dashboard
-            </Link>
-            <button onClick={handleLogout} className="flex items-center gap-1.5 px-3.5 py-2 text-xs xl:text-sm font-bold border border-red-100 text-red-600 rounded-xl hover:bg-red-50 transition-all active:scale-95 whitespace-nowrap">
-              <LogOut size={15} /> Logout
-            </button>
-          </>
-        ) : (
-          <>
-            <Link href="/login" className="px-4 py-2 text-xs xl:text-sm font-bold border border-gray-200 rounded-xl hover:bg-gray-50 transition-all whitespace-nowrap">Login</Link>
-            <Link href="/register" className="px-4 py-2 text-xs xl:text-sm font-bold bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all shadow-sm whitespace-nowrap">Get Started</Link>
-          </>
-        )}
-      </div>
-    </header>
+    </>
   );
 }
