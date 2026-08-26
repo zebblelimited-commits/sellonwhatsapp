@@ -22,7 +22,7 @@ interface ShippingSelectorProps {
 const SELF_ARRANGED_OPTION: ShippingOption = {
     id: "self_arranged",
     name: "Self-Arranged (Pickup / Direct Arrangement)",
-    logo: "",
+    logo: "/images/couriers/self-arranged.png",
     estimatedDays: "Flexible / Arrange with Seller",
     shippingFee: 0,
 };
@@ -120,15 +120,15 @@ export default function ShippingSelector({
                             type="button"
                             onClick={() => onSelectOption(option)}
                             className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all text-left ${isSelected
-                                    ? "border-green-600 bg-green-50/50 shadow-sm"
-                                    : "border-gray-100 hover:border-gray-200 bg-white"
+                                ? "border-green-600 bg-green-50/50 shadow-sm"
+                                : "border-gray-100 hover:border-gray-200 bg-white"
                                 }`}
                         >
                             <div className="flex items-center gap-3">
                                 <div
                                     className={`p-2.5 rounded-xl ${isSelected
-                                            ? "bg-green-100 text-green-700"
-                                            : "bg-gray-100 text-gray-600"
+                                        ? "bg-green-100 text-green-700"
+                                        : "bg-gray-100 text-gray-600"
                                         }`}
                                 >
                                     {isSelfArranged ? <Store size={20} /> : <Truck size={20} />}
@@ -148,8 +148,8 @@ export default function ShippingSelector({
                                 </span>
                                 <div
                                     className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${isSelected
-                                            ? "bg-green-600 border-green-600 text-white"
-                                            : "border-gray-300 bg-white"
+                                        ? "bg-green-600 border-green-600 text-white"
+                                        : "border-gray-300 bg-white"
                                         }`}
                                 >
                                     {isSelected && <Check size={12} strokeWidth={3} />}

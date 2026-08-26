@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
             shippingOptions.push({
                 id: doc.id,
                 name: courier.name,
-                logo: courier.logo || "/couriers/default.png",
+                logo: courier.logo || "/images/couriers/fezlogo.png",
                 estimatedDays: courier.estimatedDays || "2-5 Business Days",
                 shippingFee: roundedFee,
             });

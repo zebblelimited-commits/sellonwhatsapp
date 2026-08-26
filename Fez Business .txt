@@ -1,0 +1,2463 @@
+Authenticate
+This is authentication endpoint to authenticate users.
+
+Authenticate User
+
+Endpoint => /user/authenticate
+POST /user/authenticate
+
+An admin credentials will be created and shared with you once your organization has been onboarded on our portal and all KYC activities has been.
+
+Request Body
+Name
+Type
+Description
+user_id*
+
+String
+
+User Id
+
+password*
+
+String
+
+User Password
+
+
+200 Success
+
+Copy
+{
+  "status": "Success",
+  "description": "Login Successfull",
+  "authDetails": {
+    "authToken": "PBKWY4APEAQD83FBU9GZK37NGH11SUNH-168",
+    "expireToken": "2023-01-27 05:06:08"
+  },
+  "userDetails": {
+    "userID": "G-4568-3493",
+    "Full Name": "King One Admin",
+    "Username": "kingOneAdmin"
+  },
+  "orgDetails": {
+    "secret-key": "T2Y629UUeiwe7fjdj838934ooosoi82398297297482992",
+    "Org Full Name": "King One Enterprise"
+  }
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/user/authenticate',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_POSTFIELDS =>'{
+    "user_id": "G-4568-3493",
+    "password":"KingOne123#"
+}',
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+Good to know: Upon a successful login, the API returns the user details and the authentication details which contain your bearer token and the token's expiry date.
+
+Please use the bearer token when making calls to other method. Also, please include secret-key in your header. The secret key identify your organization
+
+Logout
+This endpoint invalidates a user's session. It takes a mandatory parameter of user_id.
+
+Endpoint => /user/logout
+POST /user/logout
+
+Headers
+Name
+Type
+Description
+secret-key*
+
+String
+
+User secret key
+
+Authorization*
+
+String
+
+Token
+
+
+200 Success
+
+401 Unauthorized
+
+Copy
+{
+    "status": "Success",
+    "description": "Logout Successfull"
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/user/logout',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_POSTFIELDS =>'{
+    "user_id":"G-ylNt-c7xD"
+}',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+Change Password
+This endpoint allows user change their password.It is recommended that this endpoint be called to change any password that may have been generated for your user during the onboarding process.
+
+Change Password
+
+Endpoint => /user/changePassword
+POST /user/changePassword
+
+Headers
+Name
+Type
+Description
+secret-key*
+
+String
+
+User secret key
+
+Authorization*
+
+String
+
+Token
+
+Request Body
+Name
+Type
+Description
+user_id*
+
+String
+
+The user_id of the user who is requiring a password change.
+
+oldPassword*
+
+String
+
+The user's old password
+
+newPassword*
+
+String
+
+The user's new password
+
+
+200 Success
+
+401 Unauthorized
+
+400 Incorrect Paasword
+
+Copy
+{
+    "status": "Success",
+    "description": "Password Successfully Changed"
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/user/changePassword',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_POSTFIELDS =>'{
+    "user_id":"G-1234-6svhc",
+    "oldPassword":"KingOne123#",
+    "newPassword":"KingTwo1234#"
+}',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+
+
+
+
+
+
+/////////////
+
+Create
+This is the endpoint for creating an order or requesting a pick up.
+
+This endpoint can be used for single or multiple request. It takes an array object(s).
+
+Create Order
+
+Endpoint => /order
+POST /order
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+Request Body
+Search
+Name
+Type
+Description
+recipientAddress*
+
+String
+
+Recipient Address (Delivery destination)
+
+recipientState*
+
+String
+
+Must be any of the 36 states or FCT
+
+recipientName*
+
+String
+
+Recipient Name
+
+recipientPhone*
+
+String
+
+Recipient Phone or Mobile number
+
+recipientEmail
+
+Email
+
+Recipient Email
+
+uniqueID*
+
+String
+
+Any value that uniquely identifies a delivery request from the client's side
+
+BatchID*
+
+String
+
+Any value that identifies the request. i.e all the delivery requests in an API call should have the same Batch ID.
+
+CustToken
+
+String
+
+if your organization sends a token to recipient for confirmation of receipt purpose, please include the token here.
+
+itemDescription
+
+String
+
+Description of the order
+
+additionalDetails
+
+String
+
+Any additional details you want us to know about the order. You can add additional recipient phone numbers or address landmark here.
+
+valueOfItem*
+
+String
+
+The value of items
+
+weight*
+
+Integer
+
+Weight of item in Kg (Kilogram)
+
+pickUpState
+
+string
+
+Must be any of the 36 states or FCT (optional)
+
+pickUpAddress
+
+string
+
+The address from which the  item to be sent should be picked up from. Its Optional. If not supplied, the business address is used.
+
+waybillNumber
+
+string
+
+Unique string from 3rd party logistics partners for a given order.
+
+pickUpDate
+
+Date
+
+Date in which you want the order to be picked up (Optional)
+
+isItemCod
+
+Boolean
+
+A boolean flag indicating if the item delivered is to be paid for at the point of delivery. its optional and its default value is false.(Optional)
+
+cashOnDeliveryAmount
+
+Decimal | Integer
+
+Amount to be paid for the Item been delivered. (Optional)
+
+fragile
+
+Boolean
+
+An indicator that the item to be delivered is fragile. (Default : false)
+
+lockerID
+
+string
+
+The selected locker ID to deliver the item to. (Optional)
+
+recipientAlternatePhone
+
+string
+
+Recipient Alternate Phone or Mobile number (Optional)
+
+
+201: Created Success
+
+401 Unauthorized
+
+Copy
+{
+  "status": "Success",
+  "description": "Order Successfully Created",
+  "orderNos": {
+    "KingOne-1234": "ASAC27012319",
+    "KingOne-1235": "JHAZ27012319"
+  }
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/order',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_POSTFIELDS =>'[{
+    "recipientAddress":"Idumota",
+    "recipientState":"Lagos",
+    "recipientName":"Femi",
+    "recipientPhone":"08000000000000",
+    "uniqueID":"KingOne-1234",
+    "BatchID":"KingOne-1",
+    "valueOfItem": "20000"
+},{
+    "recipientAddress":"Idumota3",
+    "recipientState":"Lagos",
+    "recipientName":"Femi2",
+    "recipientPhone":"08000000000000",
+    "uniqueID":"KingOne-1235",
+    "BatchID":"KingOne-1",
+    "valueOfItem": "20000"
+}]',
+  CURLOPT_HTTPHEADER => array(
+    'secret_key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+// Some code
+Good to know: By default, the name, address and phone number of your organization as set during the onboarding process is captured as the sender's name, sender's address, sender's phone number respectively. However, if you want to specify a different senders Name, senders Address and phone number, please add the following field in the request parameter
+
+thirdparty: Please set to "true" i.e "thirdparty": "true".
+
+senderName: The name of the sender.
+
+senderAddress: The address of the sender.
+
+senderPhone: The phone number of the sender.
+
+Upon successfully creating the order, the API returns an array object that consist of the orderNo for each request.
+
+////
+
+Get
+This is the endpoint for getting the details of an order. The details gotten includes the status of the order and the timelines of the order - pick up date, dispatched date, delivery date etc.
+
+Get Order
+
+Endpoint => /orders/{order_id}
+GET /orders/{order_id}
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+
+200 Success
+
+401 Unauthorized
+
+Copy
+{
+    "status": "Success",
+    "description": "Details Fetched Successfully",
+    "orderDetails": [
+        {
+            "id": 28155,
+            "clientAddress": "86 Olonode St, Alagomeji-Yaba, Lagos 101245, Lagos, Nigeria",
+            "orderNo": "6XUK13072630",
+            "delivery_OTP": null,
+            "pickUpDate": null,
+            "quantity": 1,
+            "dispatchDate": null,
+            "recipientName": "Mrs Chinyere Obetta",
+            "recipientAddress": "Lagos Nigeria",
+            "recipientEmail": null,
+            "recipient_phone": "+2348056523441(Alt:+2347065408830)",
+            "recipientPhone": "+2348056523441",
+            "itemDescription": "Clothes",
+            "statusDescription": null,
+            "orderStatus": "Pending Payment",
+            "deliveryDate": null,
+            "paymentMode": null,
+            "paymentStatus": "unpaid",
+            "cost": "3398.36",
+            "dropZoneName": "Default",
+            "returnReason": null,
+            "returnDate": null,
+            "recievedBySignature": null,
+            "additionalNote": null,
+            "orderVerified": "pending",
+            "thirdparty": null,
+            "thirdparty_sendersName": null,
+            "thirdparty_sendersPhone": null,
+            "recipientState": "Imo",
+            "senderState": null,
+            "created_at": "2026-07-13T10:53:30.000000Z",
+            "recipientAlternatePhone": null,
+            "createdBy": "C-21833-665",
+            "OrgRep": "G-DA5b-2Ce5",
+            "orderDate": "2026-07-13 11:53:30",
+            "weight": "2",
+            "sub_organization_id": null,
+            "manifest": {
+                "orderNo": "6XUK13072630",
+                "requestType": "local",
+                "pickUpState": "Lagos",
+                "dropOffState": "Lagos",
+                "pickUpZone": "Default",
+                "dropOffZone": "Default",
+                "displayZone": false,
+                "PickUpHub": "Lagoswa",
+                "DropOffHub": "Hq",
+                "recipientName": "Mrs Chinyere Obetta",
+                "recipientPhone": "+2348056523441 (Alt:+2347065408830)",
+                "recipientAddress": "Lagos Nigeria",
+                "description": "Clothes",
+                "sendersName": "Inya Johnson",
+                "fragile": false
+            },
+            "organizationUser": {
+                "fullname": "Admin",
+                "user_id": "G-DA5b-2Ce5"
+            },
+            "subOrganization": null,
+            "cps": null,
+            "currency": "NGN",
+            "currencySymbol": "₦",
+            "client": {
+                "id": 9081,
+                "clientId": "C-21833-665",
+                "fullName": "Inya Johnson",
+                "address": "23 Association Close Ogudu",
+                "phone": "08134822658",
+                "email": "intoajohnson@gmail.com",
+                "status": "",
+                "type": "business",
+                "logo": "https://media.licdn.com/dms/image/v2/C4D03AQE7Q5ScMTKYKQ/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1597936408421?e=1747872000&v=beta&t=wp8KuBFZXlvhDl2dy60WVWcsD6unrY0Cu-K4NuCKDQ0",
+                "businessType": {
+                    "id": 7,
+                    "name": "Logistics"
+                }
+            },
+            "manifest_print_out_url": null,
+            "is_item_cod": 0,
+            "cod_amount": null,
+            "insured": false,
+            "insurance_status": "Not Insured",
+            "timezone": "Africa/Lagos"
+        }
+    ]
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/orders/6XUK13072630',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'GET',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+Previous
+Create
+
+
+///////
+
+Manifest
+Returns the manifest document URL for a single order, if one has been generated.
+
+Manifest Url
+
+Endpoint => /orders/{orderNo}/manifest-url
+GET /orders/{orderNo}/manifest-url
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+
+200 Success
+
+401 Unauthorized
+
+404 Not Found
+
+Copy
+{
+  "status": "Success",
+  "description": "Request Successful",
+  "data": { "url": "https://.../manifest.pdf" }
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/orders/JHAZ27012319/manifest-url',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'GET',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+/////
+Update
+This is the endpoint for updating orders. It can be used for single or multiple orders and it takes an array object.
+
+Update Order
+
+Endpoint => /order
+PUT /order
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+Request Body
+Name
+Type
+Description
+recipientAddress
+
+String
+
+Recipient Address (Delivery destination)
+
+recipientState
+
+String
+
+Must be any of the 36 states or FCT
+
+recipientName
+
+String
+
+Recipient Name
+
+recipientPhone
+
+String
+
+Recipient Phone or Mobile number
+
+orderNo*
+
+String
+
+Order number
+
+
+201: Created Success
+
+401 Unauthorized
+
+Copy
+{
+  "status": "Success",
+  "description": "Update Batch Request Processed",
+  "Response": {
+    "37P727012321": "Order Successfully Updated",
+    "JHAZ27012319": "Order Successfully Updated"
+  }
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/order/multiple',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'PUT',
+  CURLOPT_POSTFIELDS =>'[{
+    "recipientAddress":"Idumota11",
+    "recipientState":"Lagos",
+    "recipientName":"Femi11",
+    "recipientPhone":"08059151937",
+    "orderNo":"37P727012321"
+},{
+    "recipientAddress":"Idumota33",
+    "recipientState":"Lagos",
+    "recipientName":"Femi2334",
+    "recipientPhone":"08059051937",
+    "orderNo":"JHAZ27012319"
+}]
+',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+Good to know: Upon successfully creating the order, the API returns an array object that consist of the update feedback for each request.
+/////////////
+
+Delete
+This is the endpoint for deleting an order or a pick up.
+
+Delete Order
+
+Endpoint => /order
+DELETE /order
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+Request Body
+Name
+Type
+Description
+orderNo*
+
+String
+
+Order number
+
+
+200 Success
+
+401 Unauthorized
+
+Copy
+{
+  "status": "Success",
+  "description": "Order Successfully Deleted"
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/order',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'DELETE',
+  CURLOPT_POSTFIELDS =>'{
+    "orderNo":"IH2107082117"
+}',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+/////
+
+Cancel
+Cancels an order and, if it was already paid for, refunds the cost to the organisation's business wallet.
+
+An order can only be cancelled while its orderStatus is one of:
+
+Pending Pick-Up
+
+Pending Payment
+
+Pending Drop-off
+
+Dropped-off
+
+Rejected At Drop-off
+
+Failed Pick-Up
+
+Any other status (e.g. Delivered, Dispatched) is rejected.
+
+Only single-order cancellation is supported (no bulk cancel).
+
+Only business/organisation wallets are supported, individual wallets are out of scope for this endpoint.
+
+Cancel Order
+
+Endpoint => /order/cancel
+POST /order/cancel
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+Request Body
+Name
+Type
+Description
+orderNo*
+
+String
+
+The order to cancel. Must belong to the requesting organisation.
+
+reason*
+
+String
+
+Cancellation reason, max 255 characters. Stored on the order as Cancel Reason.
+
+
+200 Success
+
+400 Bad Request
+
+401 Unauthorized
+
+442 Unprocessed Entities
+
+Copy
+{ 
+    "status": "Success", 
+    "description": "Order Successfully Cancelled" 
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/order/cancel',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_POSTFIELDS =>'{
+  "orderNo": "9MCW24062553",
+  "reason": "Customer requested cancellation"
+}',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+/////
+
+Search
+This endpoint allows you spool your orders.
+
+Search Order
+
+Endpoint => /orders/search
+POST /orders/search
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+Request Body
+Search
+Name
+Type
+Description
+startDate*
+
+String
+
+Start of the search date range
+
+orderNo
+
+String
+
+Order number
+
+recipientName
+
+String
+
+Recipient Name
+
+recipientPhone
+
+String
+
+Recipient Phone or Mobile number
+
+orderStatus
+
+String
+
+Enum value: Pending Pick-Up,Picked-Up,Dispatched,Delivered,Returned
+
+OrgRep
+
+String
+
+This is the user_id of the user who created the order
+
+endDate*
+
+String
+
+End of the search date range
+
+page*
+
+Integer
+
+The endpoint returns a maximum of 50 records. If the search result is more that 50, a link object is created that specifies the page Number of the next page. Please pass this number in your subsequent request to fetch the remaining records.
+
+
+200: OK Success
+
+401 Unauthorized
+
+Copy
+{
+  "status": "Success",
+  "description": "Order Fetched Successfully",
+  "orders": {
+    "current_page": 1,
+    "data": [
+      {
+        "orderNo": "O41027012333",
+        "recipientName": "Femi",
+        "recipientEmail": "",
+        "recipientAddress": "Idumota",
+        "recipientPhone": "08000000000000",
+        "orderStatus": "Pending Pick-Up",
+        "statusDescription": null,
+        "cost": "900",
+        "createdBy": "C-39006-611",
+        "OrgRep": "G-ylNt-c7xD",
+        "orderDate": "2023-01-27 02:46:33",
+        "pickUpDate": "0000-00-00 00:00:00",
+        "dispatchDate": null,
+        "deliveryDate": null,
+        "returnReason": null,
+        "returnDate": null
+      },
+      {
+        "orderNo": "JN7327012333",
+        "recipientName": "Femi2",
+        "recipientEmail": "",
+        "recipientAddress": "Idumota3",
+        "recipientPhone": "08000000000000",
+        "orderStatus": "Pending Pick-Up",
+        "statusDescription": null,
+        "cost": "900",
+        "createdBy": "C-39006-611",
+        "OrgRep": "G-ylNt-c7xD",
+        "orderDate": "2023-01-27 02:46:33",
+        "pickUpDate": "0000-00-00 00:00:00",
+        "dispatchDate": null,
+        "deliveryDate": null,
+        "returnReason": null,
+        "returnDate": null
+      },
+      {
+        "orderNo": "9KDT27012348",
+        "recipientName": "Femi",
+        "recipientEmail": "",
+        "recipientAddress": "Idumota",
+        "recipientPhone": "08000000000000",
+        "orderStatus": "Pending Pick-Up",
+        "statusDescription": null,
+        "cost": "900",
+        "createdBy": "C-39006-611",
+        "OrgRep": "G-ylNt-c7xD",
+        "orderDate": "2023-01-27 02:46:48",
+        "pickUpDate": "0000-00-00 00:00:00",
+        "dispatchDate": null,
+        "deliveryDate": null,
+        "returnReason": null,
+        "returnDate": null
+      },
+      {
+        "orderNo": "M7W727012349",
+        "recipientName": "Femi2",
+        "recipientEmail": "",
+        "recipientAddress": "Idumota3",
+        "recipientPhone": "08000000000000",
+        "orderStatus": "Pending Pick-Up",
+        "statusDescription": null,
+        "cost": "900",
+        "createdBy": "C-39006-611",
+        "OrgRep": "G-ylNt-c7xD",
+        "orderDate": "2023-01-27 02:46:49",
+        "pickUpDate": "0000-00-00 00:00:00",
+        "dispatchDate": null,
+        "deliveryDate": null,
+        "returnReason": null,
+        "returnDate": null
+      },
+      {
+        "orderNo": "JHAZ27012319",
+        "recipientName": "Femi2",
+        "recipientEmail": "",
+        "recipientAddress": "Idumota3",
+        "recipientPhone": "08000000000000",
+        "orderStatus": "Pending Pick-Up",
+        "statusDescription": null,
+        "cost": "900",
+        "createdBy": "C-39006-611",
+        "OrgRep": "G-ylNt-c7xD",
+        "orderDate": "2023-01-27 02:47:19",
+        "pickUpDate": "0000-00-00 00:00:00",
+        "dispatchDate": null,
+        "deliveryDate": null,
+        "returnReason": null,
+        "returnDate": null
+      },
+      {
+        "orderNo": "333R27012331",
+        "recipientName": "Femi",
+        "recipientEmail": "",
+        "recipientAddress": "Idumota",
+        "recipientPhone": "08000000000000",
+        "orderStatus": "Pending Pick-Up",
+        "statusDescription": null,
+        "cost": "900",
+        "createdBy": "C-39006-611",
+        "OrgRep": "G-ylNt-c7xD",
+        "orderDate": "2023-01-27 02:53:31",
+        "pickUpDate": "0000-00-00 00:00:00",
+        "dispatchDate": null,
+        "deliveryDate": null,
+        "returnReason": null,
+        "returnDate": null
+      }
+    ],
+    "first_page_url": "https://apisandbox.fezdelivery.co/v1/orders/search?page=1",
+    "from": 1,
+    "last_page": 1,
+    "last_page_url": "https://apisandbox.fezdelivery.co/v1/orders/search?page=1",
+    "next_page_url": null,
+    "path": "https://apisandbox.fezdelivery.co/v1/orders/search",
+    "per_page": 50,
+    "prev_page_url": null,
+    "to": 6,
+    "total": 6
+  }
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/orders/search',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_POSTFIELDS =>'{
+    "startDate":"2019-08-26",
+    "endDate":"2023-10-10"
+}',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+The startDate and endDate is based on order Date.
+/////
+
+Search via Waybill Number
+This endpoint allows you get an order via clients own waybill number (unique idnetifier)
+
+Search Order via waybill Number
+
+Endpoint => /orders/search/{waybillNumber}
+GET /orders/search/{waybillNumber}
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+Params
+Name
+Type
+Description
+waybillNumber
+
+String
+
+The client's unique identifier for a particular order on their own system.
+
+
+200: OK Success
+
+401 Unauthorized
+
+Copy
+{
+    "status": "Success",
+    "description": "Order Fetch Successfully",
+    "data": {
+        "orderNumber": "KMXH15082440",
+        "waybillNumber": "74U839SUSY7"
+    }
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/orders/search/64-UU0P8-NG',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'GET',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  )
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+The startDate and endDate is based on order Date.
+
+Status With Date Range
+This endpoint return the counts of order per each status - Pending Pick-Up, Picked Up, Dispatched, Delivered, Returned.
+
+Get Order
+
+Endpoint => /orders/statsWithDateRange
+POST /orders/statsWithDateRange
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+Request Body
+Name
+Type
+Description
+startDate*
+
+String
+
+Start of the search date range
+
+endDate
+
+String
+
+End of the search date range
+
+
+200 Success
+
+401 Unauthorized
+
+Copy
+{
+  "status": "Success",
+  "description": "Details Fetched Successfully",
+  "orderDetails": [
+    {
+      "orderNo": "JHAZ27012319",
+      "recipientName": "Femi2",
+      "recipientEmail": "",
+      "recipientAddress": "Idumota3",
+      "recipientPhone": "08000000000000",
+      "orderStatus": "Pending Pick-Up",
+      "statusDescription": null,
+      "cost": "900",
+      "createdBy": "C-39006-611",
+      "OrgRep": "G-ylNt-c7xD",
+      "pickUpDate": "0000-00-00 00:00:00",
+      "dispatchDate": null,
+      "deliveryDate": null,
+      "returnDate": null,
+      "dropZoneName": null,
+      "returnReason": n
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/orders/statsWithDateRange',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_POSTFIELDS =>'{
+    "startDate":"2019-02-17",
+    "endDate":"2022-11-28"
+}',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+//////
+
+Fetch Delivery Cost
+This is the endpoint for fetching the cost of delivery .It takes a non mandatory parameter - state. If state is not passed, the cost of delivery to all the states and FCT is returned.
+
+By default, the cost returned when state field is not passed is based on the weight of the parcel being between 0-5kg.
+
+To get the cost of the delivery based on the weight of the parcel, please add the weight field.
+
+Please note that the delivery cost API assumes pick up location (state) is the state configured in your organization's profile and the cost returned is between a pick up location in that state to any state you pass in the request. For example, if your business is configured to be operating out of Rivers State, the cost returned from this endpoint will be from Rivers State to any state passed in the request as the destination state or from Rivers to all the 36 States and FCT,if the state field is empty.
+
+Delivery Cost
+
+Endpoint => /order/cost
+POST /order/cost
+
+Kindly use cost (lowercase) instead of Cost in the response body.
+Please note that the actual amount charged is the sum of VAT and cost, which represents the total cost.
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+Request Body
+Name
+Type
+Description
+state
+
+String
+
+The Destination State to deliver to
+
+pickUpState
+
+String
+
+The State from which the Item is leaving (Optional)
+
+weight
+
+Numeric
+
+Weight of order (Optional)
+
+locker
+
+Boolean
+
+Indicate that the delivery should via locker. (Default: false)
+
+
+200 Success
+
+401 Unauthorized
+
+Copy
+{
+    "status": "Success",
+    "description": "Cost Fetched Successfully",
+    "Cost": {
+        "state": "Kano",
+        "cost": 6000
+    },
+    "cost": {
+        "state": "Kano",
+        "cost": 6000
+    },
+    "vat": {
+        "vatAmount": 450,
+        "vatPercent": "7.50"
+    },
+    "totalCost": 6450
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/order/cost',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_POSTFIELDS =>'{
+    "state":"Kano"
+}',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+///
+
+Track
+This is the endpoint can be used to get the status of an order and view the delivery timeline of that order.
+
+This endpoints returns an order object which includes the status of the order, sender/recipient name and sender/recipient address. It also returns the history object which contains the history/timeline of the order.
+
+Endpoint => /order/track/{orderNumber}
+GET /order/track/{orderNumber}
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+
+200 Success
+
+401 Unauthorized
+
+Copy
+{
+  "status": "Success",
+  "description": "History Fetched",
+  "order": {
+    "orderNo": "1T7002122309",
+    "orderStatus": "Dispatched",
+    "recipientAddress": "10",
+    "recipientName": "ferferf",
+    "senderAddress": "3A SULAIMON SHODERU STREET, HARUNA BUS STOP, IKORODU",
+    "senderName": "  KIDS PLACE",
+    "recipientState": "Lagos",
+    "createdAt": "2023-12-02 06:14:09",
+    "timezone": "Africa/Lagos",
+    "proofOfDelivery": null
+  },
+  "history": [
+    {
+      "orderStatus": "Dispatched",
+      "statusCreationDate": "2023-12-02 13:14:40",
+      "statusDescription": "Your package is on its way to the delivery address and is en route to the customer"
+    },
+    {
+      "orderStatus": "Picked-Up",
+      "statusCreationDate": "2023-12-02 13:14:09",
+      "statusDescription": "Our rider has picked-up your item and is heading back to the office"
+    }
+  ]
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/order/track/1T7002122309',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'GET',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+//////
+Endpoint => /delivery-time-estimate
+POST /delivery-time-estimate
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+Request Body
+Name
+Type
+Description
+delivery_type*
+
+String|Enum: import, export, local
+
+Its a string which takes any of these 3 options [import, export, local].
+
+pick_up_state
+
+String
+
+A valid state available within fez delivery coverage
+
+drop_off_state
+
+String
+
+A valid state available within fez delivery coverage
+
+
+201: Created Success
+
+401 Unauthorized
+
+422 Validation Error
+
+Copy
+{
+  "status": "Success",
+  "description": "Update Batch Request Processed",
+  "data": {
+    "eta": "2 - 5 day(s)"
+  }
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/delivery-time-estimate?delivery_type=local&pick_up_state=edo&drop_off_state=lagos',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_POSTFIELDS =>'[
+    'delivery_type':'local',
+    'pick_up_state':'edo',
+    'drop_off_state':'lagos'
+  ]',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+////
+Pickup Hubs
+This is the endpoint for provides a list of all Fez hubs in a state.
+
+Delivery Time Estimate
+
+Endpoint => /hubs/{stateId}
+GET /hubs/{stateId}
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+
+201: Created Success
+
+401 Unauthorized
+
+422 Validation Error
+
+Copy
+{
+    "status": "Success",
+    "description": "Hubs fetched successfully",
+    "hubs": [
+        {
+            "id": 1,
+            "name": "Lagoswa",
+            "address": "Lagos Nigeria"
+        },
+        {
+            "id": 15,
+            "name": "C-98100-753",
+            "address": "custom road"
+        }
+    ]
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/hubs/2
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'GET',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+//
+States
+This is the endpoint for provides a list of all states in nigeria.
+
+Delivery Time Estimate
+
+Endpoint => /states
+GET /states
+
+Headers
+Name
+Type
+Description
+Authorization *
+
+String
+
+Your Bearer Token
+
+secret-key*
+
+String
+
+Your Secret Key
+
+
+201: Created Success
+
+401 Unauthorized
+
+Copy
+{
+    "status": "Success",
+    "description": "states fetched successfully",
+    "states": [
+        {
+            "id": 1,
+            "state": "Kano"
+        },
+        {
+            "id": 2,
+            "state": "Lagos"
+        },
+        {
+            "id": 3,
+            "state": "Kaduna"
+        },
+        {
+            "id": 4,
+            "state": "Katsina"
+        },
+        {
+            "id": 5,
+            "state": "Oyo"
+        },
+        {
+            "id": 6,
+            "state": "Rivers"
+        },
+        {
+            "id": 7,
+            "state": "Bauchi"
+        },
+        {
+            "id": 8,
+            "state": "Jigawa"
+        },
+        {
+            "id": 9,
+            "state": "Benue"
+        },
+        {
+            "id": 10,
+            "state": "Anambra"
+        },
+        {
+            "id": 11,
+            "state": "Borno"
+        },
+        {
+            "id": 12,
+            "state": "Delta"
+        },
+        {
+            "id": 13,
+            "state": "Imo"
+        },
+        {
+            "id": 14,
+            "state": "Niger"
+        },
+        {
+            "id": 15,
+            "state": "Akwa Ibom"
+        },
+        {
+            "id": 16,
+            "state": "Ogun"
+        },
+        {
+            "id": 17,
+            "state": "Sokoto"
+        },
+        {
+            "id": 18,
+            "state": "Ondo"
+        },
+        {
+            "id": 19,
+            "state": "Osun"
+        },
+        {
+            "id": 20,
+            "state": "Kogi"
+        },
+        {
+            "id": 21,
+            "state": "Zamfara"
+        },
+        {
+            "id": 22,
+            "state": "Enugu"
+        },
+        {
+            "id": 23,
+            "state": "Kebbi"
+        },
+        {
+            "id": 24,
+            "state": "Edo"
+        },
+        {
+            "id": 25,
+            "state": "Plateau"
+        },
+        {
+            "id": 26,
+            "state": "Adamawa"
+        },
+        {
+            "id": 27,
+            "state": "Cross River"
+        },
+        {
+            "id": 28,
+            "state": "Abia"
+        },
+        {
+            "id": 29,
+            "state": "Ekiti"
+        },
+        {
+            "id": 30,
+            "state": "Kwara"
+        },
+        {
+            "id": 31,
+            "state": "Gombe"
+        },
+        {
+            "id": 32,
+            "state": "Yobe"
+        },
+        {
+            "id": 33,
+            "state": "Taraba"
+        },
+        {
+            "id": 34,
+            "state": "Ebonyi"
+        },
+        {
+            "id": 35,
+            "state": "Nasarawa"
+        },
+        {
+            "id": 36,
+            "state": "Bayelsa"
+        },
+        {
+            "id": 37,
+            "state": "FCT"
+        }
+    ]
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/states
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'GET',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+user//
+Create
+This endpoint can be used to create other users for your organization.
+
+Create User
+
+Create user. 
+POST /user
+
+Headers
+Name
+Type
+Description
+secret-key*
+
+user secret key
+
+Authorization*
+
+Token
+
+Request Body
+Name
+Type
+Description
+fullname*
+
+String
+
+User first name and last name
+
+email*
+
+String
+
+User email
+
+password*
+
+String
+
+User password
+
+role*
+
+String
+
+User role (Either Basic or Admin)
+
+
+200 Success
+
+401 Unauthorized
+
+Copy
+{
+    "status": "Success",
+    "description": "User Created Successfully",
+    "user_id": "G-K5YK-tk4jr"
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/user',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_POSTFIELDS =>'{
+    "fullname":"Nnena Precious",
+    "email":"nnkea2@gmail.com",
+    "password":"1234",
+    "role":"basic"
+}',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+Get All
+This endpoint returns all users created for your organization.
+
+All users.
+
+All users. 
+GET /users
+
+Headers
+Name
+Type
+Description
+secret-key*
+
+user secret key
+
+Authorization*
+
+Token
+
+
+200 Success
+
+401 Unauthorized
+
+Copy
+{
+    "status": "Success",
+    "description": "Users fetch Successfully",
+    "users": [
+        {
+            "fullname": "Admin",
+            "email": "intoajohnson@gmail.com",
+            "created_at": "2024-01-04T03:14:25.000000Z",
+            "id": 69,
+            "user_id": "G-DA5b-2Ce5"
+        },
+        {
+            "fullname": "Nnena Precious",
+            "email": "nnkea2@gmail.com",
+            "created_at": "2024-04-01T10:40:05.000000Z",
+            "id": 71,
+            "user_id": "G-K5YK-tk4jr"
+        }
+    ]
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/users',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'GET',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+Delete
+This endpoint is used to delete a user. Pass the id of the user (from the response of the All User API) as a URL parameter i.e /user/{id of user}/delete
+
+Authenticate User
+
+Delete user. 
+POST /user/{user_id}/delete
+
+Headers
+Name
+Type
+Description
+secret-key*
+
+user secret key
+
+Authorization*
+
+Token
+
+
+200 Success
+
+401 Unauthorized
+
+Copy
+{
+    "status": "Success",
+    "description": "User Deleted Successfully"
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/user/23/delete',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+Locker
+The Locker API documentation provides comprehensive guidance on how to integrate and utilize the Fez Smart Locker API in your applications.
+
+Lockers
+
+This documentation serves as a reference for developers, outlining the various endpoints, parameters, authentication methods, and response formats supported by the Locker API:
+
+
+Get All
+This endpoint retrieves information about lockers in a specific state. A successful response includes details about available lockers, maximum weight, and maximum value of items that can be stored.
+
+In case of an unsuccessful request, the response will include a status code of 401 and a JSON object with empty "status" and "description" fields.
+
+The response for a successful request will include a "Lockers" array containing objects with "lockerID" and "lockerAddress" fields, along with "maxWeight" and "maxValueOfItem" fields.
+
+The locker ID will be required to be passed as a parameter when creating order that is meant to be saved in the locker.
+
+Get All. 
+GET /Lockers/{state}
+
+Headers
+Name
+Type
+Description
+secret-key*
+
+user secret key
+
+Authorization*
+
+Token
+
+
+200 Success
+
+401 Unauthorized
+
+Copy
+{
+  "status": "Success",
+  "description": "Lockers Fetched Successfully Fetched",
+  "Lockers": [
+    {
+      "lockerID": "2100015346",
+      "lockerAddress": "1234 testing location"
+    }
+  ],
+  "maxWeight": "5",
+  "maxValueOfItem": "100000"
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/Lockers/{{State}}',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'GET',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+Check Availability
+This endpoint is for determining if a locker has available spaces. The Available flag returns true if the locker has available spaces and false if not.
+
+Check Availability.
+
+Check Availability. 
+GET /LockerAvailability/{locker_id}
+
+Headers
+Name
+Type
+Description
+secret-key*
+
+user secret key
+
+Authorization*
+
+Token
+
+
+200 Success
+
+401 Unauthorized
+
+Copy
+{
+  "status": "Success",
+  "description": "Locker Availability Fetched Successfully",
+  "Available": true
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/LockerAvailability/2100015346',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'GET',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: Td95Dw6v8BRYmbT50GKNYh5kP3weNMM5th60MpXnIAm5KZ3majX9kIB7tUoME5w9'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+Webhook
+The Webhook API documentation provides comprehensive guidance on how to integrate and utilize the Event on Fez models (orders) in your applications.
+
+This documentation serves as a reference for developers, outlining the various endpoints, parameters, authentication methods, and response formats supported by the Webhook API:
+ Register Order Webhook
+This endpoint stores client webhook (url) for to be called when an Order is created or altered. A successful response includes the order number and the status of the order.
+
+Note that the registered url should be a POST route. Json body will be sent to this route and will contain orderNumber and orderStatus as request body.
+
+Register. 
+POST /webhooks/store
+
+Headers
+Name
+Type
+Description
+secret-key*
+
+user secret key
+
+Authorization*
+
+Token
+
+
+200 Success
+
+401 Unauthorized
+
+422 Validation Error
+
+Copy
+{
+    "status": "Success",
+    "description": "Request successful",
+    "data": {
+        "webhook": "https://example.com",
+        "webhooks": [
+            {
+                "url": "https://example.com",
+                "type": "App\\Models\\Order",
+                "is_active": 1
+            }
+        ]
+    }
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => 'https://apisandbox.fezdelivery.co/v1/webhooks/store',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_POSTFIELDS =>'{
+    "webhook":"https://example.com",
+}',
+  CURLOPT_HTTPHEADER => array(
+    'secret-key: {{Your Secret Key}}'
+  ),
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
+
+Order Webhook Request
+This endpoint is defined by the client, typically specified as a callback URL during webhook registration. It is invoked whenever an order changes its state (status).
+
+This endpoint Delivers an order status change notification to the client's registered webhook endpoint.
+
+By the time execution reaches here, the system has already confirmed that the associated order exists, that the client has a registered webhook endpoint, and that the retry limit has not been exhausted. 
+
+The target URL is the client's own server — it may be any external system the client has configured to receive real-time order updates (e.g. their own backend, a third-party logistics platform, or an ERP). The payload is intentionally minimal: only the order reference and the new status are sent, keeping the contract stable and avoiding exposure of sensitive order internals.
+
+       
+
+Each request is signed using a shared secret (the client's API secret key) so the receiving server can independently verify that the notification genuinely originated from this platform and has not been tampered with in transit.
+
+Note that the registered url is a POST route. Json body will be sent to this route and will contain orderNumber and status as request body.
+
+Request
+POST /{{userDefinedBaseUrl}}
+
+Request Headers
+Name
+Type
+Description
+Content-Type
+
+String
+
+application/json
+
+X-Caller-Domain
+
+String
+
+The base URL of this platform (identifies the sender).
+
+X-Timestamp
+
+String
+
+Unix timestamp of when the request was signed (used for replay-attack prevention).
+
+X-Signature
+
+String
+
+HMAC-SHA256 hex digest of (orderNo + orderStatus + timestamp) signed with the client's secret key. The receiver should recompute this and reject requests where the signature does not match.
+
+Request Body
+Name
+Type
+Description
+orderNumber*
+
+String
+
+Your order unique ID on fez
+
+status*
+
+String
+
+The new status of your order
+
+
+200 Success
+
+401 Unauthorized
+
+422 Validation Error
+
+Copy
+{
+    userDefinedResponse
+}
+
+Copy
+<?php
+
+$curl = curl_init();
+
+curl_setopt_array($curl, array(
+  CURLOPT_URL => '{{userDefinedUrl}}',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_ENCODING => '',
+  CURLOPT_MAXREDIRS => 10,
+  CURLOPT_TIMEOUT => 0,
+  CURLOPT_FOLLOWLOCATION => true,
+  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+  CURLOPT_CUSTOMREQUEST => 'POST',
+  CURLOPT_POSTFIELDS =>'{
+    "orderNumber":"UKOOIE001F35",
+    "status": "Delivered"
+}',
+));
+
+$response = curl_exec($curl);
+
+curl_close($curl);
+echo $response;
