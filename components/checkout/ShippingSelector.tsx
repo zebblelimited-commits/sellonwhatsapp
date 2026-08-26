@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Truck, Check, Loader2, AlertCircle } from "lucide-react";
+import { Truck, Check, Loader2, AlertCircle, Store } from "lucide-react";
 
 export interface ShippingOption {
     id: string;
     name: string;
-    logo: string;
+    logo?: string;
     estimatedDays: string;
     shippingFee: number;
 }
@@ -17,6 +17,15 @@ interface ShippingSelectorProps {
     onSelectOption: (option: ShippingOption | null) => void;
     selectedOptionId?: string;
 }
+
+// Fixed Self-Arranged Shipping Option Constant
+const SELF_ARRANGED_OPTION: ShippingOption = {
+    id: "self_arranged",
+    name: "Self-Arranged (Pickup / Direct Arrangement)",
+    logo: "",
+    estimatedDays: "Flexible / Arrange with Seller",
+    shippingFee: 0,
+};
 
 export default function ShippingSelector({
     selectedState,
@@ -50,22 +59,25 @@ export default function ShippingSelector({
 
                 const data = await response.json();
 
-                if (!response.ok || !data.success) {
-                    throw new Error(data.error || "Failed to load shipping options");
+                let fetchedCouriers: ShippingOption[] = [];
+                if (response.ok && data.success && Array.isArray(data.options)) {
+                    fetchedCouriers = data.options;
                 }
 
-                setOptions(data.options);
+                // Append Self-Arranged as the first selectable choice alongside calculated couriers
+                const combinedOptions = [SELF_ARRANGED_OPTION, ...fetchedCouriers];
+                setOptions(combinedOptions);
 
-                // Auto-select the cheapest (first) option by default
-                if (data.options.length > 0) {
-                    onSelectOption(data.options[0]);
-                } else {
-                    onSelectOption(null);
-                }
+                // Preserve existing selection if valid, otherwise default to first available option
+                const currentValid = combinedOptions.find((opt) => opt.id === selectedOptionId);
+                onSelectOption(currentValid || combinedOptions[0]);
+
             } catch (err: any) {
                 console.error("Error fetching shipping rates:", err);
-                setError(err.message || "Could not calculate rates");
-                onSelectOption(null);
+                // Fallback to at least allowing Self-Arranged pickup even if logistics calculation fails
+                const fallbackOptions = [SELF_ARRANGED_OPTION];
+                setOptions(fallbackOptions);
+                onSelectOption(SELF_ARRANGED_OPTION);
             } finally {
                 setLoading(false);
             }
@@ -92,24 +104,6 @@ export default function ShippingSelector({
         );
     }
 
-    if (error) {
-        return (
-            <div className="p-4 rounded-2xl bg-red-50 border border-red-100 text-sm text-red-600 flex items-center gap-2">
-                <AlertCircle size={16} />
-                {error}
-            </div>
-        );
-    }
-
-    if (options.length === 0) {
-        return (
-            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-100 text-sm text-amber-700 flex items-center gap-2">
-                <AlertCircle size={16} />
-                No couriers available for {selectedState}. Please contact support or vendor.
-            </div>
-        );
-    }
-
     return (
         <div className="space-y-3">
             <label className="block text-sm font-bold text-gray-900">
@@ -118,6 +112,7 @@ export default function ShippingSelector({
             <div className="grid grid-cols-1 gap-3">
                 {options.map((option) => {
                     const isSelected = selectedOptionId === option.id;
+                    const isSelfArranged = option.id === "self_arranged";
 
                     return (
                         <button
@@ -130,8 +125,13 @@ export default function ShippingSelector({
                                 }`}
                         >
                             <div className="flex items-center gap-3">
-                                <div className={`p-2.5 rounded-xl ${isSelected ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
-                                    <Truck size={20} />
+                                <div
+                                    className={`p-2.5 rounded-xl ${isSelected
+                                            ? "bg-green-100 text-green-700"
+                                            : "bg-gray-100 text-gray-600"
+                                        }`}
+                                >
+                                    {isSelfArranged ? <Store size={20} /> : <Truck size={20} />}
                                 </div>
                                 <div>
                                     <p className="font-bold text-sm text-gray-900">{option.name}</p>
@@ -140,8 +140,11 @@ export default function ShippingSelector({
                             </div>
 
                             <div className="flex items-center gap-3">
-                                <span className="font-black text-sm text-gray-900">
-                                    ₦{option.shippingFee.toLocaleString()}
+                                <span
+                                    className={`font-black text-sm ${isSelfArranged ? "text-green-600" : "text-gray-900"
+                                        }`}
+                                >
+                                    {isSelfArranged ? "FREE" : `₦${option.shippingFee.toLocaleString()}`}
                                 </span>
                                 <div
                                     className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${isSelected
