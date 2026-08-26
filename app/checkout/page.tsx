@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { 
-  MapPin, Truck, CreditCard, ShieldCheck, 
-  Edit3, Package, Clock, Smartphone, Building2, 
+import {
+  MapPin, Truck, CreditCard, ShieldCheck,
+  Edit3, Package, Clock, Smartphone, Building2,
   Store, X, Save, Loader2, Plus, ChevronDown
 } from "lucide-react";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
@@ -26,7 +26,7 @@ const SHIPPING_OPTIONS = [
 export default function CheckoutPage() {
   const router = useRouter();
   const { items: cartItems, clearCart } = useCart();
-  
+
   const [loading, setLoading] = useState(true);
   const [buyerData, setBuyerData] = useState<any>(null);
   const [addresses, setAddresses] = useState<any[]>([]);
@@ -47,7 +47,7 @@ export default function CheckoutPage() {
     async function fetchBuyerData() {
       const user = auth.currentUser;
       if (!user) { router.push("/login"); return; }
-      
+
       try {
         const { getDoc } = await import("firebase/firestore");
         const buyerDoc = await getDoc(doc(db, "buyers", user.uid));
@@ -84,22 +84,34 @@ export default function CheckoutPage() {
   useEffect(() => {
     const initialShipping: Record<string, string> = {};
     Object.keys(groupedCartItems).forEach(storeId => {
-      initialShipping[storeId] = "gig"; 
+      initialShipping[storeId] = "gig";
     });
     setSellerShipping(initialShipping);
   }, [cartItems]);
 
-  // Calculations
+  // ✅ UPDATED: Calculations (Must match backend logic exactly to pass security check)
   const cartSubtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  
-  // Calculate total shipping based on per-seller selection
-  const totalShipping = Object.entries(sellerShipping).reduce((sum, [storeId, optionId]) => {
-    const option = SHIPPING_OPTIONS.find(o => o.id === optionId);
-    return sum + (option?.price || 0);
-  }, 0);
 
-  const platformFee = Math.round(cartSubtotal * 0.015);
-  const grandTotal = cartSubtotal + totalShipping + platformFee;
+  let calculatedFrontendTotal = 0;
+  let totalShipping = 0;
+  let totalPlatformFee = 0;
+  let totalHandlingFee = 0;
+
+  Object.entries(groupedCartItems).forEach(([storeId, group]) => {
+    const shippingCost = SHIPPING_OPTIONS.find(o => o.id === sellerShipping[storeId])?.price || 0;
+    const handlingFee = (sellerShipping[storeId] !== "self_arranged" && shippingCost > 0) ? 200 : 0;
+
+    // Backend charges 1.5% on (Product Subtotal + Shipping Cost)
+    const buyerPlatformFee = Math.round((group.subtotal + shippingCost) * 0.015);
+
+    totalShipping += shippingCost;
+    totalPlatformFee += buyerPlatformFee;
+    totalHandlingFee += handlingFee;
+
+    calculatedFrontendTotal += group.subtotal + shippingCost + buyerPlatformFee + handlingFee;
+  });
+
+  const grandTotal = calculatedFrontendTotal;
 
   const selectedBuyerAddress = addresses.find(a => a.id === selectedAddressId);
 
@@ -115,11 +127,25 @@ export default function CheckoutPage() {
   };
 
   const handleCheckout = async () => {
+    if (!selectedBuyerAddress || Object.keys(sellerShipping).length === 0) {
+      alert("Please select a delivery address and shipping method for all items.");
+      return;
+    }
+
     setIsProcessing(true);
     try {
-      console.log("Checkout Payload:", {
+      // 1. Build the multi-seller payload
+      const payload = {
         buyerId: auth.currentUser?.uid,
-        address: selectedBuyerAddress,
+        customerEmail: auth.currentUser?.email || "",
+        address: {
+          name: selectedBuyerAddress.name,
+          phone: selectedBuyerAddress.phone,
+          address: selectedBuyerAddress.address,
+          city: selectedBuyerAddress.city || "",
+          state: selectedBuyerAddress.state || "",
+          postalCode: selectedBuyerAddress.postalCode || "",
+        },
         sellerOrders: Object.entries(groupedCartItems).map(([storeId, group]) => ({
           storeId,
           storeName: group.storeName,
@@ -128,11 +154,35 @@ export default function CheckoutPage() {
           shippingCost: SHIPPING_OPTIONS.find(o => o.id === sellerShipping[storeId])?.price || 0,
           subtotal: group.subtotal
         })),
+        paymentMethod,
         total: grandTotal
+      };
+
+      // 2. Call the new unified checkout API
+      const response = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      alert("Checkout logic ready! Check console for split order payload.");
-    } catch (error) { console.error(error); } finally { setIsProcessing(false); }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create checkout session");
+      }
+
+      // 3. Redirect to Nomba if successful
+      if (data.success && data.checkoutLink) {
+        window.location.href = data.checkoutLink;
+      } else {
+        throw new Error("No checkout link received from payment gateway");
+      }
+    } catch (error: any) {
+      console.error("Checkout failed:", error);
+      alert(error.message || "Payment initialization failed. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-[#00a63e]" size={40} /></div>;
@@ -149,10 +199,10 @@ export default function CheckoutPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
+
             {/* LEFT COLUMN: Addresses, Shipping & Escrow */}
             <div className="lg:col-span-2 space-y-6">
-              
+
               {/* 1. Delivery & Pickup Locations */}
               <section className="bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-6">
@@ -190,19 +240,19 @@ export default function CheckoutPage() {
                 <div className="space-y-4">
                   {Object.entries(groupedCartItems).map(([storeId, group]) => {
                     const selectedOpt = SHIPPING_OPTIONS.find(o => o.id === (sellerShipping[storeId] || 'gig'));
-                    
+
                     return (
                       <div key={storeId} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
                         {/* Store Name & Circular Product Images (Now side-by-side) */}
                         <div className="flex items-center gap-3 mb-3">
                           <Store size={16} className="text-gray-500 shrink-0" />
                           <h3 className="font-bold text-sm text-gray-900">{group.storeName}</h3>
-                          
+
                           {/* Overlapping Circular Product Images right next to store name */}
                           <div className="flex items-center">
                             {group.items.slice(0, 3).map((item, idx) => (
-                              <div 
-                                key={item.id} 
+                              <div
+                                key={item.id}
                                 className={`relative w-7 h-7 rounded-full border-2 border-white overflow-hidden bg-gray-100 ${idx > 0 ? '-ml-2' : ''}`}
                               >
                                 {item.image ? (
@@ -236,8 +286,8 @@ export default function CheckoutPage() {
                               <Truck size={14} className="text-gray-500" />
                             )}
                           </div>
-                          
-                          <select 
+
+                          <select
                             className="w-full text-sm border border-gray-200 rounded-lg p-3 pl-14 bg-white appearance-none focus:border-[#00a63e] focus:ring-1 focus:ring-[#00a63e] outline-none font-medium cursor-pointer"
                             value={sellerShipping[storeId] || 'gig'}
                             onChange={(e) => setSellerShipping(prev => ({ ...prev, [storeId]: e.target.value }))}
@@ -277,7 +327,7 @@ export default function CheckoutPage() {
             {/* RIGHT COLUMN: Order Summary & Payment */}
             <div className="lg:col-span-1">
               <div className="sticky top-6 bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm space-y-6">
-                
+
                 {/* Order Summary */}
                 <div>
                   <h2 className="text-lg font-bold text-gray-900 mb-4">Order Summary</h2>
@@ -289,7 +339,7 @@ export default function CheckoutPage() {
                           <div className="p-1.5 bg-green-50 rounded-lg"><Store size={14} className="text-[#00a63e]" /></div>
                           <h3 className="font-bold text-sm text-gray-900">{group.storeName}</h3>
                         </div>
-                        
+
                         {/* Items */}
                         <div className="space-y-3 pl-1">
                           {group.items.map((item) => (
@@ -321,7 +371,7 @@ export default function CheckoutPage() {
                     ))}
                   </div>
 
-                  {/* Global Totals */}
+                  {/* ✅ UPDATED: Global Totals showing Handling Fee */}
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between text-gray-600">
                       <span>Cart Subtotal</span>
@@ -333,11 +383,17 @@ export default function CheckoutPage() {
                     </div>
                     <div className="flex justify-between text-gray-600">
                       <span>Platform Fee (1.5%)</span>
-                      <span className="font-bold text-gray-900">₦{platformFee.toLocaleString()}</span>
+                      <span className="font-bold text-gray-900">₦{totalPlatformFee.toLocaleString()}</span>
                     </div>
-                    
+                    {totalHandlingFee > 0 && (
+                      <div className="flex justify-between text-gray-600">
+                        <span>Logistics Handling Fee</span>
+                        <span className="font-bold text-gray-900">₦{totalHandlingFee.toLocaleString()}</span>
+                      </div>
+                    )}
+
                     <div className="border-t border-gray-100 my-4" />
-                    
+
                     <div className="flex justify-between items-center">
                       <span className="text-base font-bold text-gray-900">Grand Total</span>
                       <span className="text-xl font-black text-[#00a63e]">₦{grandTotal.toLocaleString()}</span>
@@ -352,12 +408,11 @@ export default function CheckoutPage() {
                   </h2>
                   <div className="grid grid-cols-3 gap-3">
                     {["card", "transfer", "ussd"].map(method => (
-                      <button 
-                        key={method} 
-                        onClick={() => setPaymentMethod(method)} 
-                        className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1.5 transition-all ${
-                          paymentMethod === method ? "border-[#00a63e] bg-green-50/30" : "border-gray-100 hover:border-gray-200"
-                        }`}
+                      <button
+                        key={method}
+                        onClick={() => setPaymentMethod(method)}
+                        className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1.5 transition-all ${paymentMethod === method ? "border-[#00a63e] bg-green-50/30" : "border-gray-100 hover:border-gray-200"
+                          }`}
                       >
                         {method === "card" ? <CreditCard size={20} /> : method === "transfer" ? <Building2 size={20} /> : <Smartphone size={20} />}
                         <span className="text-[10px] font-bold text-gray-700 capitalize">{method}</span>
@@ -367,7 +422,7 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Pay Button */}
-                <button 
+                <button
                   onClick={handleCheckout}
                   disabled={isProcessing}
                   className="w-full bg-[#00a63e] hover:bg-[#008c34] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg shadow-green-100"
@@ -399,10 +454,10 @@ export default function CheckoutPage() {
               <button onClick={() => setIsEditModalOpen(false)} className="p-2 rounded-full hover:bg-gray-100"><X size={20} /></button>
             </div>
             <div className="space-y-4">
-              <input type="text" value={editForm.address} onChange={(e) => setEditForm({...editForm, address: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="Street Address" />
+              <input type="text" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="Street Address" />
               <div className="grid grid-cols-2 gap-3">
-                <input type="text" value={editForm.city} onChange={(e) => setEditForm({...editForm, city: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="City" />
-                <input type="text" value={editForm.state} onChange={(e) => setEditForm({...editForm, state: e.target.value})} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="State" />
+                <input type="text" value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="City" />
+                <input type="text" value={editForm.state} onChange={(e) => setEditForm({ ...editForm, state: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="State" />
               </div>
               <button onClick={handleSaveAddress} disabled={isSavingAddress} className="w-full bg-[#00a63e] text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2">
                 {isSavingAddress ? <><Loader2 className="animate-spin" size={18} /> Saving...</> : <><Save size={18} /> Save Address</>}
