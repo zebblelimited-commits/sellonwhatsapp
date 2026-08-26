@@ -53,7 +53,8 @@ export async function POST(request: NextRequest) {
         throw new CompletionError("This order has already been refunded and cannot release funds", 409);
       }
 
-      if (!["PAID_HELD", "SHIPPED", "OUT_FOR_DELIVERY"].includes(normalizedStatus)) {
+      // Updated to allow service/work completions in addition to physical shipping statuses
+      if (!["PAID_HELD", "SHIPPED", "OUT_FOR_DELIVERY", "WORK_DONE", "COMPLETED_PENDING_BUYER"].includes(normalizedStatus)) {
         throw new CompletionError(`Order cannot be completed from status ${orderData.status || "unknown"}`, 409);
       }
 

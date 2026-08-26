@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { Package, Truck, CheckCircle, Clock, Info, X, Flag, AlertTriangle, MessageSquare, Search } from "lucide-react";
+import { Package, Truck, CheckCircle, Clock, Info, X, Flag, AlertTriangle, MessageSquare, Search, Briefcase } from "lucide-react";
 import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 import { showToast } from "@/lib/toast";
 import { supportChatRequest } from "@/components/chat/chatApi";
@@ -13,6 +13,7 @@ type SellerOrder = {
     id: string;
     createdAt?: { toMillis?: () => number; seconds?: number } | null;
     status?: string;
+    orderType?: "physical" | "service" | "booking";
     totalAmount?: number;
     customerName?: string;
     customerPhone?: string;
@@ -22,7 +23,7 @@ type SellerOrder = {
     buyerId?: string;
     [key: string]: any;
 };
-type SellerDispute = { id: string; orderId?: string; status?: string; [key: string]: any };
+type SellerDispute = { id: string; orderId?: string; status?: string;[key: string]: any };
 
 export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes?: SellerDispute[]; onDisputeAction?: (action: string, dispute: SellerDispute) => void }) {
     const router = useRouter();
@@ -32,14 +33,14 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
     const [shippingLoading, setShippingLoading] = useState(false);
     const [chatLoadingOrderId, setChatLoadingOrderId] = useState<string | null>(null);
     const [completionLoadingOrderId, setCompletionLoadingOrderId] = useState<string | null>(null);
-    
-    // ✅ NEW: Filter and Search State
+
+    // Filter and Search State
     const [filter, setFilter] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
 
-    // UI State for the shipping form
+    // UI State for shipping form
     const [shippingForm, setShippingForm] = useState<{ orderId: string | null; trackingId: string; carrier: string }>({ orderId: null, trackingId: "", carrier: "Zebble Internal" });
-    
+
     const [responseModal, setResponseModal] = useState<any>(null);
     const [responseText, setResponseText] = useState("");
     const [responseLoading, setResponseLoading] = useState(false);
@@ -82,13 +83,11 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
         };
     }, []);
 
-    // 1. Internal ID Generator
     const generateInternalTracking = () => {
         const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
         return `ZEB-${new Date().getFullYear()}-${randomStr}`;
     };
 
-    // 2. Open the shipping form
     const openShippingForm = (orderId: string) => {
         setShippingForm({
             orderId,
@@ -97,7 +96,6 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
         });
     };
 
-    // 3. Finalize shipping
     const handleFinalizeShipping = async () => {
         if (!shippingForm.orderId || shippingLoading) return;
         setShippingLoading(true);
@@ -149,26 +147,34 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
         }
     };
 
-    // Mark order as completed and release funds from escrow
-    const handleMarkAsCompleted = async (orderId: string) => {
+    // Updated completion handler to support services
+    const handleMarkAsCompleted = async (order: SellerOrder) => {
         if (completionLoadingOrderId) return;
-        if (!confirm("Mark this order as delivered? The funds will be released to your available balance for withdrawal.")) return;
-        setCompletionLoadingOrderId(orderId);
+
+        const isService = order.orderType === "service" || order.orderType === "booking";
+        const promptMsg = isService
+            ? "Mark service work as completed? The buyer will be notified to confirm and release escrow funds."
+            : "Mark this order as delivered? The funds will be released to your available balance.";
+
+        if (!confirm(promptMsg)) return;
+
+        setCompletionLoadingOrderId(order.id);
         try {
             const user = auth.currentUser;
             if (!user) return;
             const idToken = await user.getIdToken();
             const res = await fetch('/api/orders/complete', {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}` 
+                    'Authorization': `Bearer ${idToken}`
                 },
-                body: JSON.stringify({ orderId })
+                body: JSON.stringify({ orderId: order.id })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to complete order');
-            showToast("success", 'Order marked as delivered! Funds released to your available balance.');
+
+            showToast("success", isService ? 'Service marked as work completed!' : 'Order marked as completed!');
         } catch (error: any) {
             console.error(error);
             showToast("error", error.message || 'Failed to update order.');
@@ -189,7 +195,6 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
         setResponseError("");
     };
 
-    // Respond to existing dispute
     const handleRespondToDispute = async () => {
         if (!auth.currentUser || !responseModal || !responseText.trim()) return;
         setResponseLoading(true);
@@ -219,33 +224,33 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
         }
     };
 
-    // Helper: Get active dispute for an order
     const getOrderDispute = (orderId: string) => {
         return disputes?.find(d => d.orderId === orderId && ['open', 'under_review'].includes(String(d.status || "").toLowerCase()));
     };
 
+    // ✅ Map service and booking statuses into canonical UI statuses
     const canonicalStatus = (value: unknown): string => {
         const status = String(value || "").toUpperCase();
         if (["PAID", "HELD", "PAID_HELD"].includes(status)) return "PAID_HELD";
         if (["SHIPPED", "IN_TRANSIT", "OUT_FOR_DELIVERY"].includes(status)) return "SHIPPED";
+        if (["WORK_DONE", "COMPLETED_PENDING_BUYER"].includes(status)) return "WORK_DONE";
         if (["COMPLETED", "DELIVERED"].includes(status)) return "COMPLETED";
         return status;
     };
 
     const normalizedOrderStatus = (order: SellerOrder) => canonicalStatus(order.status);
 
-    // ✅ NEW: Filter and Search Logic
     const filteredOrders = useMemo(() => {
         let result = orders;
-        
+
         if (filter === 'escrow') result = result.filter(o => normalizedOrderStatus(o) === 'PAID_HELD');
-        else if (filter === 'transit') result = result.filter(o => normalizedOrderStatus(o) === 'SHIPPED');
+        else if (filter === 'transit') result = result.filter(o => ['SHIPPED', 'WORK_DONE'].includes(normalizedOrderStatus(o)));
         else if (filter === 'completed') result = result.filter(o => normalizedOrderStatus(o) === 'COMPLETED');
         else if (filter === 'disputes') result = result.filter(o => getOrderDispute(o.id));
-        
+
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
-            result = result.filter(o => 
+            result = result.filter(o =>
                 o.id.toLowerCase().includes(q) ||
                 o.customerName?.toLowerCase().includes(q) ||
                 o.customerPhone?.includes(q) ||
@@ -253,7 +258,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                 o.trackingId?.toLowerCase().includes(q)
             );
         }
-        
+
         return result;
     }, [orders, filter, searchQuery, disputes, getOrderDispute, normalizedOrderStatus]);
 
@@ -263,6 +268,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
         switch (status) {
             case "PAID_HELD": return "bg-orange-50 text-orange-600 border-orange-100";
             case "SHIPPED": return "bg-blue-50 text-blue-600 border-blue-100";
+            case "WORK_DONE": return "bg-purple-50 text-purple-600 border-purple-100";
             case "COMPLETED": return "bg-green-50 text-green-600 border-green-100";
             case "DISPUTED": return "bg-red-50 text-red-600 border-red-100";
             default: return "bg-gray-50 text-gray-500 border-gray-100";
@@ -274,6 +280,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
         if (hasDispute) return <AlertTriangle size={14} />;
         if (status === "PAID_HELD") return <Clock size={14} />;
         if (status === "SHIPPED") return <Truck size={14} />;
+        if (status === "WORK_DONE") return <Briefcase size={14} />;
         if (status === "COMPLETED") return <CheckCircle size={14} />;
         return <Info size={14} />;
     };
@@ -283,6 +290,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
         if (hasDispute) return "Disputed";
         if (status === "PAID_HELD") return "Escrow";
         if (status === "SHIPPED") return "In Transit";
+        if (status === "WORK_DONE") return "Work Done";
         if (status === "COMPLETED") return "Completed";
         return canonicalStatus(status).replace("_", " ");
     };
@@ -302,10 +310,10 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                         <div className="space-y-4">
                             <div>
                                 <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Carrier Name</label>
-                                <select 
+                                <select
                                     className="w-full mt-1 p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-green-500/20"
                                     value={shippingForm.carrier}
-                                    onChange={(e) => setShippingForm({...shippingForm, carrier: e.target.value})}
+                                    onChange={(e) => setShippingForm({ ...shippingForm, carrier: e.target.value })}
                                 >
                                     <option value="Zebble Internal">Zebble Internal</option>
                                     <option value="GIG Logistics">GIG Logistics</option>
@@ -315,14 +323,14 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                             </div>
                             <div>
                                 <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Tracking ID (Auto-Generated)</label>
-                                <input 
+                                <input
                                     type="text"
                                     className="w-full mt-1 p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-green-500/20"
                                     value={shippingForm.trackingId}
-                                    onChange={(e) => setShippingForm({...shippingForm, trackingId: e.target.value})}
+                                    onChange={(e) => setShippingForm({ ...shippingForm, trackingId: e.target.value })}
                                 />
                             </div>
-                            <button 
+                            <button
                                 onClick={handleFinalizeShipping}
                                 disabled={shippingLoading || !shippingForm.trackingId.trim() || !shippingForm.carrier.trim()}
                                 className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm shadow-lg shadow-green-100 transition-all active:scale-[0.98] mt-4"
@@ -334,12 +342,12 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                 </div>
             )}
 
-            {/* ✅ NEW: FILTERS & SEARCH BAR (Sticky) */}
+            {/* FILTERS & SEARCH BAR */}
             {listenerError && <div className="rounded-2xl border border-red-100 bg-red-50 p-3 text-xs font-bold text-red-700">{listenerError}</div>}
             <div className="flex min-w-0 flex-col gap-3 sticky top-0 z-20 bg-[#fafafa] py-2 border-b border-gray-100 sm:-mx-2 sm:flex-row sm:px-2">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                    <input 
+                    <input
                         type="text"
                         placeholder="Search Order ID, Customer, or Amount..."
                         value={searchQuery}
@@ -351,18 +359,17 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                     {[
                         { id: 'all', label: 'All' },
                         { id: 'escrow', label: 'Escrow' },
-                        { id: 'transit', label: 'In Transit' },
+                        { id: 'transit', label: 'In Progress' },
                         { id: 'completed', label: 'Completed' },
                         { id: 'disputes', label: 'Disputes' }
                     ].map(f => (
                         <button
                             key={f.id}
                             onClick={() => setFilter(f.id)}
-                            className={`px-4 py-2.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all ${
-                                filter === f.id 
-                                    ? 'bg-gray-900 text-white shadow-md' 
+                            className={`px-4 py-2.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all ${filter === f.id
+                                    ? 'bg-gray-900 text-white shadow-md'
                                     : 'bg-white text-gray-500 border border-gray-100 hover:bg-gray-50'
-                            }`}
+                                }`}
                         >
                             {f.label}
                         </button>
@@ -370,7 +377,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                 </div>
             </div>
 
-            {/* ✅ NEW: COMPACT 2-COLUMN GRID LAYOUT */}
+            {/* GRID LAYOUT */}
             <div className="grid w-full min-w-0 max-w-full grid-cols-1 gap-3 md:grid-cols-2">
                 {loading ? (
                     <div className="col-span-full grid gap-3 md:grid-cols-2">
@@ -388,16 +395,19 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                         const dispute = getOrderDispute(order.id);
                         const hasDispute = !!dispute;
                         const orderStatus = normalizedOrderStatus(order);
+                        const isService = order.orderType === "service" || order.orderType === "booking";
                         const customerPhone = order.customerPhone || order.buyerPhone || order.phone || "";
+
                         return (
                             <div key={order.id} className={`min-w-0 max-w-full overflow-hidden bg-white p-4 rounded-2xl border shadow-sm transition-all hover:shadow-md ${hasDispute ? 'border-red-200 ring-1 ring-red-100' : 'border-gray-100'}`}>
-                                {/* Row 1: ID and Status */}
+                                {/* Row 1: ID, Type badge, and Status */}
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="flex items-center gap-2">
                                         <div className={`p-1.5 rounded-lg border ${getStatusStyle(order.status, hasDispute)}`}>
                                             {getStatusIcon(order.status, hasDispute)}
                                         </div>
                                         <span className="font-bold text-gray-900 text-xs">#{order.id.slice(-6).toUpperCase()}</span>
+                                        {isService && <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">SERVICE</span>}
                                         {hasDispute && <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">DISPUTED</span>}
                                     </div>
                                     <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border uppercase tracking-wider ${getStatusStyle(order.status, hasDispute)}`}>
@@ -419,11 +429,11 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                                     </div>
                                 </div>
 
-                                {/* Row 3: Dispute quick action (if applicable) */}
+                                {/* Row 3: Disputes */}
                                 {hasDispute && !dispute.vendorResponded && (
                                     <div className="mb-3 p-2 bg-red-50 rounded-lg border border-red-100 flex items-center justify-between gap-2">
                                         <p className="text-[10px] font-bold text-red-700 line-clamp-1">Issue: {dispute.description}</p>
-                                        <button 
+                                        <button
                                             onClick={() => openResponseModal(dispute)}
                                             className="shrink-0 text-[9px] font-bold text-white bg-red-600 px-2 py-1 rounded-lg hover:bg-red-700"
                                         >
@@ -438,7 +448,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                                     </div>
                                 )}
 
-                                {/* Row 4: Actions */}
+                                {/* Row 4: Dynamic Actions based on Service vs Physical */}
                                 <div className="flex items-center gap-2">
                                     {customerPhone ? (
                                         <a
@@ -457,25 +467,35 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                                             <MessageSquare size={12} /> {chatLoadingOrderId === order.id ? "Opening…" : "Chat"}
                                         </button>
                                     )}
-                                    
+
                                     {hasDispute ? (
                                         <div className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[9px] font-bold ${getStatusStyle(order.status, true)}`}>
                                             <Flag size={10} /> Reviewing
                                         </div>
                                     ) : orderStatus === "PAID_HELD" ? (
-                                        <button 
-                                            onClick={() => openShippingForm(order.id)}
-                                            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-gray-900 hover:bg-black text-white rounded-xl text-[10px] font-bold transition-all"
-                                        >
-                                            <Truck size={12} /> Ship
-                                        </button>
-                                    ) : ["SHIPPED", "OUT_FOR_DELIVERY"].includes(orderStatus) ? (
-                                        <button 
-                                            onClick={() => handleMarkAsCompleted(order.id)}
+                                        isService ? (
+                                            <button
+                                                onClick={() => handleMarkAsCompleted(order)}
+                                                disabled={completionLoadingOrderId !== null}
+                                                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white rounded-xl text-[10px] font-bold transition-all"
+                                            >
+                                                <Briefcase size={12} /> {completionLoadingOrderId === order.id ? "Updating…" : "Work Done"}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => openShippingForm(order.id)}
+                                                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-gray-900 hover:bg-black text-white rounded-xl text-[10px] font-bold transition-all"
+                                            >
+                                                <Truck size={12} /> Ship
+                                            </button>
+                                        )
+                                    ) : ["SHIPPED", "OUT_FOR_DELIVERY", "WORK_DONE"].includes(orderStatus) ? (
+                                        <button
+                                            onClick={() => handleMarkAsCompleted(order)}
                                             disabled={completionLoadingOrderId !== null}
                                             className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white rounded-xl text-[10px] font-bold transition-all"
                                         >
-                                            <CheckCircle size={12} /> {completionLoadingOrderId === order.id ? "Updating…" : "Delivered"}
+                                            <CheckCircle size={12} /> {completionLoadingOrderId === order.id ? "Updating…" : "Complete"}
                                         </button>
                                     ) : orderStatus === "COMPLETED" ? (
                                         <div className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-green-100 bg-green-50 text-green-700 text-[10px] font-bold">

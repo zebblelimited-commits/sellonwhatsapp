@@ -3,10 +3,15 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
-import { doc, onSnapshot, DocumentSnapshot, FirestoreError } from "firebase/firestore";
+import {
+    doc,
+    onSnapshot,
+    DocumentSnapshot,
+    FirestoreError
+} from "firebase/firestore";
 import {
     ArrowLeft, ShieldCheck, CheckCircle2,
-    AlertCircle, Flag, Loader2, ExternalLink, Briefcase, Wrench
+    AlertCircle, Flag, Loader2, Briefcase, Wrench, Truck, ExternalLink
 } from "lucide-react";
 import Image from "next/image";
 import OrderTimeline from "@/components/buyer/OrderTimeline";
@@ -30,23 +35,27 @@ export default function OrderDetailsPage() {
     useEffect(() => {
         if (!id) return;
 
-        const unsub = onSnapshot(doc(db, "orders", id as string), (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setOrder({
-                    id: docSnap.id,
-                    ...data,
-                    createdAt: data.createdAt?.toDate?.() || (data.createdAt ? new Date(data.createdAt) : new Date()),
-                    completedAt: data.completedAt?.toDate?.() || null,
-                    disputedAt: data.disputedAt?.toDate?.() || null,
-                    shippedAt: data.shippedAt?.toDate?.() || null
-                });
+        const unsub = onSnapshot(
+            doc(db, "orders", id as string),
+            (docSnap: DocumentSnapshot) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    setOrder({
+                        id: docSnap.id,
+                        ...data,
+                        createdAt: data.createdAt?.toDate?.() || (data.createdAt ? new Date(data.createdAt) : new Date()),
+                        completedAt: data.completedAt?.toDate?.() || null,
+                        disputedAt: data.disputedAt?.toDate?.() || null,
+                        shippedAt: data.shippedAt?.toDate?.() || null
+                    });
+                }
+                setLoading(false);
+            },
+            (error: FirestoreError) => {
+                console.error("Order fetch error:", error);
+                setLoading(false);
             }
-            setLoading(false);
-        }, (error) => {
-            console.error("Order fetch error:", error);
-            setLoading(false);
-        });
+        );
 
         return () => unsub();
     }, [id]);
@@ -130,7 +139,7 @@ export default function OrderDetailsPage() {
     // Normalize Status & Product Type Logic
     const status = order.status?.toLowerCase();
 
-    // Check if order contains service / digital / booking attributes
+    // Check if order does NOT require physical shipping
     const isServiceOrBooking =
         order.productType === 'service' ||
         order.productType === 'booking' ||
@@ -138,24 +147,25 @@ export default function OrderDetailsPage() {
         order.shippingMethod === 'self_arranged' ||
         (order.items && order.items.some((i: any) => i.bookingDate || i.bookingSlot));
 
-    const isDeliveredOrWorkDone = status === "shipped" || status === "out_for_delivery" || status === "delivered" || status === "completed_pending_buyer";
+    const isShippedOrWorkDone = status === "shipped" || status === "out_for_delivery" || status === "delivered" || status === "work_done" || status === "completed_pending_buyer";
     const isCompleted = status === "completed";
     const isDisputed = status === "disputed" || status === "under_review";
 
-    // Dynamic Labels based on Type
+    // Dynamic Status Messaging
     const getStatusText = (statusStr: string) => {
         const upper = statusStr?.toUpperCase();
         if (isServiceOrBooking) {
             const serviceTexts: Record<string, string> = {
-                PAID_HELD: "Escrow Secured — Awaiting Work/Service",
-                PENDING: "Escrow Secured — Awaiting Work/Service",
-                SHIPPED: "Work / Service Completed by Vendor",
-                OUT_FOR_DELIVERY: "Work / Service Completed by Vendor",
-                COMPLETED_PENDING_BUYER: "Work Completed — Confirmation Required",
+                PAID_HELD: "Escrow Secured — Awaiting Service Delivery",
+                PENDING: "Escrow Secured — Awaiting Service Delivery",
+                SHIPPED: "Work / Service Completed by Provider",
+                WORK_DONE: "Work / Service Completed by Provider",
+                OUT_FOR_DELIVERY: "Work / Service Completed by Provider",
+                COMPLETED_PENDING_BUYER: "Service Rendered — Approval Required",
                 COMPLETED: "Service Completed — Funds Released",
-                DISPUTED: "Dispute under review",
-                UNDER_REVIEW: "Dispute under review",
-                CANCELLED: "Service cancelled"
+                DISPUTED: "Dispute Under Review",
+                UNDER_REVIEW: "Dispute Under Review",
+                CANCELLED: "Service Cancelled"
             };
             return serviceTexts[upper] || "Processing Service";
         }
@@ -196,7 +206,7 @@ export default function OrderDetailsPage() {
                     <span className="text-xs font-black uppercase text-[#00a63e] tracking-wider">{getStatusText(order.status)}</span>
                     {isServiceOrBooking && (
                         <span className="text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Briefcase size={10} /> Service / Booking
+                            <Briefcase size={10} /> Non-Physical / Service
                         </span>
                     )}
                 </div>
@@ -221,7 +231,7 @@ export default function OrderDetailsPage() {
                         {isDisputed
                             ? `Your payment of ${formatCurrency(order.totalAmount || order.total || 0)} is held securely while we review your dispute.`
                             : isServiceOrBooking
-                                ? `Your payment of ${formatCurrency(order.totalAmount || order.total || 0)} is held safely in escrow. Funds are only released after you confirm the work/service is completed to your satisfaction.`
+                                ? `Your payment of ${formatCurrency(order.totalAmount || order.total || 0)} is held safely in escrow. Once the service provider completes the task, confirm completion to release the funds.`
                                 : `Your payment of ${formatCurrency(order.totalAmount || order.total || 0)} is held securely. Funds are only released after you confirm physical delivery.`
                         }
                     </p>
@@ -263,9 +273,9 @@ export default function OrderDetailsPage() {
                     <span className="text-gray-500">Subtotal</span>
                     <span className="font-medium">{formatCurrency((order.totalAmount || order.total || 0) - (order.deliveryFee || order.shippingCost || 0))}</span>
                 </div>
-                {(order.deliveryFee || order.shippingCost) > 0 && (
+                {!isServiceOrBooking && (order.deliveryFee || order.shippingCost) > 0 && (
                     <div className="flex justify-between text-xs">
-                        <span className="text-gray-500">Delivery / Logistics</span>
+                        <span className="text-gray-500">Delivery</span>
                         <span className="font-medium">{formatCurrency(order.deliveryFee || order.shippingCost || 0)}</span>
                     </div>
                 )}
@@ -274,6 +284,27 @@ export default function OrderDetailsPage() {
                     <span className="text-sm font-black text-green-600">{formatCurrency(order.totalAmount || order.total || 0)}</span>
                 </div>
             </div>
+
+            {/* ✅ HIDDEN FOR SERVICES / SHOWN ONLY FOR PHYSICAL SHIPPING */}
+            {!isServiceOrBooking && isShippedOrWorkDone && order.trackingId && (
+                <div className="bg-blue-50 border border-blue-100 rounded-3xl p-5 mb-6 mt-4">
+                    <div className="flex items-start gap-3">
+                        <Truck size={20} className="text-blue-600 shrink-0 mt-0.5" />
+                        <div>
+                            <h4 className="font-bold text-blue-900 text-sm">Tracking Information</h4>
+                            <p className="text-[11px] text-blue-700 mt-1">
+                                <span className="font-bold">ID:</span> {order.trackingId}<br />
+                                <span className="font-bold">Carrier:</span> {order.carrier || "Logistics Partner"}
+                            </p>
+                            {order.trackingUrl && (
+                                <a href={order.trackingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold text-blue-600 hover:underline">
+                                    Track Package <ExternalLink size={10} />
+                                </a>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Dispute Banner */}
             {isDisputed && (
@@ -296,8 +327,8 @@ export default function OrderDetailsPage() {
 
             {/* Bottom Actions */}
             <div className="space-y-3 pt-6 border-t border-gray-100 mt-6">
-                {/* Release Funds Button for both Physical and Non-Physical */}
-                {(isDeliveredOrWorkDone || isServiceOrBooking) && !isCompleted && !isDisputed && (
+                {/* ✅ RELEASE FUNDS BUTTON ACTIVATED UPON WORK COMPLETION OR DELIVERY */}
+                {(isShippedOrWorkDone || isServiceOrBooking) && !isCompleted && !isDisputed && (
                     <button
                         onClick={() => setShowConfirmModal(true)}
                         disabled={processing}
@@ -324,7 +355,7 @@ export default function OrderDetailsPage() {
 
                 <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="w-full py-4 bg-[#25D366] hover:bg-[#20ba5a] text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition-all">
                     <Image src="/icons/whatsapplogo.svg" alt="WA" width={18} height={18} className="brightness-0 invert" />
-                    Chat with Vendor
+                    Chat with Provider
                 </a>
             </div>
 
@@ -341,7 +372,7 @@ export default function OrderDetailsPage() {
                             </button>
                         </div>
 
-                        <p className="text-sm text-gray-500 mb-4">Describe the issue with your order/service. Funds remain safely in escrow during review.</p>
+                        <p className="text-sm text-gray-500 mb-4">Describe the issue with your service or project. Funds remain held securely in escrow until resolved.</p>
 
                         <div className="space-y-4">
                             <div>
@@ -353,7 +384,7 @@ export default function OrderDetailsPage() {
                                 >
                                     {isServiceOrBooking ? (
                                         <>
-                                            <option value="service_not_rendered">Service / Work Not Done</option>
+                                            <option value="service_not_rendered">Service / Work Not Rendered</option>
                                             <option value="incomplete_work">Work Incomplete</option>
                                             <option value="poor_quality">Substandard Quality</option>
                                             <option value="other">Other</option>
@@ -401,11 +432,11 @@ export default function OrderDetailsPage() {
                                 {isServiceOrBooking ? <Wrench size={32} /> : <ShieldCheck size={32} />}
                             </div>
                             <h3 className="text-lg font-black text-gray-900 mb-2">
-                                {isServiceOrBooking ? "Confirm Service Completion" : "Confirm Order Receipt"}
+                                {isServiceOrBooking ? "Confirm Task / Service Completion" : "Confirm Order Receipt"}
                             </h3>
                             <p className="text-xs font-medium text-gray-500 leading-relaxed mb-6">
                                 {isServiceOrBooking
-                                    ? "Are you satisfied with the service or project delivered? Confirming will immediately release held funds to the provider."
+                                    ? "Are you satisfied with the completed work or rendered service? Confirming will immediately release the held payment to the service provider."
                                     : "Are you sure you have received your order in good condition? This action will immediately release funds to the vendor."
                                 }
                             </p>
@@ -430,7 +461,7 @@ export default function OrderDetailsPage() {
                 </div>
             )}
 
-            {/* Success Alert Modal */}
+            {/* Success Modal */}
             {showSuccessModal && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl text-center animate-in zoom-in-95 duration-200">
@@ -439,7 +470,7 @@ export default function OrderDetailsPage() {
                         </div>
                         <h3 className="text-lg font-black text-gray-900 mb-2">Funds Released!</h3>
                         <p className="text-xs font-medium text-gray-500 leading-relaxed mb-6">
-                            Funds have been successfully transferred to the vendor. Thank you for using Escrow Protection!
+                            Payment has been released from escrow to the provider. Thank you for using our platform!
                         </p>
                         <button
                             onClick={() => setShowSuccessModal(false)}

@@ -24,8 +24,6 @@ export async function POST(request: NextRequest) {
     const carrier = typeof body.carrier === "string" ? body.carrier.trim() : "";
 
     if (!orderId) throw new ShipOrderError("Order ID is required");
-    if (!trackingId) throw new ShipOrderError("Tracking ID is required");
-    if (!carrier) throw new ShipOrderError("Carrier is required");
 
     const result = await adminDb.runTransaction(async (transaction) => {
       const orderRef = adminDb.collection("orders").doc(orderId);
@@ -33,44 +31,73 @@ export async function POST(request: NextRequest) {
       if (!orderSnap.exists) throw new ShipOrderError("Order not found", 404);
 
       const order = orderSnap.data() || {};
-      if (order.vendorId !== decoded.uid) throw new ShipOrderError("You cannot ship this order", 403);
+
+      // Verify vendor ownership (supporting vendorId or storeId)
+      const vendorId = order.vendorId || order.storeId;
+      if (vendorId !== decoded.uid) throw new ShipOrderError("You cannot update this order", 403);
+
+      // Detect if order is non-physical / service
+      const isServiceOrBooking =
+        order.productType === 'service' ||
+        order.productType === 'booking' ||
+        order.productType === 'utility' ||
+        order.shippingMethod === 'self_arranged' ||
+        (Array.isArray(order.items) && order.items.some((i: any) => i.bookingDate || i.bookingSlot));
+
+      // Validation: Tracking ID is required ONLY for physical items
+      if (!isServiceOrBooking) {
+        if (!trackingId) throw new ShipOrderError("Tracking ID is required for physical shipments");
+        if (!carrier) throw new ShipOrderError("Carrier is required for physical shipments");
+      }
 
       const rawStatus = String(order.status || "").toUpperCase();
-      const status = ["SHIPPED", "IN_TRANSIT", "OUT_FOR_DELIVERY"].includes(rawStatus) ? "SHIPPED" : rawStatus;
-      if (status === "SHIPPED") {
-        return { alreadyShipped: true, trackingId: String(order.trackingId || trackingId) };
+
+      // If already shipped or completed, return early
+      if (["SHIPPED", "WORK_DONE", "COMPLETED_PENDING_BUYER"].includes(rawStatus)) {
+        return { alreadyUpdated: true, status: rawStatus };
       }
-      if (status !== "PAID_HELD") {
-        throw new ShipOrderError(`Order cannot be shipped from status ${order.status || "unknown"}`, 409);
+
+      if (!["PAID_HELD", "PENDING", "IN_PROGRESS"].includes(rawStatus)) {
+        throw new ShipOrderError(`Order status cannot be updated from ${order.status || "unknown"}`, 409);
       }
 
       const now = FieldValue.serverTimestamp();
-      transaction.update(orderRef, {
-        status: "SHIPPED",
-        shippedAt: now,
-        trackingId,
-        carrier,
-        updatedAt: now,
-      });
+      const nextStatus = isServiceOrBooking ? "COMPLETED_PENDING_BUYER" : "SHIPPED";
 
+      const updatePayload: Record<string, any> = {
+        status: nextStatus,
+        shippedAt: now,
+        updatedAt: now,
+      };
+
+      if (!isServiceOrBooking) {
+        updatePayload.trackingId = trackingId;
+        updatePayload.carrier = carrier;
+      }
+
+      transaction.update(orderRef, updatePayload);
+
+      // Notify Buyer
       if (typeof order.buyerId === "string" && order.buyerId) {
         transaction.create(adminDb.collection("notifications").doc(), {
           buyerId: order.buyerId,
-          type: "order_shipped",
+          type: isServiceOrBooking ? "service_completed" : "order_shipped",
           orderId,
-          message: `Your order from ${order.storeName || "the seller"} is now in transit.`,
+          message: isServiceOrBooking
+            ? `Work for your order from ${order.storeName || "the provider"} has been completed. Please review and release funds.`
+            : `Your order from ${order.storeName || "the seller"} is now in transit.`,
           read: false,
           createdAt: now,
         });
       }
 
-      return { alreadyShipped: false, trackingId };
+      return { alreadyUpdated: false, status: nextStatus };
     });
 
     return NextResponse.json({ success: true, ...result });
   } catch (error: unknown) {
-    console.error("Ship order API error:", error);
+    console.error("Update order API error:", error);
     const status = error instanceof ShipOrderError ? error.status : 500;
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to ship order" }, { status });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update order" }, { status });
   }
 }
