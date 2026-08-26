@@ -4,7 +4,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 import { Novu } from "@novu/node";
 
-// ✅ Initialize Novu (Make sure you have NOVU_API_KEY in your .env)
+// ✅ Initialize Novu (Make sure you have NOVU_SECRET_KEY in your .env)
 const novu = new Novu(process.env.NOVU_SECRET_KEY!);
 
 export async function GET(
@@ -49,8 +49,6 @@ export async function GET(
 
       // Automated fallbacks for Mock environment or local debug tests
       if (reference.startsWith("mock-") || reference.includes("test") || reference.startsWith("SUB_")) {
-        // Safe extraction of User ID directly from reference format layout if available
-        // Example: SUB_PRO_MAX_YcD0Kr9WtEPfiXJtBzISBprzTtl2_1782523178417
         let extractedUserId = "test-user-id";
         const parts = reference.split("_");
         if (parts.length >= 4) {
@@ -174,7 +172,16 @@ export async function GET(
         // Upgrades corresponding Vendor Profile Access Control fields inside Firebase
         await adminDb.collection("users").doc(verifiedData.userId).set(userFeaturesUpdate, { merge: true });
 
-        console.log(`🎉 [ Activation Success ] Upgraded User ${verifiedData.userId} to ${verifiedData.planName}.`);
+        // ✅ FIX: ALSO UPDATE STORES COLLECTION
+        // Keeps store-level subscription plan and partner status in sync with checkout tier checks
+        await adminDb.collection("stores").doc(verifiedData.userId).set({
+          subscriptionPlan: verifiedData.planId,
+          isPartner: isMaxTier,
+          partnerExpiry: expiry.toISOString(),
+          updatedAt: now.toISOString()
+        }, { merge: true });
+
+        console.log(`🎉 [ Activation Success ] Upgraded User & Store ${verifiedData.userId} to ${verifiedData.planName}.`);
 
         // ==========================================
         // ✅ SEND SUBSCRIPTION NOTIFICATION (FIRESTORE + NOVU)
@@ -185,14 +192,14 @@ export async function GET(
           priority: "medium",
           title: "Subscription Activated! 👑",
           body: `Your ${verifiedData.planName} is now active. Enjoy premium features!`,
-          actionUrl: "/dashboard?tab=overview", // Routes to Overview Tab
+          actionUrl: "/dashboard?tab=overview",
           actionLabel: "Go to Dashboard"
         };
 
         // 1️⃣ WRITE TO FIRESTORE (Powers your NotificationsTab)
         try {
           await adminDb.collection("notifications").add({
-            vendorId: targetUserId, // NotificationsTab listens to 'vendorId'
+            vendorId: targetUserId,
             ...notifConfig,
             actionable: true,
             read: false,
@@ -217,7 +224,7 @@ export async function GET(
       }
     }
 
-    // 🚨 FIX: Return a 404 block instead of 200 if still processing, signaling frontend to continue polling cleanly
+    // Return a 404 block instead of 200 if still processing, signaling frontend to continue polling cleanly
     if (!subscriptionRecord || subscriptionRecord.status !== "active") {
       return NextResponse.json({
         error: "Subscription transaction verification processing",
@@ -228,7 +235,7 @@ export async function GET(
     // Calculate fallback expirations mappings
     let expiryDateStr = subscriptionRecord.expiryDate;
     const rawStatus = subscriptionRecord.status || "pending_payment";
-    const isExpired = expiryDateStr ? new Date(expiryDateStr).getTime() <Date.now() : false;
+    const isExpired = expiryDateStr ? new Date(expiryDateStr).getTime() < Date.now() : false;
     const effectiveStatus = rawStatus === "active" && isExpired ? "expired" : rawStatus;
 
     // Universal compatible JSON layout payload

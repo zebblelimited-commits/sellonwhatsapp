@@ -4,7 +4,6 @@ import { FieldValue } from "firebase-admin/firestore";
 
 interface CheckoutRequestBody {
     buyerId: string;
-    customerEmail: string; // ✅ ADD THIS
     address: any;
     sellerOrders: {
         storeId: string;
@@ -38,9 +37,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
         console.log("🔵 [CHECKOUT API] Request received");
         const body: CheckoutRequestBody = await req.json();
-        const { buyerId, customerEmail, address, sellerOrders, paymentMethod, total: frontendTotal } = body;
-
-        console.log("📧 [CHECKOUT API] Customer Email received:", customerEmail);
+        const { buyerId, address, sellerOrders, paymentMethod, total: frontendTotal } = body;
 
         if (!buyerId || !address || !sellerOrders || sellerOrders.length === 0) {
             return NextResponse.json({ error: "Missing required checkout fields." }, { status: 400 });
@@ -54,7 +51,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         for (const sellerOrder of sellerOrders) {
             const { storeId, storeName, items, shippingMethod, shippingCost, subtotal: productSubtotal } = sellerOrder;
 
-            // ✅ SAFETY CHECK: Prevent 'unknown' or missing storeId
             if (!storeId || storeId === 'unknown') {
                 console.error("❌ [CHECKOUT API] Invalid storeId detected:", storeId);
                 return NextResponse.json({ error: "One or more items in your cart are missing store information." }, { status: 400 });
@@ -69,7 +65,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             }
 
             const storeData = storeSnap.data() || {};
-            const isPartner = storeData.isPartner === true || storeData.subscriptionPlan === "pro_max";
+
+            // ✅ TIER CHECK: 0% commission for Partners or Pro Max/Yearly Business Max, otherwise 1.5%
+            const isPartner =
+                storeData.isPartner === true ||
+                storeData.subscriptionPlan === "pro_max" ||
+                storeData.subscriptionPlan === "pro_yearly_business_max" ||
+                String(storeData.subscriptionPlan).toLowerCase().includes("max");
+
             const sellerCommissionRate = isPartner ? 0 : 0.015;
 
             const handlingFee = (shippingMethod !== "self_arranged" && shippingCost > 0) ? 200 : 0;
@@ -147,8 +150,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         const nombaOrigin = process.env.NOMBA_SANDBOX_URL || "https://sandbox.nomba.com";
         const isSandbox = Boolean(process.env.NOMBA_SANDBOX_URL) || process.env.NEXT_PUBLIC_ENVIRONMENT === "sandbox";
         const authBaseUrl = `${nombaOrigin}/v1`;
-
-        // ✅ ROBUST FALLBACK: Try /v1 first, then fallback to /sandbox if 404
         const checkoutBaseUrls = isSandbox
             ? [`${nombaOrigin}/v1`, `${nombaOrigin}/sandbox`]
             : [`${nombaOrigin}/v1`];
@@ -193,7 +194,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     amount: calculatedGrandTotal.toFixed(2),
                     currency: "NGN",
                     callbackUrl: callbackUrl,
-                    customerEmail: customerEmail || "customer@sellonwhatsapp.com",
+                    customerEmail: sellerOrders[0].items[0]?.customerEmail || "customer@sowa.com",
                     description: `Checkout: ${itemSummary}`,
                     allowedPaymentMethods: [paymentMethod || "Card", "Transfer"],
                     metaData: {
@@ -208,7 +209,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         console.log("🔵 [CHECKOUT API] Creating Nomba Checkout Order...");
         let nombaOrderRes = await fetchWithRetry(`${checkoutBaseUrls[0]}/checkout/order`, checkoutRequest);
 
-        // ✅ FALLBACK TO SANDBOX IF PRIMARY RETURNS 404
         if (!nombaOrderRes.ok && nombaOrderRes.status === 404 && checkoutBaseUrls.length > 1) {
             console.warn("⚠️ Primary Nomba checkout route returned 404; trying sandbox checkout route.");
             nombaOrderRes = await fetchWithRetry(`${checkoutBaseUrls[1]}/checkout/order`, checkoutRequest);

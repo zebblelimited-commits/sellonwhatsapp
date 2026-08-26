@@ -334,7 +334,7 @@ export async function POST(request: NextRequest) {
 
             console.log(`✅ [ESCROW] Order ${orderRef} ${holdResult.transitioned ? `reserved ₦${holdResult.amount}` : "was already reserved"}.`);
           } else {
-            // ✅ FIX 2: Moved activeDuration and durationUnit here so they are in scope for the else block
+            // Calculate plan expiration
             const activeDuration = Number(localData.durationDays || localData.durationMonths || 7);
             const durationUnit = localData.durationMonths ? "months" : "days";
 
@@ -345,12 +345,36 @@ export async function POST(request: NextRequest) {
               expiryDate.setDate(expiryDate.getDate() + activeDuration);
             }
 
+            // 1️⃣ Update the Subscription Document
             await documentRef.update({
               status: newStatus,
               startDate: new Date().toISOString(),
               expiryDate: expiryDate.toISOString(),
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
+
+            // 2️⃣ ✅ CRITICAL FIX: Sync Subscription state to Store and User documents
+            if (collectionName === "subscriptions" && targetUserId) {
+              const planId = localData.planId || "pro_yearly_business_max";
+              const isMaxTier = planId === "pro_yearly_business_max" || planId.includes("max");
+
+              // Sync Store document (used by Checkout API for 0% commission check)
+              await adminDb.collection("stores").doc(targetUserId).set({
+                subscriptionPlan: planId,
+                isPartner: isMaxTier,
+                partnerExpiry: expiryDate.toISOString(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              }, { merge: true });
+
+              // Sync User document
+              await adminDb.collection("users").doc(targetUserId).set({
+                isPremium: true,
+                planId: planId,
+                premiumActivatedAt: new Date().toISOString(),
+                premiumExpiresAt: expiryDate.toISOString(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              }, { merge: true });
+            }
           }
 
           console.log(`✅ [WEBHOOK SUCCESS] ${collectionName} ${orderRef} updated to '${newStatus}'!`);

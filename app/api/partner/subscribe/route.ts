@@ -19,7 +19,8 @@ const auth = getAuth();
 
 // ✅ Helper to get Nomba Access Token
 async function getNombaToken() {
-  const response = await fetch(`${process.env.NOMBA_AUTH_URL}/v1/auth/token/issue`, {
+  const authUrl = process.env.NOMBA_AUTH_URL || process.env.NOMBA_SANDBOX_URL || "https://api.nomba.com";
+  const response = await fetch(`${authUrl}/v1/auth/token/issue`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -53,13 +54,20 @@ export async function POST(request: NextRequest) {
 
     // 2. Get Nomba Token
     const nombaToken = await getNombaToken();
-    
-    // ✅ Nomba Checkout expects amount in NGN (Naira) as a string/float, NOT in Kobo!
-    const amountInNaira = "10000.00"; 
+
+    // ✅ Nomba Checkout expects amount in NGN (Naira) as a string/float
+    const amountInNaira = "10000.00";
     const orderReference = `PARTNER_${storeId}_${Date.now()}`;
 
-    // ✅ 3. Create Checkout Order using Nomba's correct endpoint and payload structure
-    const response = await fetch(`${process.env.NOMBA_SANDBOX_URL}/v1/checkout/order`, {
+    // App URL & Dynamic Nomba API Base URL
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const nombaBaseUrl = process.env.NOMBA_SANDBOX_URL || "https://api.nomba.com";
+
+    // UI Callback URL for browser redirect after checkout completion
+    const callbackUrl = `${appUrl}/dashboard?tab=partner&reference=${orderReference}`;
+
+    // ✅ 3. Create Checkout Order
+    const response = await fetch(`${nombaBaseUrl}/v1/checkout/order`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${nombaToken}`,
@@ -74,14 +82,13 @@ export async function POST(request: NextRequest) {
           customerEmail: userEmail,
           customerId: storeId,
           accountId: process.env.NOMBA_ACCOUNT_ID,
-          // Ensure this points to your existing webhook URL
-          callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://yourdomain.com"}/api/webhooks/nomba`, 
-          // ✅ Nomba requires metadata to be inside "orderMetaData"
-          orderMetaData: {
+          callbackUrl: callbackUrl,
+          metaData: {
             type: "partner_subscription",
             storeId: storeId,
+            userId: storeId,
             durationDays: 30,
-            productName: "Zebble Marketplace Partner Subscription (1 Month)"
+            productName: "SellOnWhatsapp Marketplace Partner Subscription (1 Month)"
           }
         },
         tokenizeCard: "false"
@@ -89,13 +96,13 @@ export async function POST(request: NextRequest) {
     });
 
     const result = await response.json();
-    
+
     if (!response.ok) {
       console.error("Nomba Checkout Order Error:", result);
       throw new Error(result?.description || "Failed to create Nomba checkout order");
     }
 
-    // ✅ 4. Extract the checkout link (Nomba returns it as "checkoutLink")
+    // ✅ 4. Extract the checkout link
     const checkoutLink = result?.data?.checkoutLink || result?.checkoutLink;
 
     if (!checkoutLink) {
@@ -103,8 +110,8 @@ export async function POST(request: NextRequest) {
       throw new Error("Checkout link not found in Nomba response");
     }
 
-    return NextResponse.json({ 
-      checkoutUrl: checkoutLink 
+    return NextResponse.json({
+      checkoutUrl: checkoutLink
     });
 
   } catch (error: any) {

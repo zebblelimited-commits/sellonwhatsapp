@@ -2,10 +2,10 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
 import { doc, onSnapshot, collection, query, where, getDocs } from "firebase/firestore";
-import { 
-  Crown, CheckCircle2, TrendingUp, Loader2, Sparkles, 
+import {
+  Crown, CheckCircle2, TrendingUp, Loader2, Sparkles,
   Calendar, Wallet, Percent, ArrowRight, AlertCircle,
-  ShoppingCart, MessageSquare, Eye, Star, Zap
+  MessageSquare, Eye
 } from "lucide-react";
 import { showToast } from "@/lib/toast";
 
@@ -31,11 +31,15 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
       const q = query(
         collection(db, "orders"),
         where("storeId", "==", storeId),
-        where("status", "in", ["COMPLETED", "SHIPPED"]),
+        where("status", "in", ["COMPLETED", "SHIPPED", "PAID_HELD"]), // Added PAID_HELD to show pending escrow sales
         where("createdAt", ">=", startOfMonth)
       );
       const snap = await getDocs(q);
-      const total = snap.docs.reduce((acc, doc) => acc + (doc.data().totalAmount || 0), 0);
+      const total = snap.docs.reduce((acc, doc) => {
+        const data = doc.data();
+        // ✅ FIX: Fallback to 'total' for new multi-seller orders
+        return acc + (data.totalAmount ?? data.total ?? 0);
+      }, 0);
       setMonthlySales(total);
     };
     fetchMonthlySales();
@@ -43,14 +47,19 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
     return () => unsubStore();
   }, [storeId]);
 
-  // Check if active Partner
-  const isPartner = storeData?.isPartner && new Date(storeData?.partnerExpiry) > new Date();
-  const partnerExpiry = storeData?.partnerExpiry ? new Date(storeData.partnerExpiry) : null;
+  // ✅ FIX: Robust Partner Check matching the Checkout API logic
+  const isPartner =
+    storeData?.isPartner === true ||
+    storeData?.subscriptionPlan === "pro_max" ||
+    String(storeData?.subscriptionPlan || "").toLowerCase().includes("max");
+
+  // Fallback to subscriptionExpiry if partnerExpiry isn't set yet
+  const partnerExpiry = storeData?.partnerExpiry ? new Date(storeData.partnerExpiry) : (storeData?.subscriptionExpiry ? new Date(storeData.subscriptionExpiry) : null);
 
   // Calculate Savings
-  const standardFees = monthlySales * 0.03; // 3% total
+  const standardFees = monthlySales * 0.03; // 3% total (1.5% platform + 1.5% seller)
   const partnerFees = monthlySales * 0.015; // 1.5% platform only
-  const monthlySavings = isPartner ? (standardFees - partnerFees) : standardFees;
+  const monthlySavings = standardFees - partnerFees;
 
   // Handle Subscription
   const handleSubscribe = async () => {
@@ -60,21 +69,19 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
       if (!user) throw new Error("User not authenticated");
 
       const idToken = await user.getIdToken();
-      
-      // Call our new API route
+
       const res = await fetch("/api/partner/subscribe", {
         method: "POST",
         headers: { Authorization: `Bearer ${idToken}` },
       });
-      
+
       const data = await res.json();
-      
+
       if (!res.ok) {
         throw new Error(data.error || "Failed to initialize payment");
       }
 
       if (data.checkoutUrl) {
-        // ✅ Redirect user to Nomba's secure checkout page
         window.location.href = data.checkoutUrl;
       } else {
         throw new Error("Checkout URL not received from server");
@@ -119,17 +126,17 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
                   </span>
                 </div>
                 <p className="text-green-50 text-sm mt-1">
-                  Thank you for being a valued Partner. You're enjoying lower fees and premium benefits.
+                  Thank you for being a valued Partner. You're enjoying 0% seller commission and premium benefits.
                 </p>
                 {partnerExpiry && (
                   <p className="text-green-50 text-xs mt-2 flex items-center gap-1">
                     <Calendar size={12} />
-                    Member since {partnerExpiry.toLocaleDateString('en-NG', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    Valid until {partnerExpiry.toLocaleDateString('en-NG', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </p>
                 )}
               </div>
             </div>
-            <button 
+            <button
               onClick={handleSubscribe}
               disabled={subscribing}
               className="px-6 py-2.5 bg-white text-[#00a63e] font-bold rounded-xl text-sm hover:bg-green-50 transition-colors shadow-sm disabled:opacity-50"
@@ -152,7 +159,7 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
                 </p>
               </div>
             </div>
-            <button 
+            <button
               onClick={handleSubscribe}
               disabled={subscribing}
               className="px-6 py-2.5 bg-white text-orange-600 font-bold rounded-xl text-sm hover:bg-amber-50 transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
@@ -175,8 +182,8 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
             <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center mb-3">
               <Percent size={24} className="text-[#00a63e]" />
             </div>
-            <h4 className="font-bold text-gray-900 text-sm mb-1">Lower Fees</h4>
-            <p className="text-xs text-gray-500">Pay only 1.5% platform fee instead of 3% total</p>
+            <h4 className="font-bold text-gray-900 text-sm mb-1">0% Seller Fees</h4>
+            <p className="text-xs text-gray-500">Pay only the 1.5% platform fee instead of 3% total</p>
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -200,7 +207,7 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
               <MessageSquare size={24} className="text-purple-600" />
             </div>
             <h4 className="font-bold text-gray-900 text-sm mb-1">Priority Support</h4>
-            <p className="text-xs text-gray-500">Get faster support whenever you need</p>
+            <p className="text-xs text-gray-500">Get faster support whenever you need it</p>
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -221,15 +228,13 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
         </div>
       </div>
 
-      {/* Compare Your Savings Section - INPUT FIRST, CARDS SECOND */}
+      {/* Compare Your Savings Section */}
       <div className="bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm">
         <h3 className="font-bold text-gray-900 mb-2">Compare Your Savings</h3>
         <p className="text-xs text-gray-500 mb-6">Estimate your monthly savings as a Partner</p>
 
-        {/* 3 columns: 1 for input, 2 for cards */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* 1. Monthly Sales Input - Left side (narrower) */}
+          {/* Monthly Sales Input */}
           <div className="space-y-3 lg:col-span-1">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Monthly Sales (₦)</label>
             <input
@@ -239,36 +244,15 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
               placeholder="Enter your monthly sales"
               className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-[#00a63e] transition-all"
             />
-            {/* Bigger Green Quick Selection Buttons */}
             <div className="flex flex-wrap gap-3">
-              <button 
-                onClick={() => setMonthlySales(100000)} 
-                className="flex-1 py-2.5 bg-[#00a63e] hover:bg-green-700 text-white font-bold text-sm rounded-xl transition-all shadow-sm hover:shadow-md"
-              >
-                100K
-              </button>
-              <button 
-                onClick={() => setMonthlySales(1000000)} 
-                className="flex-1 py-2.5 bg-[#00a63e] hover:bg-green-700 text-white font-bold text-sm rounded-xl transition-all shadow-sm hover:shadow-md"
-              >
-                ₦1M
-              </button>
-              <button 
-                onClick={() => setMonthlySales(5000000)} 
-                className="flex-1 py-2.5 bg-[#00a63e] hover:bg-green-700 text-white font-bold text-sm rounded-xl transition-all shadow-sm hover:shadow-md"
-              >
-                ₦5M
-              </button>
-              <button 
-                onClick={() => setMonthlySales(10000000)} 
-                className="flex-1 py-2.5 bg-[#00a63e] hover:bg-green-700 text-white font-bold text-sm rounded-xl transition-all shadow-sm hover:shadow-md"
-              >
-                10M+
-              </button>
+              <button onClick={() => setMonthlySales(100000)} className="flex-1 py-2.5 bg-[#00a63e] hover:bg-green-700 text-white font-bold text-sm rounded-xl transition-all shadow-sm hover:shadow-md">100K</button>
+              <button onClick={() => setMonthlySales(1000000)} className="flex-1 py-2.5 bg-[#00a63e] hover:bg-green-700 text-white font-bold text-sm rounded-xl transition-all shadow-sm hover:shadow-md">₦1M</button>
+              <button onClick={() => setMonthlySales(5000000)} className="flex-1 py-2.5 bg-[#00a63e] hover:bg-green-700 text-white font-bold text-sm rounded-xl transition-all shadow-sm hover:shadow-md">₦5M</button>
+              <button onClick={() => setMonthlySales(10000000)} className="flex-1 py-2.5 bg-[#00a63e] hover:bg-green-700 text-white font-bold text-sm rounded-xl transition-all shadow-sm hover:shadow-md">10M+</button>
             </div>
           </div>
 
-          {/* 2. Comparison Cards - Right side (wider) */}
+          {/* Comparison Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:col-span-2">
             {/* Standard Seller Card */}
             <div className="bg-gray-50 rounded-2xl p-4 border border-gray-200 hover:bg-gray-100 hover:shadow-md hover:-translate-y-1 transition-all duration-300 cursor-default">
@@ -293,11 +277,8 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
             </div>
 
             {/* Partner Seller Card */}
-            <div className={`rounded-2xl p-4 border hover:shadow-md hover:-translate-y-1 transition-all duration-300 cursor-default ${
-              isPartner 
-                ? 'bg-green-50 border-green-200 hover:bg-green-100' 
-                : 'bg-amber-50/50 border-amber-200 hover:bg-amber-50'
-            }`}>
+            <div className={`rounded-2xl p-4 border hover:shadow-md hover:-translate-y-1 transition-all duration-300 cursor-default ${isPartner ? 'bg-green-50 border-green-200 hover:bg-green-100' : 'bg-amber-50/50 border-amber-200 hover:bg-amber-50'
+              }`}>
               <h4 className={`font-bold text-xs mb-3 ${isPartner ? 'text-green-900' : 'text-amber-900'}`}>
                 Partner Seller {isPartner && <CheckCircle2 size={12} className="inline ml-1 text-green-600" />}
               </h4>
@@ -305,7 +286,8 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Platform Fee (1.5%)</span>
-                  <span className="font-bold">{(monthlySales * 0.015).toLocaleString()}</span>
+                  {/* ✅ FIX: Added missing ₦ symbol */}
+                  <span className="font-bold">₦{(monthlySales * 0.015).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Seller Commission</span>
@@ -317,7 +299,7 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
                   <div className="flex justify-between">
                     <span className={`font-bold ${isPartner ? 'text-green-700' : 'text-amber-700'}`}>Total Fees</span>
                     <span className={`font-bold ${isPartner ? 'text-green-700' : 'text-amber-700'}`}>
-                      {partnerFees.toLocaleString()}
+                      ₦{partnerFees.toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -398,11 +380,11 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
                   ₦10,000/month • Cancel anytime • No hidden fees
                 </p>
                 <p className="text-xs text-gray-500 mt-2">
-                  Break even with just ₦667,000 in monthly sales. Above that, you're pure profit!
+                  Break even with just ₦667,000 in monthly sales. Above that, it's pure profit!
                 </p>
               </div>
             </div>
-            <button 
+            <button
               onClick={handleSubscribe}
               disabled={subscribing}
               className="px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold rounded-xl text-sm shadow-sm disabled:opacity-50 transition-all"
