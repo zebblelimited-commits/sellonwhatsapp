@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Plus, Minus, ShieldCheck, Truck, ChevronLeft, ChevronRight,
-  Box, Loader2, Calendar, MessageCircle, CheckCircle2, CreditCard, X
+  Box, Loader2, Calendar, MessageCircle, CheckCircle2, CreditCard, X, Info
 } from "lucide-react";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
@@ -39,7 +39,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
 
   useEffect(() => {
     setIsMounted(true);
-    // Pre-fill email if user is logged in
+    // Pre-fill email/name if user is logged in
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user && user.email) {
         setCustomerEmail(user.email);
@@ -58,7 +58,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
   // PRODUCT TYPE LOGIC
   const isBooking = product?.productType === 'booking';
   const isServiceOrUtility = product?.productType === 'service' || product?.productType === 'utility';
-  const requiresShipping = !isBooking && !isServiceOrUtility; // ✅ Dual experience trigger
+  const requiresShipping = !isBooking && !isServiceOrUtility;
 
   const hideQuantity = isBooking || isServiceOrUtility;
   const stockCount = Number(product?.stockCount ?? product?.stock ?? 0);
@@ -69,9 +69,13 @@ export default function ProductPageClient({ product, store }: { product: any; st
   const images = product?.images || [product?.image || "/placeholder.png"];
   const activeQuantity = hideQuantity ? 1 : quantity;
   const productPrice = Number(product?.price || 0);
-  const finalTotal = productPrice * activeQuantity;
 
-  // ✅ DUAL CHECKOUT ROUTER LOGIC
+  // FINANCIAL CALCULATIONS WITH 1.5% PLATFORM FEE
+  const subtotal = productPrice * activeQuantity;
+  const platformFee = Math.round(subtotal * 0.015);
+  const grandTotal = subtotal + platformFee;
+
+  // DUAL CHECKOUT ROUTER LOGIC
   const handleBuyNow = () => {
     const storeId = store?.id || store?.uid;
     const productId = product?.id || product?.uid;
@@ -81,7 +85,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
     }
 
     if (requiresShipping) {
-      // EXPERIENCE 1: Physical Product -> Redirect to Checkout Page
+      // Physical Product -> Redirect to Checkout Page
       const orderDetails = {
         productId,
         productName: product?.name,
@@ -96,12 +100,12 @@ export default function ProductPageClient({ product, store }: { product: any; st
       sessionStorage.setItem("checkout_order", JSON.stringify(orderDetails));
       router.push("/checkout");
     } else {
-      // EXPERIENCE 2: Digital/Service/Booking -> Open Seamless Modal
+      // Digital/Service/Booking -> Open Seamless Modal
       setCheckoutModalOpen(true);
     }
   };
 
-  // ✅ MODAL PAYMENT HANDLER (For Non-Shipping Items)
+  // ✅ FIXED MODAL PAYMENT HANDLER
   const handleModalPayment = async () => {
     if (!customerEmail.trim()) {
       setModalError("Please provide a valid contact email address.");
@@ -121,6 +125,11 @@ export default function ProductPageClient({ product, store }: { product: any; st
     const productId = product?.id || product?.uid;
     const storeId = store?.id || store?.uid;
 
+    if (!storeId) {
+      setModalError("Store information is missing. Please contact support.");
+      return;
+    }
+
     setIsModalLoading(true);
     setModalError(null);
 
@@ -129,32 +138,52 @@ export default function ProductPageClient({ product, store }: { product: any; st
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productId,
-          productName: product.name,
-          price: productPrice,
-          quantity: activeQuantity,
-          deliveryFee: 0, // No shipping for these types
-          storeId,
-          storeUsername: store.username,
-          storeName: store.storeName,
-          vendorNombaAccountId: store.nombaAccountId,
-          paymentMethod: "nomba", // Or your default gateway
-          deliveryState: isBooking ? "Booking" : "Digital Service",
-          bookingDate: selectedDate,
-          bookingSlot: selectedSlot,
-          isBooking,
-          customerEmail: customerEmail.trim(),
-          customerName: customerName.trim(),
-          customerPhone: customerPhone.trim(),
           buyerId: buyer.uid,
+          customerEmail: customerEmail.trim(),
+          paymentMethod: "Card",
+          total: grandTotal,
+          address: {
+            fullName: customerName.trim() || buyer.displayName || "Customer",
+            email: customerEmail.trim(),
+            phone: customerPhone.trim() || "N/A",
+            street: isBooking ? `Booking: ${selectedDate} ${selectedSlot}` : "Digital Delivery / Service",
+            city: "N/A",
+            state: isBooking ? "Booking" : "Digital Service",
+            country: "NG",
+          },
+          sellerOrders: [
+            {
+              storeId: storeId,
+              storeName: store?.storeName || "Store",
+              shippingMethod: "self_arranged",
+              shippingCost: 0,
+              subtotal: subtotal,
+              items: [
+                {
+                  productId,
+                  name: product?.name || "Service Item",
+                  price: productPrice,
+                  quantity: activeQuantity,
+                  image: images[0] || "",
+                  bookingDate: selectedDate || null,
+                  bookingSlot: selectedSlot || null,
+                },
+              ],
+            },
+          ],
         }),
       });
 
       const data = await response.json();
-      if (data.checkoutLink) {
-        window.location.href = data.checkoutLink; // Redirect to payment gateway
-      } else {
+
+      if (!response.ok) {
         throw new Error(data.error || "Failed to initiate payment");
+      }
+
+      if (data.checkoutLink) {
+        window.location.href = data.checkoutLink;
+      } else {
+        throw new Error("Payment gateway checkout link not returned.");
       }
     } catch (err: any) {
       setModalError(err.message || "An error occurred while initiating payment.");
@@ -325,7 +354,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
         </div>
       </main>
 
-      {/* ✅ SEAMLESS MODAL CHECKOUT (Only for Non-Shipping: Bookings, Services, Utilities) */}
+      {/* ✅ SEAMLESS MODAL CHECKOUT */}
       {!requiresShipping && checkoutModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isModalLoading && setCheckoutModalOpen(false)} />
@@ -361,7 +390,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
                 <input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} disabled={isModalLoading} className="w-full p-3.5 bg-gray-50/80 border border-gray-100 rounded-xl font-bold text-xs outline-none focus:border-[#00a63e] focus:bg-white text-gray-900 transition-all" placeholder="08012345678" />
               </div>
 
-              {/* Booking Details Summary (If applicable) */}
+              {/* Booking Details Summary */}
               {isBooking && selectedDate && selectedSlot && (
                 <div className="bg-purple-50/50 border border-purple-100 rounded-xl p-3 flex items-center gap-3">
                   <Calendar size={16} className="text-purple-600 shrink-0" />
@@ -372,15 +401,30 @@ export default function ProductPageClient({ product, store }: { product: any; st
                 </div>
               )}
 
-              {/* Order Summary */}
+              {/* Order Breakdown Summary */}
               <div className="bg-gray-50/80 p-4 rounded-xl border border-gray-100 space-y-2">
                 <div className="flex justify-between text-xs text-gray-600 font-medium">
                   <span>{product?.name} (x{activeQuantity})</span>
-                  <span className="font-bold text-gray-900">₦{finalTotal.toLocaleString()}</span>
+                  <span className="font-bold text-gray-900">₦{subtotal.toLocaleString()}</span>
                 </div>
+
+                {/* Platform Fee Line Item */}
+                <div className="flex justify-between text-xs text-gray-600 font-medium">
+                  <span className="flex items-center gap-1">
+                    Platform Fee (1.5%)
+                    <span className="group relative cursor-pointer text-gray-400 hover:text-gray-600">
+                      <Info size={12} />
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block w-36 p-1.5 bg-black text-white text-[9px] rounded text-center z-20">
+                        Standard 1.5% checkout processing fee
+                      </span>
+                    </span>
+                  </span>
+                  <span className="font-bold text-gray-900">₦{platformFee.toLocaleString()}</span>
+                </div>
+
                 <div className="border-t border-gray-200/60 pt-2 flex justify-between items-center text-sm font-extrabold text-gray-900">
                   <span>Total Amount</span>
-                  <span className="text-base text-[#00a63e] font-black">₦{finalTotal.toLocaleString()}</span>
+                  <span className="text-base text-[#00a63e] font-black">₦{grandTotal.toLocaleString()}</span>
                 </div>
               </div>
 
@@ -394,7 +438,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
                 {isModalLoading ? (
                   <><Loader2 className="animate-spin" size={16} /> Processing...</>
                 ) : (
-                  <><CreditCard size={16} /> Pay ₦{finalTotal.toLocaleString()} Now</>
+                  <><CreditCard size={16} /> Pay ₦{grandTotal.toLocaleString()} Now</>
                 )}
               </button>
 
