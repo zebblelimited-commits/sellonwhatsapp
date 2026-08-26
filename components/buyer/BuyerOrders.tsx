@@ -2,15 +2,15 @@
 import { useEffect, useState } from "react";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { 
-  collection, query, where, onSnapshot, doc, updateDoc, 
-  serverTimestamp, addDoc 
+import {
+    collection, query, where, onSnapshot, doc, updateDoc,
+    serverTimestamp, addDoc
 } from "firebase/firestore";
 import Link from "next/link";
 import { useRouter } from "next/navigation"; // ✅ Add router for programmatic navigation
-import { 
-  ShoppingBag, ChevronRight, Clock, Truck, CheckCircle, Package, 
-  ShieldCheck, AlertTriangle, X, Flag, MessageSquare, Loader2
+import {
+    ShoppingBag, ChevronRight, Clock, Truck, CheckCircle, Package,
+    ShieldCheck, AlertTriangle, X, Flag, MessageSquare, Loader2
 } from "lucide-react";
 
 type BuyerDispute = { orderId: string; status?: string; reason?: string; description?: string; vendorResponded?: boolean };
@@ -19,14 +19,14 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
     const router = useRouter(); // ✅ Initialize router
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    
+
     // Modal States
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [isDisputeModalOpen, setIsDisputeModalOpen] = useState(false);
     const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
     const [isUpdating, setIsUpdating] = useState(false);
     const [updateError, setUpdateError] = useState("");
-    
+
     // Dispute Form State
     const [disputeForm, setDisputeForm] = useState({
         reason: "item_not_received",
@@ -37,17 +37,17 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
             if (user) {
                 const q = query(
-                    collection(db, "orders"), 
+                    collection(db, "orders"),
                     where("buyerId", "==", user.uid)
                 );
 
                 const unsubOrders = onSnapshot(q, (snap) => {
-                    const docs = snap.docs.map(doc => ({ 
-                        id: doc.id, 
+                    const docs = snap.docs.map(doc => ({
+                        id: doc.id,
                         ...doc.data(),
                         createdAt: doc.data().createdAt?.toDate?.() || new Date()
                     }));
-                    setOrders(docs.sort((a, b) => 
+                    setOrders(docs.sort((a, b) =>
                         (b.createdAt?.getTime?.() || 0) - (a.createdAt?.getTime?.() || 0)
                     ));
                     setLoading(false);
@@ -67,8 +67,8 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
 
     // ✅ Helper: Check if order has active dispute
     const getOrderDispute = (orderId: string) => {
-        return disputes?.find(d => 
-            d.orderId === orderId && 
+        return disputes?.find(d =>
+            d.orderId === orderId &&
             ["open", "under_review"].includes(String(d.status || ""))
         );
     };
@@ -138,8 +138,8 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
             if (!response.ok) throw new Error(result.error || "Failed to create dispute");
 
             // Notify parent component
-            onDisputeAction?.("dispute_opened", { 
-                orderId: selectedOrderId, 
+            onDisputeAction?.("dispute_opened", {
+                orderId: selectedOrderId,
                 disputeId: result.disputeId
             });
 
@@ -147,7 +147,7 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
             setIsDisputeModalOpen(false);
             setSelectedOrderId(null);
             setDisputeForm({ reason: "item_not_received", description: "" });
-            
+
         } catch (error) {
             console.error("Dispute Error:", error);
         } finally {
@@ -180,7 +180,7 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
 
     return (
         <div className="space-y-4 animate-in fade-in duration-500">
-            
+
             {/* --- CONFIRMATION MODAL --- */}
             {isConfirmModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -191,13 +191,13 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                             </div>
                             <h3 className="text-xl font-extrabold text-slate-900 mb-2">Final Confirmation</h3>
                             <p className="text-sm text-slate-500 leading-relaxed mb-6">
-                                Are you sure you have received your items in good condition? 
+                                Are you sure you have received your items in good condition?
                                 <span className="block mt-2 font-bold text-slate-700">
                                     This action will release funds from Escrow to the vendor immediately.
                                 </span>
                             </p>
                             {updateError && <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 p-3 text-left text-xs font-semibold leading-relaxed text-red-700">{updateError}</div>}
-                            
+
                             <div className="flex flex-col gap-3">
                                 <button
                                     onClick={handleConfirmFinal}
@@ -231,7 +231,7 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                                 <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
                                     <Flag size={20} className="text-red-500" /> Report Issue
                                 </h3>
-                                <button 
+                                <button
                                     onClick={() => {
                                         setIsDisputeModalOpen(false);
                                         setSelectedOrderId(null);
@@ -245,16 +245,16 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                             <p className="text-sm text-slate-500 mb-4">
                                 Describe the issue with your order. Funds are held securely in escrow until resolved.
                             </p>
-                            
+
                             <div className="space-y-4">
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">
                                         Reason
                                     </label>
-                                    <select 
+                                    <select
                                         className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-red-500/20"
                                         value={disputeForm.reason}
-                                        onChange={(e) => setDisputeForm({...disputeForm, reason: e.target.value})}
+                                        onChange={(e) => setDisputeForm({ ...disputeForm, reason: e.target.value })}
                                     >
                                         <option value="item_not_received">Item Not Received</option>
                                         <option value="damaged">Item Damaged</option>
@@ -263,16 +263,16 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                                         <option value="other">Other</option>
                                     </select>
                                 </div>
-                                
+
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">
                                         Description
                                     </label>
-                                    <textarea 
+                                    <textarea
                                         className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-red-500/20 min-h-[100px]"
                                         placeholder="Describe the issue in detail..."
                                         value={disputeForm.description}
-                                        onChange={(e) => setDisputeForm({...disputeForm, description: e.target.value})}
+                                        onChange={(e) => setDisputeForm({ ...disputeForm, description: e.target.value })}
                                     />
                                 </div>
 
@@ -313,50 +313,48 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                 orders.map((order) => {
                     const dispute = getOrderDispute(order.id);
                     const hasActiveDispute = !!dispute;
-                    
+
                     return (
                         // ✅ FIXED: Link to correct buyer order detail path
-                        <Link 
-                            href={`/buyer/orders/${order.id}`} 
-                            key={order.id} 
+                        <Link
+                            href={`/buyer/orders/${order.id}`}
+                            key={order.id}
                             className="block"
                         >
-                            <div 
-                                className={`bg-white p-5 rounded-[32px] border shadow-sm flex flex-col gap-4 active:scale-[0.99] transition-all ${
-                                    hasActiveDispute 
-                                        ? 'border-red-200 ring-1 ring-red-100 hover:border-red-300' 
-                                        : 'border-gray-50 hover:border-green-100'
-                                }`}
+                            <div
+                                className={`bg-white p-5 rounded-[32px] border shadow-sm flex flex-col gap-4 active:scale-[0.99] transition-all ${hasActiveDispute
+                                    ? 'border-red-200 ring-1 ring-red-100 hover:border-red-300'
+                                    : 'border-gray-50 hover:border-green-100'
+                                    }`}
                             >
-                                
+
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-4">
-                                        <div className={`p-3 rounded-2xl ${
-                                            hasActiveDispute ? "bg-red-50 text-red-500" :
+                                        <div className={`p-3 rounded-2xl ${hasActiveDispute ? "bg-red-50 text-red-500" :
                                             order.status === "PAID_HELD" ? "bg-orange-50 text-orange-500" :
-                                            order.status === "SHIPPED" ? "bg-blue-50 text-blue-500" :
-                                            "bg-green-50 text-green-500"
-                                        }`}>
+                                                order.status === "SHIPPED" ? "bg-blue-50 text-blue-500" :
+                                                    "bg-green-50 text-green-500"
+                                            }`}>
                                             {hasActiveDispute ? <AlertTriangle size={20} /> :
-                                             order.status === "PAID_HELD" ? <Clock size={20} /> :
-                                             order.status === "SHIPPED" ? <Truck size={20} /> :
-                                             <CheckCircle size={20} />}
+                                                order.status === "PAID_HELD" ? <Clock size={20} /> :
+                                                    order.status === "SHIPPED" ? <Truck size={20} /> :
+                                                        <CheckCircle size={20} />}
                                         </div>
                                         <div>
                                             <h4 className="font-bold text-gray-900 text-sm">Order #{order.id.slice(-6).toUpperCase()}</h4>
-                                            <p className="text-[11px] text-gray-400 font-bold">₦{order.totalAmount?.toLocaleString()}</p>
+                                            {/* ✅ FIX: Read 'total' or fallback to 'totalAmount' */}
+                                            <p className="text-[11px] text-gray-400 font-bold">₦{(order.totalAmount || order.total || 0).toLocaleString()}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <span className={`text-[9px] font-black px-3 py-1 rounded-full border uppercase tracking-wider ${
-                                            hasActiveDispute ? "bg-red-50 text-red-600 border-red-100" :
+                                        <span className={`text-[9px] font-black px-3 py-1 rounded-full border uppercase tracking-wider ${hasActiveDispute ? "bg-red-50 text-red-600 border-red-100" :
                                             order.status === "PAID_HELD" ? "bg-orange-50 text-orange-600 border-orange-100" :
-                                            order.status === "SHIPPED" ? "bg-blue-50 text-blue-600 border-blue-100" :
-                                            "bg-green-50 text-green-600 border-green-100"
-                                        }`}>
-                                            {hasActiveDispute ? "Disputed" : 
-                                             order.status === "PAID_HELD" ? "Escrow" : 
-                                             order.status}
+                                                order.status === "SHIPPED" ? "bg-blue-50 text-blue-600 border-blue-100" :
+                                                    "bg-green-50 text-green-600 border-green-100"
+                                            }`}>
+                                            {hasActiveDispute ? "Disputed" :
+                                                order.status === "PAID_HELD" ? "Escrow" :
+                                                    order.status}
                                         </span>
                                         <ChevronRight size={16} className="text-gray-300" />
                                     </div>
@@ -394,18 +392,18 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                                                 <p className="text-xs font-bold text-gray-700">{order.trackingId || "Pending ID"}</p>
                                             </div>
                                         </div>
-                                        
+
                                         {/* ✅ Track Order Button - Uses button + window.open to avoid nested <a> */}
                                         {order.trackingUrl && (
-                                            <button 
+                                            <button
                                                 onClick={(e) => handleExternalLink(e, order.trackingUrl)}
                                                 className="w-full sm:w-auto px-6 py-3.5 bg-blue-600 text-white rounded-2xl font-bold text-xs hover:bg-blue-700 shadow-lg shadow-blue-100 active:scale-[0.95] flex items-center justify-center gap-2"
                                             >
                                                 <Truck size={14} /> Track
                                             </button>
                                         )}
-                                        
-                                        <button 
+
+                                        <button
                                             onClick={(e) => openConfirmModal(e, order.id)}
                                             className="w-full sm:w-auto px-6 py-3.5 bg-green-600 text-white rounded-2xl font-bold text-xs hover:bg-green-700 shadow-lg shadow-green-100 active:scale-[0.95]"
                                         >
@@ -420,17 +418,17 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                                         <div className="flex items-center gap-2 px-4 py-3 bg-green-50/50 text-green-700 rounded-2xl text-[10px] font-black uppercase border border-green-100 flex-1">
                                             <ShieldCheck size={14} /> Order Finished
                                         </div>
-                                        
+
                                         {/* ✅ Report Issue Button */}
-                                        <button 
+                                        <button
                                             onClick={(e) => openDisputeModal(e, order)}
                                             className="w-full sm:w-auto px-5 py-3.5 text-red-600 hover:bg-red-50 border border-red-200 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-2"
                                         >
                                             <Flag size={14} /> Report Issue
                                         </button>
-                                        
+
                                         {/* ✅ Chat with Vendor Button - Uses button + window.open to avoid nested <a> */}
-                                        <button 
+                                        <button
                                             onClick={(e) => handleExternalLink(e, getWhatsAppLink(order))}
                                             className="w-full sm:w-auto px-5 py-3.5 text-[#25D366] hover:bg-[#25D366]/10 border border-[#25D366]/20 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-2"
                                         >
@@ -445,7 +443,7 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                                         <div className="flex items-center gap-2 text-[10px] font-bold text-red-700">
                                             <AlertTriangle size={14} /> Under Review
                                         </div>
-                                        <button 
+                                        <button
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();

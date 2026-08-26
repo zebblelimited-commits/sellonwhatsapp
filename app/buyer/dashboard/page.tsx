@@ -51,7 +51,7 @@ type RecommendedStore = {
 export default function BuyerDashboard() {
   const router = useRouter();
   const { cartCount, toggleCart } = useCart(); // ✅ Initialize cart context
-  
+
   const [activeTab, setActiveTab] = useState("home");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -343,7 +343,7 @@ export default function BuyerDashboard() {
           </aside>
         </div>
       )}
-      
+
       {/* Sidebar */}
       <aside className="sticky top-0 hidden h-screen w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
         <div className="flex items-center px-2 py-2 mb-6">
@@ -427,8 +427,8 @@ export default function BuyerDashboard() {
               )}
 
               {/* ✅ NEW: Shopping Bag Cart Button */}
-              <button 
-                onClick={toggleCart} 
+              <button
+                onClick={toggleCart}
                 className="relative p-2.5 bg-white border border-gray-200 text-gray-500 rounded-2xl hover:text-green-600 hover:border-green-200 transition-all shadow-sm cursor-pointer"
               >
                 <ShoppingBag size={18} />
@@ -496,8 +496,8 @@ export default function BuyerDashboard() {
 
           {/* ✅ NEW: Off-Canvas Cart Component */}
           <OffCanvasCart />
-          
-          <Footer /> 
+
+          <Footer />
         </div>
       </main>
     </div>
@@ -727,30 +727,28 @@ function BuyerHome({ userData, stats, buyerDisputeStats, onExploreClick, onViewO
           <div className="space-y-3">
             {recentOrders.map((order) => {
               const { label, icon: StatusIcon, color } = getStatusConfig(order.status);
-              const productImage = order.productImage || order.imageUrl || order.image || order.images?.[0];
+
+              // ✅ FIX: Handle new multi-seller schema (items array) vs legacy schema
+              const productImage = order.productImage || order.items?.[0]?.image || order.imageUrl || order.image;
+              const productName = order.productName || order.items?.[0]?.name || "Order";
+              const orderTotal = order.totalAmount || order.total || 0;
+
               return (
-                <Link key={order.id} href={`/${order.storeUsername || order.storeId}`} className="flex items-center gap-4 p-4 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-colors group">
+                <Link key={order.id} href={`/buyer/orders/${order.id}`} className="flex items-center gap-4 p-4 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-colors group">
                   <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center overflow-hidden border border-gray-100">
                     {productImage ? (
-                      <Image
-                        src={productImage}
-                        alt={order.productName || "Ordered product"}
-                        width={64}
-                        height={64}
-                        className="w-full h-full object-cover"
-                        priority={recentOrders.indexOf(order) < 2}
-                      />
+                      <Image src={productImage} alt={productName} width={64} height={64} className="w-full h-full object-cover" priority={recentOrders.indexOf(order) < 2} />
                     ) : (
                       <ShoppingBag size={24} className="text-gray-300" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm text-gray-900 truncate">{order.productName}</p>
+                    <p className="font-bold text-sm text-gray-900 truncate">{productName}</p>
                     <p className="text-[11px] text-gray-400">{order.storeName}</p>
                     <p className="text-[10px] text-gray-400 mt-1">{formatDate(order.createdAt)}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="font-black text-sm text-gray-900">{formatCurrency(order.totalAmount)}</p>
+                    <p className="font-black text-sm text-gray-900">{formatCurrency(orderTotal)}</p>
                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-bold uppercase mt-1 ${color}`}>
                       <StatusIcon size={8} /> {label}
                     </span>

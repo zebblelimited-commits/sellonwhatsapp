@@ -185,12 +185,12 @@ export default function OrderDetailsPage() {
                 </div>
                 <div>
                     <h4 className={`font-bold text-sm ${isDisputed ? "text-red-900" : "text-green-900"}`}>
-                        {isDisputed ? "Dispute Under Review" : "Zebble Protected Escrow"}
+                        {isDisputed ? "Dispute Under Review" : "SellOnWhatsapp Protected Escrow"}
                     </h4>
                     <p className={`text-[11px] font-medium leading-relaxed ${isDisputed ? "text-red-700" : "text-green-700"}`}>
                         {isDisputed
-                            ? `Your payment of ${formatCurrency(order.totalAmount)} is held securely while we review your dispute.`
-                            : `Your payment of ${formatCurrency(order.totalAmount)} is held securely. Funds are only released after you confirm delivery.`
+                            ? `Your payment of ${formatCurrency(order.totalAmount || order.total || 0)} is held securely while we review your dispute.`
+                            : `Your payment of ${formatCurrency(order.totalAmount || order.total || 0)} is held securely. Funds are only released after you confirm delivery.`
                         }
                     </p>
                     {isDisputed && order.disputeReason && (
@@ -202,38 +202,43 @@ export default function OrderDetailsPage() {
             </div>
 
             {/* Order Summary */}
-            <div className="bg-white rounded-[32px] border border-gray-100 p-6 mb-6 shadow-sm">
-                <h3 className="font-bold text-sm mb-4 flex items-center gap-2">
-                    <Package size={16} className="text-gray-400" /> Order Summary
-                </h3>
-
-                <div className="space-y-3 mb-4">
-                    {order.items?.map((item: any, idx: number) => (
-                        <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
-                            <div>
-                                <p className="text-xs font-bold text-gray-700">{item.name}</p>
-                                <p className="text-[10px] text-gray-400">Qty: {item.quantity}</p>
-                            </div>
-                            <p className="text-xs font-black">{formatCurrency(item.price * item.quantity)}</p>
+            <div className="space-y-3 mb-4">
+                {/* ✅ FIX: Loop through items array if it exists (new schema) */}
+                {(order.items || []).map((item: any, idx: number) => (
+                    <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+                        <div>
+                            <p className="text-xs font-bold text-gray-700">{item.name}</p>
+                            <p className="text-[10px] text-gray-400">Qty: {item.quantity}</p>
                         </div>
-                    ))}
+                        <p className="text-xs font-black">{formatCurrency(item.price * item.quantity)}</p>
+                    </div>
+                ))}
+                {/* Fallback for legacy orders without items array */}
+                {!order.items && order.productName && (
+                    <div className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+                        <div>
+                            <p className="text-xs font-bold text-gray-700">{order.productName}</p>
+                            <p className="text-[10px] text-gray-400">Qty: {order.quantity || 1}</p>
+                        </div>
+                        <p className="text-xs font-black">{formatCurrency(order.totalAmount || order.total || 0)}</p>
+                    </div>
+                )}
+            </div>
+            <div className="space-y-2 pt-4 border-t border-dashed border-gray-100">
+                <div className="flex justify-between text-xs">
+                    <span className="text-gray-500">Subtotal</span>
+                    <span className="font-medium">{formatCurrency((order.totalAmount || order.total || 0) - (order.deliveryFee || order.shippingCost || 0))}</span>
                 </div>
-
-                <div className="space-y-2 pt-4 border-t border-dashed border-gray-100">
+                {(order.deliveryFee || order.shippingCost) > 0 && (
                     <div className="flex justify-between text-xs">
-                        <span className="text-gray-500">Subtotal</span>
-                        <span className="font-medium">{formatCurrency(order.totalAmount - (order.deliveryFee || 0))}</span>
+                        <span className="text-gray-500">Delivery</span>
+                        <span className="font-medium">{formatCurrency(order.deliveryFee || order.shippingCost || 0)}</span>
                     </div>
-                    {order.deliveryFee != null && order.deliveryFee > 0 && (
-                        <div className="flex justify-between text-xs">
-                            <span className="text-gray-500">Delivery</span>
-                            <span className="font-medium">{formatCurrency(order.deliveryFee)}</span>
-                        </div>
-                    )}
-                    <div className="flex justify-between items-center pt-2">
-                        <span className="text-sm font-black text-gray-900">Total Paid</span>
-                        <span className="text-sm font-black text-green-600">{formatCurrency(order.totalAmount)}</span>
-                    </div>
+                )}
+                <div className="flex justify-between items-center pt-2">
+                    <span className="text-sm font-black text-gray-900">Total Paid</span>
+                    {/* ✅ FIX: Display the correct total */}
+                    <span className="text-sm font-black text-green-600">{formatCurrency(order.totalAmount || order.total || 0)}</span>
                 </div>
             </div>
 
