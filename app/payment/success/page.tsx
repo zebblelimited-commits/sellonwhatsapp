@@ -10,6 +10,7 @@ import { CheckCircle2, Loader2, ArrowRight, ShieldCheck, ShoppingBag, CalendarCh
 type SuccessOrder = {
     isBooking?: boolean;
     totalAmount?: number;
+    total?: number; // ✅ Added to support new multi-seller checkout field
     status?: string;
     buyerId?: string;
     slotId?: string;
@@ -54,7 +55,9 @@ export default function SuccessPage() {
 
                 querySnapshot.forEach((docSnap) => {
                     const data = docSnap.data();
-                    totalAmount += Number(data.totalAmount || 0);
+
+                    // ✅ FIX: Read 'total' (from new checkout API) or fallback to 'totalAmount'
+                    totalAmount += Number(data.total ?? data.totalAmount ?? 0);
 
                     if (!["PAID_HELD", "PAID", "COMPLETED", "SHIPPED"].includes(String(data.status || "").toUpperCase())) {
                         allPaid = false;
@@ -140,7 +143,6 @@ export default function SuccessPage() {
         if (status === "success" && orderReference) {
             const deepLinkUrl = `sowa://payment-success?orderRef=${orderReference}&reference=${orderReference}`;
 
-            // A. Post message if running inside Flutter InAppWebView / WebView
             if (typeof window !== "undefined" && (window as unknown as { FlutterWebView?: { postMessage: (msg: string) => void } }).FlutterWebView) {
                 (window as unknown as { FlutterWebView: { postMessage: (msg: string) => void } }).FlutterWebView.postMessage(
                     JSON.stringify({
@@ -151,12 +153,10 @@ export default function SuccessPage() {
                 );
             }
 
-            // B. Dispatch custom deep link immediately
             if (typeof window !== "undefined") {
                 window.location.href = deepLinkUrl;
             }
 
-            // C. Fallback timer for secondary dispatch and tab closure
             const deepLinkTimer = setTimeout(() => {
                 if (typeof window !== "undefined") {
                     window.location.href = deepLinkUrl;
@@ -231,7 +231,8 @@ export default function SuccessPage() {
                             <div className="flex justify-between items-center px-1">
                                 <div className="text-left">
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Paid</p>
-                                    <p className="text-lg font-extrabold text-slate-900">₦{orderData?.totalAmount?.toLocaleString()}</p>
+                                    {/* ✅ This will now correctly display the aggregated total */}
+                                    <p className="text-lg font-extrabold text-slate-900">₦{(orderData?.totalAmount || 0).toLocaleString()}</p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ref</p>
@@ -267,7 +268,6 @@ export default function SuccessPage() {
                                 </div>
                             )}
 
-                            {/* Native Mobile App Return CTA */}
                             <a
                                 href={deepLinkUrl}
                                 className="w-full flex items-center justify-center gap-2 py-3.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl transition-all active:scale-[0.97]"
