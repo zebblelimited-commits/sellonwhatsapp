@@ -57,7 +57,7 @@ export default function CheckoutPage() {
     }
   }, [cartItems]);
 
-  // 2. Fetch Buyer Profile
+  // 2. Fetch Buyer Profile & Delivery Address Data
   useEffect(() => {
     async function fetchBuyerData() {
       const user = auth.currentUser;
@@ -108,7 +108,7 @@ export default function CheckoutPage() {
   // Active items being checked out
   const activeCheckoutItems = sessionOrderItems;
 
-  // 3. Group Cart Items by Seller
+  // 3. Group Cart Items by Seller & Calculate Total Store Weight (kg)
   const groupedCartItems = activeCheckoutItems.reduce((acc: Record<string, { storeName: string; items: any[]; subtotal: number; totalWeightKg: number }>, item: any) => {
     const storeId = item.storeId || item.vendorId || 'unknown';
     if (!acc[storeId]) {
@@ -116,15 +116,19 @@ export default function CheckoutPage() {
     }
     acc[storeId].items.push(item);
     acc[storeId].subtotal += item.price * item.quantity;
-    acc[storeId].totalWeightKg += (item.weightKg || 1) * item.quantity;
+
+    // Fallback to 1kg per item quantity if item weight is missing
+    const itemWeight = Number(item.weightKg) || 1;
+    acc[storeId].totalWeightKg += itemWeight * item.quantity;
+
     return acc;
   }, {});
 
-  // Selected Address Details
+  // Active Buyer Delivery Address & State
   const selectedBuyerAddress = addresses.find((a: any) => a.id === selectedAddressId);
   const selectedState = selectedBuyerAddress?.state || "Lagos";
 
-  // 4. Dynamic Calculations
+  // 4. Complete Checkout Totals Calculation Matrix
   const cartSubtotal = activeCheckoutItems.reduce((sum: number, item: any) => sum + item.price * item.quantity, 0);
 
   let calculatedFrontendTotal = 0;
@@ -149,6 +153,7 @@ export default function CheckoutPage() {
 
   const grandTotal = calculatedFrontendTotal;
 
+  // Update Address & Trigger State Change for Re-calculating Shipping
   const handleSaveAddress = async () => {
     if (!auth.currentUser) return;
     setIsSavingAddress(true);
@@ -171,6 +176,7 @@ export default function CheckoutPage() {
     }
   };
 
+  // 5. Submit Order Payload with Complete Checkout Information
   const handleCheckout = async () => {
     if (!selectedBuyerAddress) {
       alert("Please select a valid delivery address.");
@@ -182,14 +188,12 @@ export default function CheckoutPage() {
     );
 
     if (missingShipping) {
-      alert("Please select a shipping option for all stores before proceeding.");
+      alert("Please select a valid shipping courier for all sellers before proceeding.");
       return;
     }
 
     setIsProcessing(true);
     try {
-      console.log("📧 Frontend Auth Email:", auth.currentUser?.email);
-
       const payload = {
         buyerId: auth.currentUser?.uid,
         customerEmail: auth.currentUser?.email || "",
@@ -211,6 +215,7 @@ export default function CheckoutPage() {
             shippingMethod: courier?.name,
             shippingCost: courier?.shippingFee || 0,
             estimatedDays: courier?.estimatedDays,
+            totalWeightKg: group.totalWeightKg,
             subtotal: group.subtotal
           };
         }),
@@ -285,7 +290,7 @@ export default function CheckoutPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-            {/* LEFT COLUMN: Addresses, Shipping & Escrow */}
+            {/* LEFT COLUMN: Addresses, Dynamic Shipping & Escrow */}
             <div className="lg:col-span-2 space-y-6">
 
               {/* 1. Delivery & Pickup Locations */}
@@ -325,10 +330,13 @@ export default function CheckoutPage() {
                 <div className="space-y-6">
                   {Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => (
                     <div key={storeId} className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-4">
-                      {/* Store Name & Product Images */}
+                      {/* Store Details & Item Thumbnails */}
                       <div className="flex items-center gap-3">
                         <Store size={16} className="text-gray-500 shrink-0" />
-                        <h3 className="font-bold text-sm text-gray-900">{group.storeName}</h3>
+                        <div>
+                          <h3 className="font-bold text-sm text-gray-900">{group.storeName}</h3>
+                          <p className="text-[10px] text-gray-400 font-medium">Est. Package Weight: {group.totalWeightKg}kg</p>
+                        </div>
 
                         <div className="flex items-center ml-auto">
                           {group.items.slice(0, 3).map((item: any, idx: number) => (
@@ -517,6 +525,7 @@ export default function CheckoutPage() {
                 <input type="text" value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="City" />
                 <input type="text" value={editForm.state} onChange={(e) => setEditForm({ ...editForm, state: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="State" />
               </div>
+              <input type="text" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="Phone Number" />
               <button onClick={handleSaveAddress} disabled={isSavingAddress} className="w-full bg-[#00a63e] text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2">
                 {isSavingAddress ? <><Loader2 className="animate-spin" size={18} /> Saving...</> : <><Save size={18} /> Save Address</>}
               </button>
