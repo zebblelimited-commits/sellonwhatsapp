@@ -193,7 +193,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     amount: calculatedGrandTotal.toFixed(2),
                     currency: "NGN",
                     callbackUrl: callbackUrl,
-                    customerEmail: sellerOrders[0].items[0]?.customerEmail || "customer@sellonwhatsapp.com",
+                    customerEmail: customerEmail || "customer@sellonwhatsapp.com",
                     description: `Checkout: ${itemSummary}`,
                     allowedPaymentMethods: [paymentMethod || "Card", "Transfer"],
                     metaData: {
