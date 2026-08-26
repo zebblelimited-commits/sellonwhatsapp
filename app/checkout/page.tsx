@@ -34,6 +34,9 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState("card");
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Direct checkout order from sessionStorage (fallback)
+  const [sessionOrderItems, setSessionOrderItems] = useState<any[]>([]);
+
   // Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({ address: "", city: "", state: "", postalCode: "", phone: "" });
@@ -42,11 +45,32 @@ export default function CheckoutPage() {
   // ✅ Per-Seller Shipping Selection
   const [sellerShipping, setSellerShipping] = useState<Record<string, string>>({});
 
-  // 1. Fetch Buyer Profile
+  // 1. Fetch Direct Session Order Data or standard Cart Data
+  useEffect(() => {
+    if (cartItems && cartItems.length > 0) {
+      setSessionOrderItems(cartItems);
+    } else {
+      const savedOrder = sessionStorage.getItem("checkout_order");
+      if (savedOrder) {
+        try {
+          const parsed = JSON.parse(savedOrder);
+          const normalizedItems = Array.isArray(parsed) ? parsed : [parsed];
+          setSessionOrderItems(normalizedItems);
+        } catch (err) {
+          console.error("Failed to parse checkout_order session data:", err);
+        }
+      }
+    }
+  }, [cartItems]);
+
+  // 2. Fetch Buyer Profile
   useEffect(() => {
     async function fetchBuyerData() {
       const user = auth.currentUser;
-      if (!user) { router.push("/login"); return; }
+      if (!user) {
+        router.push("/login");
+        return;
+      }
 
       try {
         const { getDoc } = await import("firebase/firestore");
@@ -56,52 +80,73 @@ export default function CheckoutPage() {
           setBuyerData(data);
           const fullAddress = [data.address, data.city, data.state, data.postalCode, data.country].filter(Boolean).join(", ");
           const defaultAddress = {
-            id: "default_addr", label: "Default Address",
+            id: "default_addr",
+            label: "Default Address",
             name: `${data.firstName || ''} ${data.lastName || ''}`.trim() || data.displayName || "Buyer",
-            phone: data.phone || "", address: fullAddress, state: data.state || "Lagos", isDefault: true,
+            phone: data.phone || "",
+            address: fullAddress,
+            city: data.city || "",
+            state: data.state || "Lagos",
+            postalCode: data.postalCode || "",
+            isDefault: true,
           };
           setAddresses([defaultAddress]);
           setSelectedAddressId("default_addr");
-          setEditForm({ address: data.address || "", city: data.city || "", state: data.state || "", postalCode: data.postalCode || "", phone: data.phone || "" });
-        } else { router.push("/buyer/profile"); }
-      } catch (error) { console.error(error); } finally { setLoading(false); }
+          setEditForm({
+            address: data.address || "",
+            city: data.city || "",
+            state: data.state || "",
+            postalCode: data.postalCode || "",
+            phone: data.phone || ""
+          });
+        } else {
+          router.push("/buyer/profile");
+        }
+      } catch (error) {
+        console.error("Error fetching buyer data:", error);
+      } finally {
+        setLoading(false);
+      }
     }
     fetchBuyerData();
   }, [router]);
 
-  // 2. Group Cart Items by Seller
-  const groupedCartItems = cartItems.reduce((acc, item) => {
-    const storeId = item.storeId || 'unknown';
+  // Active items being checked out
+  const activeCheckoutItems = sessionOrderItems;
+
+  // 3. Group Cart Items by Seller
+  const groupedCartItems = activeCheckoutItems.reduce((acc: Record<string, { storeName: string; items: any[]; subtotal: number }>, item: any) => {
+    const storeId = item.storeId || item.vendorId || 'unknown';
     if (!acc[storeId]) {
-      acc[storeId] = { storeName: item.storeName || 'Unknown Store', items: [], subtotal: 0 };
+      acc[storeId] = { storeName: item.storeName || item.vendorName || 'Unknown Store', items: [], subtotal: 0 };
     }
     acc[storeId].items.push(item);
     acc[storeId].subtotal += item.price * item.quantity;
     return acc;
-  }, {} as Record<string, { storeName: string; items: typeof cartItems; subtotal: number }>);
+  }, {});
 
-  // 3. Initialize Shipping for each seller (Default to GIG)
+  // 4. Initialize Shipping for each seller (Default to GIG)
   useEffect(() => {
     const initialShipping: Record<string, string> = {};
-    Object.keys(groupedCartItems).forEach(storeId => {
-      initialShipping[storeId] = "gig";
+    Object.keys(groupedCartItems).forEach((storeId: string) => {
+      initialShipping[storeId] = sellerShipping[storeId] || "gig";
     });
     setSellerShipping(initialShipping);
-  }, [cartItems]);
+  }, [sessionOrderItems]);
 
-  // ✅ UPDATED: Calculations (Must match backend logic exactly to pass security check)
-  const cartSubtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  // 5. Calculations
+  const cartSubtotal = activeCheckoutItems.reduce((sum: number, item: any) => sum + item.price * item.quantity, 0);
 
   let calculatedFrontendTotal = 0;
   let totalShipping = 0;
   let totalPlatformFee = 0;
   let totalHandlingFee = 0;
 
-  Object.entries(groupedCartItems).forEach(([storeId, group]) => {
+  Object.entries(groupedCartItems).forEach(([storeId, group]: [string, any]) => {
     const shippingCost = SHIPPING_OPTIONS.find(o => o.id === sellerShipping[storeId])?.price || 0;
     const handlingFee = (sellerShipping[storeId] !== "self_arranged" && shippingCost > 0) ? 200 : 0;
 
-    // Backend charges 1.5% on (Product Subtotal + Shipping Cost)
+    // Platform Fee: 1.5% on (Product Subtotal + Shipping Cost)
     const buyerPlatformFee = Math.round((group.subtotal + shippingCost) * 0.015);
 
     totalShipping += shippingCost;
@@ -113,17 +158,28 @@ export default function CheckoutPage() {
 
   const grandTotal = calculatedFrontendTotal;
 
-  const selectedBuyerAddress = addresses.find(a => a.id === selectedAddressId);
+  const selectedBuyerAddress = addresses.find((a: any) => a.id === selectedAddressId);
 
   const handleSaveAddress = async () => {
     if (!auth.currentUser) return;
     setIsSavingAddress(true);
     try {
       await updateDoc(doc(db, "buyers", auth.currentUser.uid), { ...editForm, updatedAt: new Date() });
-      const updatedAddress = { ...selectedBuyerAddress, address: [editForm.address, editForm.city, editForm.state, editForm.postalCode].filter(Boolean).join(", "), phone: editForm.phone };
+      const updatedAddress = {
+        ...selectedBuyerAddress,
+        address: [editForm.address, editForm.city, editForm.state, editForm.postalCode].filter(Boolean).join(", "),
+        city: editForm.city,
+        state: editForm.state,
+        postalCode: editForm.postalCode,
+        phone: editForm.phone
+      };
       setAddresses([updatedAddress]);
       setIsEditModalOpen(false);
-    } catch (error) { alert("Failed to save address."); } finally { setIsSavingAddress(false); }
+    } catch (error) {
+      alert("Failed to save address.");
+    } finally {
+      setIsSavingAddress(false);
+    }
   };
 
   const handleCheckout = async () => {
@@ -134,8 +190,6 @@ export default function CheckoutPage() {
 
     setIsProcessing(true);
     try {
-      // 1. Build the multi-seller payload
-      // ✅ DEBUG: Check if email exists before sending
       console.log("📧 Frontend Auth Email:", auth.currentUser?.email);
 
       const payload = {
@@ -149,7 +203,7 @@ export default function CheckoutPage() {
           state: selectedBuyerAddress.state || "",
           postalCode: selectedBuyerAddress.postalCode || "",
         },
-        sellerOrders: Object.entries(groupedCartItems).map(([storeId, group]) => ({
+        sellerOrders: Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => ({
           storeId,
           storeName: group.storeName,
           items: group.items,
@@ -161,7 +215,6 @@ export default function CheckoutPage() {
         total: grandTotal
       };
 
-      // 2. Call the new unified checkout API
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -174,8 +227,9 @@ export default function CheckoutPage() {
         throw new Error(data.error || "Failed to create checkout session");
       }
 
-      // 3. Redirect to Nomba if successful
       if (data.success && data.checkoutLink) {
+        clearCart();
+        sessionStorage.removeItem("checkout_order");
         window.location.href = data.checkoutLink;
       } else {
         throw new Error("No checkout link received from payment gateway");
@@ -188,8 +242,33 @@ export default function CheckoutPage() {
     }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-[#00a63e]" size={40} /></div>;
-  if (cartItems.length === 0) return null;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="animate-spin text-[#00a63e]" size={40} />
+      </div>
+    );
+  }
+
+  if (activeCheckoutItems.length === 0) {
+    return (
+      <div className={`${font.className} min-h-screen flex flex-col bg-[#FAFAFA]`}>
+        <Header />
+        <main className="flex-1 flex flex-col items-center justify-center p-6">
+          <Package size={48} className="text-gray-300 mb-4" />
+          <h2 className="text-xl font-bold text-gray-800">Your checkout details are empty</h2>
+          <p className="text-gray-500 text-sm mt-1 mb-6">Please add items to your cart or select a product to purchase.</p>
+          <button
+            onClick={() => router.push("/explore")}
+            className="px-6 py-3 bg-[#00a63e] text-white font-bold rounded-xl text-sm"
+          >
+            Explore Products
+          </button>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className={`${font.className} min-h-screen flex flex-col bg-[#FAFAFA]`}>
@@ -235,27 +314,26 @@ export default function CheckoutPage() {
                 </div>
               </section>
 
-              {/* 2. Available Shipping Options (Updated Layout) */}
+              {/* 2. Available Shipping Options */}
               <section className="bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
                   <Truck size={20} className="text-[#00a63e]" /> Available Shipping Options
                 </h2>
                 <div className="space-y-4">
-                  {Object.entries(groupedCartItems).map(([storeId, group]) => {
+                  {Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => {
                     const selectedOpt = SHIPPING_OPTIONS.find(o => o.id === (sellerShipping[storeId] || 'gig'));
 
                     return (
                       <div key={storeId} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                        {/* Store Name & Circular Product Images (Now side-by-side) */}
+                        {/* Store Name & Circular Product Images */}
                         <div className="flex items-center gap-3 mb-3">
                           <Store size={16} className="text-gray-500 shrink-0" />
                           <h3 className="font-bold text-sm text-gray-900">{group.storeName}</h3>
 
-                          {/* Overlapping Circular Product Images right next to store name */}
                           <div className="flex items-center">
-                            {group.items.slice(0, 3).map((item, idx) => (
+                            {group.items.slice(0, 3).map((item: any, idx: number) => (
                               <div
-                                key={item.id}
+                                key={item.id || idx}
                                 className={`relative w-7 h-7 rounded-full border-2 border-white overflow-hidden bg-gray-100 ${idx > 0 ? '-ml-2' : ''}`}
                               >
                                 {item.image ? (
@@ -275,9 +353,8 @@ export default function CheckoutPage() {
                           </div>
                         </div>
 
-                        {/* Shipping Dropdown with Dynamic Courier Logo */}
+                        {/* Shipping Dropdown */}
                         <div className="relative">
-                          {/* Circular Courier Logo (Left side of input) */}
                           <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center overflow-hidden shadow-sm">
                             {selectedOpt?.name.includes("GIG") ? (
                               <span className="text-[9px] font-black text-blue-600">GIG</span>
@@ -309,7 +386,7 @@ export default function CheckoutPage() {
                 </div>
               </section>
 
-              {/* 3. Secured By Escrow Protection */}
+              {/* 3. Escrow Protection Banner */}
               <section className="bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
                   <ShieldCheck size={20} className="text-[#00a63e]" /> Secured By Escrow Protection
@@ -335,24 +412,22 @@ export default function CheckoutPage() {
                 <div>
                   <h2 className="text-lg font-bold text-gray-900 mb-4">Order Summary</h2>
                   <div className="space-y-6 mb-6 border-b border-gray-100 pb-6 max-h-[400px] overflow-y-auto">
-                    {Object.entries(groupedCartItems).map(([storeId, group]) => (
+                    {Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => (
                       <div key={storeId} className="space-y-3">
-                        {/* Seller Header */}
                         <div className="flex items-center gap-2">
                           <div className="p-1.5 bg-green-50 rounded-lg"><Store size={14} className="text-[#00a63e]" /></div>
                           <h3 className="font-bold text-sm text-gray-900">{group.storeName}</h3>
                         </div>
 
-                        {/* Items */}
                         <div className="space-y-3 pl-1">
-                          {group.items.map((item) => (
-                            <div key={item.id} className="flex gap-3">
+                          {group.items.map((item: any, idx: number) => (
+                            <div key={item.id || idx} className="flex gap-3">
                               <div className="relative w-14 h-14 rounded-lg bg-gray-100 overflow-hidden shrink-0 border border-gray-100">
-                                {item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-300"><Package size={16} /></div>}
+                                {item.image ? <img src={item.image} alt={item.name || item.productName} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-300"><Package size={16} /></div>}
                               </div>
                               <div className="flex-1 min-w-0 pr-2">
                                 <p className="text-sm font-bold text-gray-900 leading-snug break-words">
-                                  {item.name}
+                                  {item.name || item.productName}
                                 </p>
                                 <div className="flex items-center justify-between mt-1.5">
                                   <span className="text-[10px] text-gray-400">Qty: {item.quantity}</span>
@@ -365,7 +440,6 @@ export default function CheckoutPage() {
                           ))}
                         </div>
 
-                        {/* Seller Subtotal (Items Only) */}
                         <div className="flex justify-between items-center border-t border-gray-100 pt-3">
                           <span className="text-xs font-medium text-gray-500">Seller Subtotal</span>
                           <span className="text-sm font-bold text-gray-900">₦{group.subtotal.toLocaleString()}</span>
@@ -374,7 +448,7 @@ export default function CheckoutPage() {
                     ))}
                   </div>
 
-                  {/* ✅ UPDATED: Global Totals showing Handling Fee */}
+                  {/* Totals Breakdown */}
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between text-gray-600">
                       <span>Cart Subtotal</span>
@@ -410,7 +484,7 @@ export default function CheckoutPage() {
                     <CreditCard size={20} className="text-[#00a63e]" /> Payment Method
                   </h2>
                   <div className="grid grid-cols-3 gap-3">
-                    {["card", "transfer", "ussd"].map(method => (
+                    {["card", "transfer", "ussd"].map((method: string) => (
                       <button
                         key={method}
                         onClick={() => setPaymentMethod(method)}
