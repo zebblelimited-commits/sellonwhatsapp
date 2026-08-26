@@ -3,22 +3,20 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
+import { doc, onSnapshot, DocumentSnapshot, FirestoreError } from "firebase/firestore";
 import {
-    doc, onSnapshot
-} from "firebase/firestore";
-import {
-    ArrowLeft, ShieldCheck, Package, CheckCircle2,
-    AlertCircle, Truck, Flag, Loader2, ExternalLink
+    ArrowLeft, ShieldCheck, CheckCircle2,
+    AlertCircle, Flag, Loader2, ExternalLink, Briefcase, Wrench
 } from "lucide-react";
 import Image from "next/image";
 import OrderTimeline from "@/components/buyer/OrderTimeline";
-import { useAuth } from "@/contexts/AuthContext"; // ✅ Added Auth Context
+import { useAuth } from "@/contexts/AuthContext";
 import { showToast } from "@/lib/toast";
 
 export default function OrderDetailsPage() {
     const { id } = useParams();
     const router = useRouter();
-    const { user } = useAuth(); // ✅ Use context instead of auth.currentUser
+    const { user } = useAuth();
 
     const [order, setOrder] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -26,7 +24,7 @@ export default function OrderDetailsPage() {
     const [showDisputeModal, setShowDisputeModal] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
-    const [disputeReason, setDisputeReason] = useState("item_not_received");
+    const [disputeReason, setDisputeReason] = useState("service_not_rendered");
     const [disputeDescription, setDisputeDescription] = useState("");
 
     useEffect(() => {
@@ -55,7 +53,7 @@ export default function OrderDetailsPage() {
 
     const handleConfirmReceipt = async () => {
         if (!user) {
-            showToast("error", "Please log in to confirm receipt");
+            showToast("error", "Please log in to confirm completion");
             return;
         }
 
@@ -116,24 +114,9 @@ export default function OrderDetailsPage() {
     const formatCurrency = (amount: number) =>
         new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(amount || 0);
 
-    const getStatusText = (status: string) => {
-        const upperStatus = status?.toUpperCase();
-        const texts: any = {
-            PAID_HELD: "Payment secured in escrow",
-            PENDING: "Payment secured in escrow",
-            SHIPPED: "Order shipped - awaiting delivery",
-            OUT_FOR_DELIVERY: "Order shipped - awaiting delivery",
-            COMPLETED: "Order completed - funds released",
-            DISPUTED: "Dispute under review",
-            UNDER_REVIEW: "Dispute under review",
-            CANCELLED: "Order cancelled"
-        };
-        return texts[upperStatus] || "Processing";
-    };
-
     if (loading) return (
         <div className="p-10 text-center font-bold text-gray-400 flex items-center justify-center min-h-[60vh]">
-            <Loader2 className="animate-spin mr-2" size={20} /> Loading Order...
+            <Loader2 className="animate-spin mr-2" size={20} /> Loading Details...
         </div>
     );
 
@@ -144,11 +127,51 @@ export default function OrderDetailsPage() {
         </div>
     );
 
-    // ✅ FIX: Normalize status to lowercase to prevent case-sensitivity bugs
+    // Normalize Status & Product Type Logic
     const status = order.status?.toLowerCase();
-    const isShipped = status === "shipped" || status === "out_for_delivery";
+
+    // Check if order contains service / digital / booking attributes
+    const isServiceOrBooking =
+        order.productType === 'service' ||
+        order.productType === 'booking' ||
+        order.productType === 'utility' ||
+        order.shippingMethod === 'self_arranged' ||
+        (order.items && order.items.some((i: any) => i.bookingDate || i.bookingSlot));
+
+    const isDeliveredOrWorkDone = status === "shipped" || status === "out_for_delivery" || status === "delivered" || status === "completed_pending_buyer";
     const isCompleted = status === "completed";
     const isDisputed = status === "disputed" || status === "under_review";
+
+    // Dynamic Labels based on Type
+    const getStatusText = (statusStr: string) => {
+        const upper = statusStr?.toUpperCase();
+        if (isServiceOrBooking) {
+            const serviceTexts: Record<string, string> = {
+                PAID_HELD: "Escrow Secured — Awaiting Work/Service",
+                PENDING: "Escrow Secured — Awaiting Work/Service",
+                SHIPPED: "Work / Service Completed by Vendor",
+                OUT_FOR_DELIVERY: "Work / Service Completed by Vendor",
+                COMPLETED_PENDING_BUYER: "Work Completed — Confirmation Required",
+                COMPLETED: "Service Completed — Funds Released",
+                DISPUTED: "Dispute under review",
+                UNDER_REVIEW: "Dispute under review",
+                CANCELLED: "Service cancelled"
+            };
+            return serviceTexts[upper] || "Processing Service";
+        }
+
+        const physicalTexts: Record<string, string> = {
+            PAID_HELD: "Payment secured in escrow",
+            PENDING: "Payment secured in escrow",
+            SHIPPED: "Order shipped - awaiting delivery",
+            OUT_FOR_DELIVERY: "Order shipped - awaiting delivery",
+            COMPLETED: "Order completed - funds released",
+            DISPUTED: "Dispute under review",
+            UNDER_REVIEW: "Dispute under review",
+            CANCELLED: "Order cancelled"
+        };
+        return physicalTexts[upper] || "Processing";
+    };
 
     const whatsappUrl = `https://wa.me/${order.vendorPhone?.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello ${order.storeName}, I have a question about order #${order.id?.slice(-6)}`)}`;
 
@@ -160,7 +183,7 @@ export default function OrderDetailsPage() {
                     <ArrowLeft size={20} />
                 </button>
                 <div>
-                    <h1 className="font-black text-xl text-gray-900">Order Details</h1>
+                    <h1 className="font-black text-xl text-gray-900">{isServiceOrBooking ? "Service Order Details" : "Order Details"}</h1>
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                         #{order.id?.slice(-8).toUpperCase()}
                     </p>
@@ -169,6 +192,14 @@ export default function OrderDetailsPage() {
 
             {/* Status Timeline */}
             <div className="bg-white rounded-[32px] border border-gray-100 p-6 mb-6 shadow-sm">
+                <div className="mb-3 flex justify-between items-center">
+                    <span className="text-xs font-black uppercase text-[#00a63e] tracking-wider">{getStatusText(order.status)}</span>
+                    {isServiceOrBooking && (
+                        <span className="text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Briefcase size={10} /> Service / Booking
+                        </span>
+                    )}
+                </div>
                 <OrderTimeline
                     status={order.status}
                     createdAt={order.createdAt}
@@ -178,19 +209,20 @@ export default function OrderDetailsPage() {
             </div>
 
             {/* Escrow Shield Info */}
-            <div className={`rounded-3xl p-5 mb-6 flex items-start gap-4 ${isDisputed ? "bg-red-50 border border-red-100" : "bg-green-50 border border-green-100"
-                }`}>
+            <div className={`rounded-3xl p-5 mb-6 flex items-start gap-4 ${isDisputed ? "bg-red-50 border border-red-100" : "bg-green-50 border border-green-100"}`}>
                 <div className={`p-2 rounded-xl ${isDisputed ? "bg-red-600" : "bg-green-600"} text-white`}>
                     {isDisputed ? <AlertCircle size={20} /> : <ShieldCheck size={20} />}
                 </div>
                 <div>
                     <h4 className={`font-bold text-sm ${isDisputed ? "text-red-900" : "text-green-900"}`}>
-                        {isDisputed ? "Dispute Under Review" : "SellOnWhatsapp Protected Escrow"}
+                        {isDisputed ? "Dispute Under Review" : "Protected Escrow Payment"}
                     </h4>
                     <p className={`text-[11px] font-medium leading-relaxed ${isDisputed ? "text-red-700" : "text-green-700"}`}>
                         {isDisputed
                             ? `Your payment of ${formatCurrency(order.totalAmount || order.total || 0)} is held securely while we review your dispute.`
-                            : `Your payment of ${formatCurrency(order.totalAmount || order.total || 0)} is held securely. Funds are only released after you confirm delivery.`
+                            : isServiceOrBooking
+                                ? `Your payment of ${formatCurrency(order.totalAmount || order.total || 0)} is held safely in escrow. Funds are only released after you confirm the work/service is completed to your satisfaction.`
+                                : `Your payment of ${formatCurrency(order.totalAmount || order.total || 0)} is held securely. Funds are only released after you confirm physical delivery.`
                         }
                     </p>
                     {isDisputed && order.disputeReason && (
@@ -201,19 +233,20 @@ export default function OrderDetailsPage() {
                 </div>
             </div>
 
-            {/* Order Summary */}
+            {/* Order Items Summary */}
             <div className="space-y-3 mb-4">
-                {/* ✅ FIX: Loop through items array if it exists (new schema) */}
                 {(order.items || []).map((item: any, idx: number) => (
                     <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
                         <div>
                             <p className="text-xs font-bold text-gray-700">{item.name}</p>
+                            {item.bookingDate && (
+                                <p className="text-[10px] text-purple-600 font-bold">Scheduled: {item.bookingDate} {item.bookingSlot && `at ${item.bookingSlot}`}</p>
+                            )}
                             <p className="text-[10px] text-gray-400">Qty: {item.quantity}</p>
                         </div>
                         <p className="text-xs font-black">{formatCurrency(item.price * item.quantity)}</p>
                     </div>
                 ))}
-                {/* Fallback for legacy orders without items array */}
                 {!order.items && order.productName && (
                     <div className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
                         <div>
@@ -224,6 +257,7 @@ export default function OrderDetailsPage() {
                     </div>
                 )}
             </div>
+
             <div className="space-y-2 pt-4 border-t border-dashed border-gray-100">
                 <div className="flex justify-between text-xs">
                     <span className="text-gray-500">Subtotal</span>
@@ -231,41 +265,19 @@ export default function OrderDetailsPage() {
                 </div>
                 {(order.deliveryFee || order.shippingCost) > 0 && (
                     <div className="flex justify-between text-xs">
-                        <span className="text-gray-500">Delivery</span>
+                        <span className="text-gray-500">Delivery / Logistics</span>
                         <span className="font-medium">{formatCurrency(order.deliveryFee || order.shippingCost || 0)}</span>
                     </div>
                 )}
                 <div className="flex justify-between items-center pt-2">
                     <span className="text-sm font-black text-gray-900">Total Paid</span>
-                    {/* ✅ FIX: Display the correct total */}
                     <span className="text-sm font-black text-green-600">{formatCurrency(order.totalAmount || order.total || 0)}</span>
                 </div>
             </div>
 
-            {/* Tracking Info */}
-            {isShipped && order.trackingId && (
-                <div className="bg-blue-50 border border-blue-100 rounded-3xl p-5 mb-6">
-                    <div className="flex items-start gap-3">
-                        <Truck size={20} className="text-blue-600 shrink-0 mt-0.5" />
-                        <div>
-                            <h4 className="font-bold text-blue-900 text-sm">Tracking Information</h4>
-                            <p className="text-[11px] text-blue-700 mt-1">
-                                <span className="font-bold">ID:</span> {order.trackingId}<br />
-                                <span className="font-bold">Carrier:</span> {order.carrier || "Zebble Logistics"}
-                            </p>
-                            {order.trackingUrl && (
-                                <a href={order.trackingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold text-blue-600 hover:underline">
-                                    Track Package <ExternalLink size={10} />
-                                </a>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* Dispute Banner */}
             {isDisputed && (
-                <div className="bg-red-50 border border-red-100 rounded-3xl p-5 mb-6">
+                <div className="bg-red-50 border border-red-100 rounded-3xl p-5 mb-6 mt-4">
                     <div className="flex items-start gap-3">
                         <Flag size={20} className="text-red-600 shrink-0 mt-0.5" />
                         <div>
@@ -274,11 +286,6 @@ export default function OrderDetailsPage() {
                                 <span className="font-bold">Reason:</span> {order.disputeReason?.replace('_', ' ')}<br />
                                 <span className="font-bold">Description:</span> {order.disputeDescription}
                             </p>
-                            {order.disputeVendorResponded && (
-                                <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-2 py-1 rounded-full">
-                                    <CheckCircle2 size={10} /> Vendor has responded
-                                </div>
-                            )}
                             <button onClick={() => router.push("/buyer/dashboard?tab=disputes")} className="mt-3 text-[10px] font-bold text-red-600 hover:underline">
                                 View Full Dispute →
                             </button>
@@ -288,14 +295,21 @@ export default function OrderDetailsPage() {
             )}
 
             {/* Bottom Actions */}
-            <div className="space-y-3 pt-6 border-t border-gray-100">
-                {isShipped && !isDisputed && (
+            <div className="space-y-3 pt-6 border-t border-gray-100 mt-6">
+                {/* Release Funds Button for both Physical and Non-Physical */}
+                {(isDeliveredOrWorkDone || isServiceOrBooking) && !isCompleted && !isDisputed && (
                     <button
                         onClick={() => setShowConfirmModal(true)}
                         disabled={processing}
                         className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-2xl font-bold text-sm shadow-sm transition-all flex items-center justify-center gap-2"
                     >
-                        {processing ? <><Loader2 size={18} className="animate-spin" /> Processing...</> : <><CheckCircle2 size={18} /> Confirm Receipt & Release Funds</>}
+                        {processing ? (
+                            <><Loader2 size={18} className="animate-spin" /> Processing...</>
+                        ) : isServiceOrBooking ? (
+                            <><CheckCircle2 size={18} /> Confirm Service Done & Release Funds</>
+                        ) : (
+                            <><CheckCircle2 size={18} /> Confirm Receipt & Release Funds</>
+                        )}
                     </button>
                 )}
 
@@ -314,7 +328,7 @@ export default function OrderDetailsPage() {
                 </a>
             </div>
 
-            {/* ✅ Dispute Modal (Kept only ONE instance) */}
+            {/* Dispute Modal */}
             {showDisputeModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
                     <div className="bg-white w-full max-w-md rounded-[32px] p-6 shadow-2xl">
@@ -327,7 +341,7 @@ export default function OrderDetailsPage() {
                             </button>
                         </div>
 
-                        <p className="text-sm text-gray-500 mb-4">Describe the issue with your order. Funds remain held in escrow until resolved.</p>
+                        <p className="text-sm text-gray-500 mb-4">Describe the issue with your order/service. Funds remain safely in escrow during review.</p>
 
                         <div className="space-y-4">
                             <div>
@@ -337,11 +351,22 @@ export default function OrderDetailsPage() {
                                     value={disputeReason}
                                     onChange={(e) => setDisputeReason(e.target.value)}
                                 >
-                                    <option value="item_not_received">Item Not Received</option>
-                                    <option value="damaged">Item Damaged</option>
-                                    <option value="wrong_item">Wrong Item Sent</option>
-                                    <option value="not_as_described">Not As Described</option>
-                                    <option value="other">Other</option>
+                                    {isServiceOrBooking ? (
+                                        <>
+                                            <option value="service_not_rendered">Service / Work Not Done</option>
+                                            <option value="incomplete_work">Work Incomplete</option>
+                                            <option value="poor_quality">Substandard Quality</option>
+                                            <option value="other">Other</option>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <option value="item_not_received">Item Not Received</option>
+                                            <option value="damaged">Item Damaged</option>
+                                            <option value="wrong_item">Wrong Item Sent</option>
+                                            <option value="not_as_described">Not As Described</option>
+                                            <option value="other">Other</option>
+                                        </>
+                                    )}
                                 </select>
                             </div>
 
@@ -367,17 +392,22 @@ export default function OrderDetailsPage() {
                 </div>
             )}
 
-            {/* Order Receipt Confirmation Modal */}
+            {/* Confirmation Modal */}
             {showConfirmModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
                         <div className="flex flex-col items-center text-center">
                             <div className="p-4 bg-green-50 text-green-600 rounded-full mb-4">
-                                <ShieldCheck size={32} />
+                                {isServiceOrBooking ? <Wrench size={32} /> : <ShieldCheck size={32} />}
                             </div>
-                            <h3 className="text-lg font-black text-gray-900 mb-2">Confirm Order Receipt</h3>
+                            <h3 className="text-lg font-black text-gray-900 mb-2">
+                                {isServiceOrBooking ? "Confirm Service Completion" : "Confirm Order Receipt"}
+                            </h3>
                             <p className="text-xs font-medium text-gray-500 leading-relaxed mb-6">
-                                Are you sure you have received your order in good condition? This action will immediately release funds to the vendor.
+                                {isServiceOrBooking
+                                    ? "Are you satisfied with the service or project delivered? Confirming will immediately release held funds to the provider."
+                                    : "Are you sure you have received your order in good condition? This action will immediately release funds to the vendor."
+                                }
                             </p>
                             <div className="w-full flex flex-col gap-2">
                                 <button
@@ -407,9 +437,9 @@ export default function OrderDetailsPage() {
                         <div className="mx-auto w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center mb-4">
                             <CheckCircle2 size={24} />
                         </div>
-                        <h3 className="text-lg font-black text-gray-900 mb-2">Order Confirmed!</h3>
+                        <h3 className="text-lg font-black text-gray-900 mb-2">Funds Released!</h3>
                         <p className="text-xs font-medium text-gray-500 leading-relaxed mb-6">
-                            Funds have been successfully released to the vendor. Thank you for using Zebble Protected Escrow!
+                            Funds have been successfully transferred to the vendor. Thank you for using Escrow Protection!
                         </p>
                         <button
                             onClick={() => setShowSuccessModal(false)}
