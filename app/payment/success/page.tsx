@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { db, auth } from "@/lib/firebase";
-import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, updateDoc } from "firebase/firestore";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { CheckCircle2, Loader2, ArrowRight, ShieldCheck, ShoppingBag, CalendarCheck, Smartphone } from "lucide-react";
 
@@ -40,22 +40,36 @@ export default function SuccessPage() {
 
     // 2. Establish Firestore Listener ONLY after authentication layer is verified active
     useEffect(() => {
-        if (authLoading) return; // Prevent premature execution with empty auth payload
-
+        if (authLoading) return;
         if (!orderReference) return;
 
-        // Listen for real-time order state updates
-        const unsub = onSnapshot(doc(db, "orders", orderReference), async (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
+        // ✅ MULTI-SELLER FIX: Query by checkoutReference field instead of document ID
+        const q = query(collection(db, "orders"), where("checkoutReference", "==", orderReference));
+
+        const unsub = onSnapshot(q, async (querySnapshot) => {
+            if (!querySnapshot.empty) {
+                let allPaid = true;
+                let totalAmount = 0;
+                let firstOrderData: any = null;
+
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    totalAmount += Number(data.totalAmount || 0);
+
+                    if (!["PAID_HELD", "PAID", "COMPLETED", "SHIPPED"].includes(String(data.status || "").toUpperCase())) {
+                        allPaid = false;
+                    }
+                    if (!firstOrderData) firstOrderData = data;
+                });
 
                 // --- PATCH LOGIC START ---
-                // If the document is missing the buyerId, patch it safely with attached auth header token
-                if (currentUser && !data.buyerId) {
-                    console.log("Fixing missing buyerId for order...");
+                if (currentUser && firstOrderData && !firstOrderData.buyerId) {
+                    console.log("Fixing missing buyerId for order session...");
                     try {
-                        await updateDoc(doc(db, "orders", orderReference), {
-                            buyerId: currentUser.uid
+                        querySnapshot.forEach(async (d) => {
+                            if (!d.data().buyerId) {
+                                await updateDoc(d.ref, { buyerId: currentUser.uid });
+                            }
                         });
                     } catch (patchError) {
                         console.error("Auto-patching buyerId rules restriction fallback:", patchError);
@@ -63,14 +77,15 @@ export default function SuccessPage() {
                 }
                 // --- PATCH LOGIC END ---
 
-                setOrderData(data as SuccessOrder);
+                const displayData = { ...firstOrderData, totalAmount };
+                setOrderData(displayData as SuccessOrder);
 
-                if (["PAID_HELD", "PAID", "COMPLETED", "SHIPPED"].includes(String(data.status || "").toUpperCase())) {
+                if (allPaid) {
                     paymentConfirmedRef.current = true;
                     setStatus("success");
                 }
             } else {
-                console.log("Waiting for order document...");
+                console.log("Waiting for order document(s)...");
             }
         }, (error) => {
             console.error("Firestore Listen Error:", error);
