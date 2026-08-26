@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 
 interface CheckoutRequestBody {
     buyerId: string;
+    customerEmail: string; // ✅ ADD THIS
     address: any;
     sellerOrders: {
         storeId: string;
@@ -37,7 +38,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
         console.log("🔵 [CHECKOUT API] Request received");
         const body: CheckoutRequestBody = await req.json();
-        const { buyerId, address, sellerOrders, paymentMethod, total: frontendTotal } = body;
+        const { buyerId, customerEmail, address, sellerOrders, paymentMethod, total: frontendTotal } = body;
+
+        console.log("📧 [CHECKOUT API] Customer Email received:", customerEmail);
 
         if (!buyerId || !address || !sellerOrders || sellerOrders.length === 0) {
             return NextResponse.json({ error: "Missing required checkout fields." }, { status: 400 });
@@ -190,7 +193,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     amount: calculatedGrandTotal.toFixed(2),
                     currency: "NGN",
                     callbackUrl: callbackUrl,
-                    customerEmail: sellerOrders[0].items[0]?.customerEmail || "customer@sowa.com",
+                    customerEmail: sellerOrders[0].items[0]?.customerEmail || "customer@sellonwhatsapp.com",
                     description: `Checkout: ${itemSummary}`,
                     allowedPaymentMethods: [paymentMethod || "Card", "Transfer"],
                     metaData: {

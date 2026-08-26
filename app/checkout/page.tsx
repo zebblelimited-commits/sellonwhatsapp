@@ -135,6 +135,9 @@ export default function CheckoutPage() {
     setIsProcessing(true);
     try {
       // 1. Build the multi-seller payload
+      // ✅ DEBUG: Check if email exists before sending
+      console.log("📧 Frontend Auth Email:", auth.currentUser?.email);
+
       const payload = {
         buyerId: auth.currentUser?.uid,
         customerEmail: auth.currentUser?.email || "",
