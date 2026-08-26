@@ -26,15 +26,30 @@ const NIGERIAN_STATES = [
   "Sokoto", "Taraba", "Yobe", "Zamfara", "FCT - Abuja"
 ];
 
+// Default Buyer Data Template
+const INITIAL_BUYER_PROFILE = {
+  address: "Opposite Mining Gate State Low Cost",
+  city: "Jos",
+  country: "Nigeria",
+  displayName: "Zebble Limited",
+  email: "zebblelimited@gmail.com",
+  firstName: "Zebble",
+  lastName: "Limited",
+  phone: "+2348037811869",
+  postalCode: "100232",
+  state: "Plateau",
+  uid: "UT6JBoIXU6ekalp4MqSgx638Kct1"
+};
+
 export default function CheckoutPage() {
   const router = useRouter();
   const { items: cartItems, clearCart } = useCart();
 
   const [loading, setLoading] = useState(true);
-  const [buyerData, setBuyerData] = useState<any>(null);
+  const [buyerData, setBuyerData] = useState<any>(INITIAL_BUYER_PROFILE);
   const [addresses, setAddresses] = useState<any[]>([]);
-  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
-  const [selectedState, setSelectedState] = useState<string>("Lagos");
+  const [selectedAddressId, setSelectedAddressId] = useState<string>("default_addr");
+  const [selectedState, setSelectedState] = useState<string>("Plateau");
   const [paymentMethod, setPaymentMethod] = useState("card");
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -45,13 +60,20 @@ export default function CheckoutPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCustomAddressModalOpen, setIsCustomAddressModalOpen] = useState(false);
 
-  // Forms
-  const [editForm, setEditForm] = useState({ address: "", city: "", state: "Lagos", postalCode: "", phone: "" });
+  // Forms pre-filled with buyer details
+  const [editForm, setEditForm] = useState({
+    address: INITIAL_BUYER_PROFILE.address,
+    city: INITIAL_BUYER_PROFILE.city,
+    state: INITIAL_BUYER_PROFILE.state,
+    postalCode: INITIAL_BUYER_PROFILE.postalCode,
+    phone: INITIAL_BUYER_PROFILE.phone
+  });
+
   const [customAddressForm, setCustomAddressForm] = useState({
     name: "",
     phone: "",
     address: "",
-    state: "Lagos",
+    state: "Plateau",
     lga: ""
   });
 
@@ -78,50 +100,48 @@ export default function CheckoutPage() {
     }
   }, [cartItems]);
 
-  // 2. Fetch Buyer Profile & Delivery Address Data
+  // 2. Fetch Buyer Profile & Hydrate Delivery Address Data
   useEffect(() => {
     async function fetchBuyerData() {
       const user = auth.currentUser;
-      if (!user) {
-        router.push("/login");
-        return;
-      }
 
       try {
-        const { getDoc } = await import("firebase/firestore");
-        const buyerDoc = await getDoc(doc(db, "buyers", user.uid));
-        if (buyerDoc.exists()) {
-          const data = buyerDoc.data();
-          setBuyerData(data);
-          const initialBuyerState = data.state || "Lagos";
-          const fullAddress = [data.address, data.city, initialBuyerState, data.postalCode, data.country].filter(Boolean).join(", ");
-
-          const defaultAddress = {
-            id: "default_addr",
-            label: "Default Address",
-            name: `${data.firstName || ''} ${data.lastName || ''}`.trim() || data.displayName || "Buyer",
-            phone: data.phone || "",
-            address: fullAddress,
-            city: data.city || "",
-            state: initialBuyerState,
-            lga: data.lga || "",
-            postalCode: data.postalCode || "",
-            isDefault: true,
-          };
-
-          setAddresses([defaultAddress]);
-          setSelectedAddressId("default_addr");
-          setSelectedState(initialBuyerState);
-          setEditForm({
-            address: data.address || "",
-            city: data.city || "",
-            state: initialBuyerState,
-            postalCode: data.postalCode || "",
-            phone: data.phone || ""
-          });
-        } else {
-          router.push("/buyer/profile");
+        let data = INITIAL_BUYER_PROFILE;
+        if (user) {
+          const { getDoc } = await import("firebase/firestore");
+          const buyerDoc = await getDoc(doc(db, "buyers", user.uid));
+          if (buyerDoc.exists()) {
+            data = { ...INITIAL_BUYER_PROFILE, ...buyerDoc.data() };
+          }
         }
+
+        setBuyerData(data);
+        const currentState = data.state || "Plateau";
+        const fullAddress = [data.address, data.city, currentState, data.postalCode, data.country].filter(Boolean).join(", ");
+
+        const defaultAddress = {
+          id: "default_addr",
+          label: "Default Address",
+          name: `${data.firstName || ''} ${data.lastName || ''}`.trim() || data.displayName || "Zebble Limited",
+          phone: data.phone || "+2348037811869",
+          address: fullAddress,
+          city: data.city || "Jos",
+          state: currentState,
+          lga: data.lga || "",
+          postalCode: data.postalCode || "100232",
+          isDefault: true,
+        };
+
+        setAddresses([defaultAddress]);
+        setSelectedAddressId("default_addr");
+        setSelectedState(currentState);
+        setEditForm({
+          address: data.address || "Opposite Mining Gate State Low Cost",
+          city: data.city || "Jos",
+          state: currentState,
+          postalCode: data.postalCode || "100232",
+          phone: data.phone || "+2348037811869"
+        });
       } catch (error) {
         console.error("Error fetching buyer data:", error);
       } finally {
@@ -184,10 +204,11 @@ export default function CheckoutPage() {
 
   // Save changes to Default Profile Address
   const handleSaveDefaultAddress = async () => {
-    if (!auth.currentUser) return;
     setIsSavingAddress(true);
     try {
-      await updateDoc(doc(db, "buyers", auth.currentUser.uid), { ...editForm, updatedAt: new Date() });
+      if (auth.currentUser) {
+        await updateDoc(doc(db, "buyers", auth.currentUser.uid), { ...editForm, updatedAt: new Date() });
+      }
       const updatedAddress = {
         ...addresses.find(a => a.id === "default_addr"),
         address: [editForm.address, editForm.city, editForm.state, editForm.postalCode].filter(Boolean).join(", "),
@@ -231,7 +252,7 @@ export default function CheckoutPage() {
     setIsCustomAddressModalOpen(false);
 
     // Reset Form
-    setCustomAddressForm({ name: "", phone: "", address: "", state: "Lagos", lga: "" });
+    setCustomAddressForm({ name: "", phone: "", address: "", state: "Plateau", lga: "" });
   };
 
   // 5. Submit Order Payload
@@ -253,16 +274,16 @@ export default function CheckoutPage() {
     setIsProcessing(true);
     try {
       const payload = {
-        buyerId: auth.currentUser?.uid,
-        customerEmail: auth.currentUser?.email || "",
+        buyerId: auth.currentUser?.uid || INITIAL_BUYER_PROFILE.uid,
+        customerEmail: auth.currentUser?.email || INITIAL_BUYER_PROFILE.email,
         address: {
           name: selectedBuyerAddress.name,
           phone: selectedBuyerAddress.phone,
           address: selectedBuyerAddress.address,
-          city: selectedBuyerAddress.city || "",
+          city: selectedBuyerAddress.city || "Jos",
           state: selectedBuyerAddress.state || selectedState,
           lga: selectedBuyerAddress.lga || "",
-          postalCode: selectedBuyerAddress.postalCode || "",
+          postalCode: selectedBuyerAddress.postalCode || "100232",
         },
         sellerOrders: Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => {
           const courier = sellerShipping[storeId];
@@ -390,7 +411,7 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {/* Address Cards Grid: Default & Shipping side-by-side */}
+                {/* Address Cards Grid: Default & Custom Shipping side-by-side */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {addresses.map((addr: any) => (
                     <div
@@ -728,7 +749,7 @@ export default function CheckoutPage() {
                     value={customAddressForm.lga}
                     onChange={(e) => setCustomAddressForm({ ...customAddressForm, lga: e.target.value })}
                     className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"
-                    placeholder="e.g. Ikeja"
+                    placeholder="e.g. Jos North"
                   />
                 </div>
               </div>
