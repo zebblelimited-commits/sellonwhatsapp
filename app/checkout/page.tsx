@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from "react";
 import {
   MapPin, Truck, CreditCard, ShieldCheck,
-  Edit3, Package, Clock, Smartphone, Building2,
-  Store, X, Save, Loader2, Plus, ChevronDown
+  Edit3, Package, Smartphone, Building2,
+  Store, X, Save, Loader2
 } from "lucide-react";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import Header from "@/components/layout/Header";
@@ -13,15 +13,9 @@ import { useCart } from "@/contexts/CartContext";
 import { auth, db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import ShippingSelector, { ShippingOption } from "@/components/checkout/ShippingSelector";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
-
-// --- Mock Shipping Options (Per Seller) ---
-const SHIPPING_OPTIONS = [
-  { id: "gig", name: "GIG Logistics", price: 2450, eta: "1-2 days" },
-  { id: "sendbox", name: "Sendbox", price: 2150, eta: "2-3 days" },
-  { id: "dhl", name: "DHL Express", price: 3200, eta: "1 day" },
-];
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -42,8 +36,8 @@ export default function CheckoutPage() {
   const [editForm, setEditForm] = useState({ address: "", city: "", state: "", postalCode: "", phone: "" });
   const [isSavingAddress, setIsSavingAddress] = useState(false);
 
-  // ✅ Per-Seller Shipping Selection
-  const [sellerShipping, setSellerShipping] = useState<Record<string, string>>({});
+  // ✅ Real-time Per-Seller Shipping Selection (Stores ShippingOption objects)
+  const [sellerShipping, setSellerShipping] = useState<Record<string, ShippingOption | null>>({});
 
   // 1. Fetch Direct Session Order Data or standard Cart Data
   useEffect(() => {
@@ -95,7 +89,7 @@ export default function CheckoutPage() {
           setEditForm({
             address: data.address || "",
             city: data.city || "",
-            state: data.state || "",
+            state: data.state || "Lagos",
             postalCode: data.postalCode || "",
             phone: data.phone || ""
           });
@@ -115,26 +109,22 @@ export default function CheckoutPage() {
   const activeCheckoutItems = sessionOrderItems;
 
   // 3. Group Cart Items by Seller
-  const groupedCartItems = activeCheckoutItems.reduce((acc: Record<string, { storeName: string; items: any[]; subtotal: number }>, item: any) => {
+  const groupedCartItems = activeCheckoutItems.reduce((acc: Record<string, { storeName: string; items: any[]; subtotal: number; totalWeightKg: number }>, item: any) => {
     const storeId = item.storeId || item.vendorId || 'unknown';
     if (!acc[storeId]) {
-      acc[storeId] = { storeName: item.storeName || item.vendorName || 'Unknown Store', items: [], subtotal: 0 };
+      acc[storeId] = { storeName: item.storeName || item.vendorName || 'Unknown Store', items: [], subtotal: 0, totalWeightKg: 0 };
     }
     acc[storeId].items.push(item);
     acc[storeId].subtotal += item.price * item.quantity;
+    acc[storeId].totalWeightKg += (item.weightKg || 1) * item.quantity;
     return acc;
   }, {});
 
-  // 4. Initialize Shipping for each seller (Default to GIG)
-  useEffect(() => {
-    const initialShipping: Record<string, string> = {};
-    Object.keys(groupedCartItems).forEach((storeId: string) => {
-      initialShipping[storeId] = sellerShipping[storeId] || "gig";
-    });
-    setSellerShipping(initialShipping);
-  }, [sessionOrderItems]);
+  // Selected Address Details
+  const selectedBuyerAddress = addresses.find((a: any) => a.id === selectedAddressId);
+  const selectedState = selectedBuyerAddress?.state || "Lagos";
 
-  // 5. Calculations
+  // 4. Dynamic Calculations
   const cartSubtotal = activeCheckoutItems.reduce((sum: number, item: any) => sum + item.price * item.quantity, 0);
 
   let calculatedFrontendTotal = 0;
@@ -143,8 +133,9 @@ export default function CheckoutPage() {
   let totalHandlingFee = 0;
 
   Object.entries(groupedCartItems).forEach(([storeId, group]: [string, any]) => {
-    const shippingCost = SHIPPING_OPTIONS.find(o => o.id === sellerShipping[storeId])?.price || 0;
-    const handlingFee = (sellerShipping[storeId] !== "self_arranged" && shippingCost > 0) ? 200 : 0;
+    const selectedCourier = sellerShipping[storeId];
+    const shippingCost = selectedCourier?.shippingFee || 0;
+    const handlingFee = shippingCost > 0 ? 200 : 0;
 
     // Platform Fee: 1.5% on (Product Subtotal + Shipping Cost)
     const buyerPlatformFee = Math.round((group.subtotal + shippingCost) * 0.015);
@@ -157,8 +148,6 @@ export default function CheckoutPage() {
   });
 
   const grandTotal = calculatedFrontendTotal;
-
-  const selectedBuyerAddress = addresses.find((a: any) => a.id === selectedAddressId);
 
   const handleSaveAddress = async () => {
     if (!auth.currentUser) return;
@@ -183,8 +172,17 @@ export default function CheckoutPage() {
   };
 
   const handleCheckout = async () => {
-    if (!selectedBuyerAddress || Object.keys(sellerShipping).length === 0) {
-      alert("Please select a delivery address and shipping method for all items.");
+    if (!selectedBuyerAddress) {
+      alert("Please select a valid delivery address.");
+      return;
+    }
+
+    const missingShipping = Object.keys(groupedCartItems).some(
+      (storeId) => !sellerShipping[storeId]
+    );
+
+    if (missingShipping) {
+      alert("Please select a shipping option for all stores before proceeding.");
       return;
     }
 
@@ -203,14 +201,19 @@ export default function CheckoutPage() {
           state: selectedBuyerAddress.state || "",
           postalCode: selectedBuyerAddress.postalCode || "",
         },
-        sellerOrders: Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => ({
-          storeId,
-          storeName: group.storeName,
-          items: group.items,
-          shippingMethod: sellerShipping[storeId],
-          shippingCost: SHIPPING_OPTIONS.find(o => o.id === sellerShipping[storeId])?.price || 0,
-          subtotal: group.subtotal
-        })),
+        sellerOrders: Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => {
+          const courier = sellerShipping[storeId];
+          return {
+            storeId,
+            storeName: group.storeName,
+            items: group.items,
+            courierId: courier?.id,
+            shippingMethod: courier?.name,
+            shippingCost: courier?.shippingFee || 0,
+            estimatedDays: courier?.estimatedDays,
+            subtotal: group.subtotal
+          };
+        }),
         paymentMethod,
         total: grandTotal
       };
@@ -319,70 +322,48 @@ export default function CheckoutPage() {
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
                   <Truck size={20} className="text-[#00a63e]" /> Available Shipping Options
                 </h2>
-                <div className="space-y-4">
-                  {Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => {
-                    const selectedOpt = SHIPPING_OPTIONS.find(o => o.id === (sellerShipping[storeId] || 'gig'));
+                <div className="space-y-6">
+                  {Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => (
+                    <div key={storeId} className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-4">
+                      {/* Store Name & Product Images */}
+                      <div className="flex items-center gap-3">
+                        <Store size={16} className="text-gray-500 shrink-0" />
+                        <h3 className="font-bold text-sm text-gray-900">{group.storeName}</h3>
 
-                    return (
-                      <div key={storeId} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                        {/* Store Name & Circular Product Images */}
-                        <div className="flex items-center gap-3 mb-3">
-                          <Store size={16} className="text-gray-500 shrink-0" />
-                          <h3 className="font-bold text-sm text-gray-900">{group.storeName}</h3>
-
-                          <div className="flex items-center">
-                            {group.items.slice(0, 3).map((item: any, idx: number) => (
-                              <div
-                                key={item.id || idx}
-                                className={`relative w-7 h-7 rounded-full border-2 border-white overflow-hidden bg-gray-100 ${idx > 0 ? '-ml-2' : ''}`}
-                              >
-                                {item.image ? (
-                                  <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-gray-400">
-                                    <Package size={10} />
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                            {group.items.length > 3 && (
-                              <div className="relative w-7 h-7 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center -ml-2">
-                                <span className="text-[8px] font-bold text-gray-600">+{group.items.length - 3}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Shipping Dropdown */}
-                        <div className="relative">
-                          <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center overflow-hidden shadow-sm">
-                            {selectedOpt?.name.includes("GIG") ? (
-                              <span className="text-[9px] font-black text-blue-600">GIG</span>
-                            ) : selectedOpt?.name.includes("Sendbox") ? (
-                              <span className="text-[9px] font-black text-orange-600">SBX</span>
-                            ) : selectedOpt?.name.includes("DHL") ? (
-                              <span className="text-[9px] font-black text-red-600">DHL</span>
-                            ) : (
-                              <Truck size={14} className="text-gray-500" />
-                            )}
-                          </div>
-
-                          <select
-                            className="w-full text-sm border border-gray-200 rounded-lg p-3 pl-14 bg-white appearance-none focus:border-[#00a63e] focus:ring-1 focus:ring-[#00a63e] outline-none font-medium cursor-pointer"
-                            value={sellerShipping[storeId] || 'gig'}
-                            onChange={(e) => setSellerShipping(prev => ({ ...prev, [storeId]: e.target.value }))}
-                          >
-                            {SHIPPING_OPTIONS.map(opt => (
-                              <option key={opt.id} value={opt.id}>
-                                {opt.name} - ₦{opt.price.toLocaleString()} ({opt.eta})
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                        <div className="flex items-center ml-auto">
+                          {group.items.slice(0, 3).map((item: any, idx: number) => (
+                            <div
+                              key={item.id || idx}
+                              className={`relative w-7 h-7 rounded-full border-2 border-white overflow-hidden bg-gray-100 ${idx > 0 ? '-ml-2' : ''}`}
+                            >
+                              {item.image ? (
+                                <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                  <Package size={10} />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {group.items.length > 3 && (
+                            <div className="relative w-7 h-7 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center -ml-2">
+                              <span className="text-[8px] font-bold text-gray-600">+{group.items.length - 3}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    );
-                  })}
+
+                      {/* Dynamic Shipping Selector per Vendor */}
+                      <ShippingSelector
+                        selectedState={selectedState}
+                        totalWeightKg={group.totalWeightKg}
+                        selectedOptionId={sellerShipping[storeId]?.id}
+                        onSelectOption={(option) =>
+                          setSellerShipping((prev) => ({ ...prev, [storeId]: option }))
+                        }
+                      />
+                    </div>
+                  ))}
                 </div>
               </section>
 
