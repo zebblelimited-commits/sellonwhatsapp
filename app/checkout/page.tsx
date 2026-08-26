@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import {
   MapPin, Truck, CreditCard, ShieldCheck,
   Edit3, Package, Smartphone, Building2,
-  Store, X, Save, Loader2
+  Store, X, Save, Loader2, ChevronDown
 } from "lucide-react";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import Header from "@/components/layout/Header";
@@ -17,6 +17,15 @@ import ShippingSelector, { ShippingOption } from "@/components/checkout/Shipping
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
+// Nigerian States List for Instant Dynamic Shipping Calculation
+const NIGERIAN_STATES = [
+  "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno",
+  "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "Gombe", "Imo",
+  "Jigawa", "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara", "Lagos",
+  "Nasarawa", "Niger", "Ogun", "Ondo", "Osun", "Oyo", "Plateau", "Rivers",
+  "Sokoto", "Taraba", "Yobe", "Zamfara", "FCT - Abuja"
+];
+
 export default function CheckoutPage() {
   const router = useRouter();
   const { items: cartItems, clearCart } = useCart();
@@ -25,6 +34,7 @@ export default function CheckoutPage() {
   const [buyerData, setBuyerData] = useState<any>(null);
   const [addresses, setAddresses] = useState<any[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+  const [selectedState, setSelectedState] = useState<string>("Lagos"); // Active calculation state
   const [paymentMethod, setPaymentMethod] = useState("card");
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -33,10 +43,10 @@ export default function CheckoutPage() {
 
   // Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ address: "", city: "", state: "", postalCode: "", phone: "" });
+  const [editForm, setEditForm] = useState({ address: "", city: "", state: "Lagos", postalCode: "", phone: "" });
   const [isSavingAddress, setIsSavingAddress] = useState(false);
 
-  // ✅ Real-time Per-Seller Shipping Selection (Stores ShippingOption objects)
+  // Real-time Per-Seller Shipping Selection
   const [sellerShipping, setSellerShipping] = useState<Record<string, ShippingOption | null>>({});
 
   // 1. Fetch Direct Session Order Data or standard Cart Data
@@ -72,7 +82,9 @@ export default function CheckoutPage() {
         if (buyerDoc.exists()) {
           const data = buyerDoc.data();
           setBuyerData(data);
-          const fullAddress = [data.address, data.city, data.state, data.postalCode, data.country].filter(Boolean).join(", ");
+          const initialBuyerState = data.state || "Lagos";
+          const fullAddress = [data.address, data.city, initialBuyerState, data.postalCode, data.country].filter(Boolean).join(", ");
+
           const defaultAddress = {
             id: "default_addr",
             label: "Default Address",
@@ -80,16 +92,17 @@ export default function CheckoutPage() {
             phone: data.phone || "",
             address: fullAddress,
             city: data.city || "",
-            state: data.state || "Lagos",
+            state: initialBuyerState,
             postalCode: data.postalCode || "",
             isDefault: true,
           };
           setAddresses([defaultAddress]);
           setSelectedAddressId("default_addr");
+          setSelectedState(initialBuyerState);
           setEditForm({
             address: data.address || "",
             city: data.city || "",
-            state: data.state || "Lagos",
+            state: initialBuyerState,
             postalCode: data.postalCode || "",
             phone: data.phone || ""
           });
@@ -124,9 +137,7 @@ export default function CheckoutPage() {
     return acc;
   }, {});
 
-  // Active Buyer Delivery Address & State
   const selectedBuyerAddress = addresses.find((a: any) => a.id === selectedAddressId);
-  const selectedState = selectedBuyerAddress?.state || "Lagos";
 
   // 4. Complete Checkout Totals Calculation Matrix
   const cartSubtotal = activeCheckoutItems.reduce((sum: number, item: any) => sum + item.price * item.quantity, 0);
@@ -168,6 +179,7 @@ export default function CheckoutPage() {
         phone: editForm.phone
       };
       setAddresses([updatedAddress]);
+      setSelectedState(editForm.state);
       setIsEditModalOpen(false);
     } catch (error) {
       alert("Failed to save address.");
@@ -202,7 +214,7 @@ export default function CheckoutPage() {
           phone: selectedBuyerAddress.phone,
           address: selectedBuyerAddress.address,
           city: selectedBuyerAddress.city || "",
-          state: selectedBuyerAddress.state || "",
+          state: selectedState,
           postalCode: selectedBuyerAddress.postalCode || "",
         },
         sellerOrders: Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => {
@@ -293,16 +305,41 @@ export default function CheckoutPage() {
             {/* LEFT COLUMN: Addresses, Dynamic Shipping & Escrow */}
             <div className="lg:col-span-2 space-y-6">
 
-              {/* 1. Delivery & Pickup Locations */}
+              {/* 1. Delivery & Pickup Locations with Dynamic State Dropdown */}
               <section className="bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                     <MapPin size={20} className="text-[#00a63e]" /> Delivery & Pickup Locations
                   </h2>
                   <button onClick={() => setIsEditModalOpen(true)} className="text-xs font-bold text-[#00a63e] hover:text-[#008c34] flex items-center gap-1">
-                    <Edit3 size={12} /> Edit Delivery Address
+                    <Edit3 size={12} /> Edit Full Address
                   </button>
                 </div>
+
+                {/* State Selection Toggle */}
+                <div className="mb-6 p-4 bg-green-50/50 border border-green-100 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-green-800">
+                      Select Destination State
+                    </label>
+                    <p className="text-xs text-gray-500 mt-0.5">Shipping rates update live based on your selected state.</p>
+                  </div>
+                  <div className="relative min-w-[200px]">
+                    <select
+                      value={selectedState}
+                      onChange={(e) => setSelectedState(e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-bold text-gray-900 appearance-none focus:outline-none focus:border-[#00a63e] cursor-pointer shadow-sm pr-8"
+                    >
+                      {NIGERIAN_STATES.map((state) => (
+                        <option key={state} value={state}>
+                          {state}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown size={16} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {addresses.map((addr: any) => (
                     <div key={addr.id} onClick={() => setSelectedAddressId(addr.id)} className={`relative rounded-2xl border-2 p-4 transition-all h-full flex flex-col ${selectedAddressId === addr.id ? "border-[#00a63e] bg-green-50/30" : "border-gray-100 hover:border-gray-200 cursor-pointer"}`}>
@@ -325,7 +362,7 @@ export default function CheckoutPage() {
               {/* 2. Available Shipping Options */}
               <section className="bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
-                  <Truck size={20} className="text-[#00a63e]" /> Available Shipping Options
+                  <Truck size={20} className="text-[#00a63e]" /> Available Shipping Options ({selectedState})
                 </h2>
                 <div className="space-y-6">
                   {Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => (
@@ -444,7 +481,7 @@ export default function CheckoutPage() {
                       <span className="font-bold text-gray-900">₦{cartSubtotal.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-gray-600">
-                      <span>Total Shipping</span>
+                      <span>Total Shipping ({selectedState})</span>
                       <span className="font-bold text-gray-900">₦{totalShipping.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-gray-600">
@@ -523,7 +560,19 @@ export default function CheckoutPage() {
               <input type="text" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="Street Address" />
               <div className="grid grid-cols-2 gap-3">
                 <input type="text" value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="City" />
-                <input type="text" value={editForm.state} onChange={(e) => setEditForm({ ...editForm, state: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="State" />
+
+                {/* State Dropdown inside Modal */}
+                <select
+                  value={editForm.state}
+                  onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                  className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"
+                >
+                  {NIGERIAN_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
               </div>
               <input type="text" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="Phone Number" />
               <button onClick={handleSaveAddress} disabled={isSavingAddress} className="w-full bg-[#00a63e] text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2">
