@@ -35,6 +35,7 @@ const INITIAL_BUYER_PROFILE = {
   email: "zebblelimited@gmail.com",
   firstName: "Zebble",
   lastName: "Limited",
+  lga: "", // <--- Add this property (or "Jos South" / "Jos North")
   phone: "+2348037811869",
   postalCode: "100232",
   state: "Plateau",
@@ -418,14 +419,14 @@ export default function CheckoutPage() {
                       key={addr.id}
                       onClick={() => setSelectedAddressId(addr.id)}
                       className={`relative rounded-2xl border-2 p-5 transition-all flex flex-col cursor-pointer ${selectedAddressId === addr.id
-                          ? "border-[#00a63e] bg-green-50/30"
-                          : "border-gray-100 hover:border-gray-200 bg-white"
+                        ? "border-[#00a63e] bg-green-50/30"
+                        : "border-gray-100 hover:border-gray-200 bg-white"
                         }`}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${addr.isDefault
-                            ? "bg-[#00a63e]/10 text-[#00a63e]"
-                            : "bg-blue-50 text-blue-600 border border-blue-100"
+                          ? "bg-[#00a63e]/10 text-[#00a63e]"
+                          : "bg-blue-50 text-blue-600 border border-blue-100"
                           }`}>
                           {addr.label}
                         </span>
