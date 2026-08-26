@@ -26,11 +26,7 @@ async function fetchWithRetry(
     for (let i = 0; i <= retries; i++) {
         try {
             const controller = new AbortController();
-
-            const timeoutId = setTimeout(
-                () => controller.abort(),
-                30000
-            );
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
 
             const response = await fetch(url, {
                 ...options,
@@ -38,27 +34,32 @@ async function fetchWithRetry(
             });
 
             clearTimeout(timeoutId);
-
             return response;
         } catch (error: any) {
-            if (i === retries) {
-                throw error;
-            }
-
+            if (i === retries) throw error;
             await new Promise((resolve) =>
                 setTimeout(resolve, 1000 * Math.pow(2, i))
             );
         }
     }
-
     throw new Error("All retry attempts failed");
 }
 
-export async function POST(
-    req: NextRequest
-): Promise<NextResponse> {
+export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
         console.log("🔵 [CHECKOUT API] Request received");
+
+        const accountId = process.env.NOMBA_ACCOUNT_ID;
+        const clientId = process.env.NOMBA_CLIENT_ID;
+        const clientSecret = process.env.NOMBA_CLIENT_SECRET;
+
+        if (!accountId || !clientId || !clientSecret) {
+            console.error("❌ [CHECKOUT API] Missing Nomba API environment variables.");
+            return NextResponse.json(
+                { error: "Payment gateway configuration error." },
+                { status: 500 }
+            );
+        }
 
         const body: CheckoutRequestBody = await req.json();
 
@@ -71,10 +72,6 @@ export async function POST(
             total: frontendTotal,
         } = body;
 
-        // ---------------------------------------------------------
-        // VALIDATE REQUIRED CHECKOUT DATA
-        // ---------------------------------------------------------
-
         if (
             !buyerId ||
             !customerEmail ||
@@ -83,25 +80,16 @@ export async function POST(
             sellerOrders.length === 0
         ) {
             return NextResponse.json(
-                {
-                    error:
-                        "Missing required checkout fields.",
-                },
+                { error: "Missing required checkout fields." },
                 { status: 400 }
             );
         }
 
-        console.log(
-            "🔵 [CHECKOUT API] Customer email:",
-            customerEmail
-        );
+        console.log("🔵 [CHECKOUT API] Customer email:", customerEmail);
 
         const batch = adminDb.batch();
-
         const checkoutReference = `SOWA_CHK_${Date.now()}`;
-
         let calculatedGrandTotal = 0;
-
         const createdOrderIds: string[] = [];
 
         // ---------------------------------------------------------
@@ -114,52 +102,25 @@ export async function POST(
                 storeName,
                 items,
                 shippingMethod,
-                shippingCost,
+                shippingCost: rawShippingCost,
                 subtotal: productSubtotal,
             } = sellerOrder;
 
-            // -----------------------------------------------------
-            // VALIDATE STORE
-            // -----------------------------------------------------
-
             if (!storeId || storeId === "unknown") {
-                console.error(
-                    "❌ [CHECKOUT API] Invalid storeId detected:",
-                    storeId
-                );
-
+                console.error("❌ [CHECKOUT API] Invalid storeId detected:", storeId);
                 return NextResponse.json(
-                    {
-                        error:
-                            "One or more items in your cart are missing store information.",
-                    },
+                    { error: "One or more items in your cart are missing store information." },
                     { status: 400 }
                 );
             }
 
-            // -----------------------------------------------------
-            // FETCH STORE DATA
-            // -----------------------------------------------------
-
-            console.log(
-                `🔵 [CHECKOUT API] Fetching store data for: ${storeId}`
-            );
-
-            const storeSnap = await adminDb
-                .collection("stores")
-                .doc(storeId)
-                .get();
+            console.log(`🔵 [CHECKOUT API] Fetching store data for: ${storeId}`);
+            const storeSnap = await adminDb.collection("stores").doc(storeId).get();
 
             if (!storeSnap.exists) {
-                console.error(
-                    `❌ [CHECKOUT API] Store document not found in Firestore: ${storeId}`
-                );
-
+                console.error(`❌ [CHECKOUT API] Store document not found: ${storeId}`);
                 return NextResponse.json(
-                    {
-                        error:
-                            "Store configuration not found. Please contact support.",
-                    },
+                    { error: "Store configuration not found. Please contact support." },
                     { status: 404 }
                 );
             }
@@ -167,70 +128,34 @@ export async function POST(
             const storeData = storeSnap.data() || {};
 
             // -----------------------------------------------------
-            // PARTNER / SUBSCRIPTION COMMISSION CHECK
+            // CHECK SELF-ARRANGED SHIPPING & COMMISSIONS
             // -----------------------------------------------------
+
+            const isSelfArranged = shippingMethod === "self_arranged";
+            const shippingCost = isSelfArranged ? 0 : rawShippingCost;
 
             const isPartner =
                 storeData.isPartner === true ||
                 storeData.subscriptionPlan === "pro_max" ||
-                storeData.subscriptionPlan ===
-                "pro_yearly_business_max" ||
-                String(
-                    storeData.subscriptionPlan
-                )
-                    .toLowerCase()
-                    .includes("max");
+                storeData.subscriptionPlan === "pro_yearly_business_max" ||
+                String(storeData.subscriptionPlan || "").toLowerCase().includes("max");
 
-            // Partner stores = 0%
-            // Standard stores = 1.5%
-            const sellerCommissionRate = isPartner
-                ? 0
-                : 0.015;
+            const sellerCommissionRate = isPartner ? 0 : 0.015;
 
-            // -----------------------------------------------------
-            // FEES
-            // -----------------------------------------------------
+            // Handling fee is waived for self-arranged shipping
+            const handlingFee = !isSelfArranged && shippingCost > 0 ? 200 : 0;
 
-            const handlingFee =
-                shippingMethod !== "self_arranged" &&
-                    shippingCost > 0
-                    ? 200
-                    : 0;
-
-            const sellerCommission = Math.round(
-                productSubtotal * sellerCommissionRate
-            );
-
-            const sellerPayout =
-                productSubtotal - sellerCommission;
-
-            const buyerPlatformFee = Math.round(
-                (productSubtotal + shippingCost) * 0.015
-            );
-
+            const sellerCommission = Math.round(productSubtotal * sellerCommissionRate);
+            const sellerPayout = productSubtotal - sellerCommission;
+            const buyerPlatformFee = Math.round((productSubtotal + shippingCost) * 0.015);
             const escrowAmount = productSubtotal;
 
-            const platformRevenue =
-                sellerCommission +
-                buyerPlatformFee +
-                handlingFee;
-
-            const orderTotal =
-                productSubtotal +
-                shippingCost +
-                buyerPlatformFee +
-                handlingFee;
+            const platformRevenue = sellerCommission + buyerPlatformFee + handlingFee;
+            const orderTotal = productSubtotal + shippingCost + buyerPlatformFee + handlingFee;
 
             calculatedGrandTotal += orderTotal;
 
-            // -----------------------------------------------------
-            // CREATE ORDER ID
-            // -----------------------------------------------------
-
-            const orderId = `ORD_${Date.now()}_${Math.random()
-                .toString(36)
-                .substr(2, 5)}`;
-
+            const orderId = `ORD_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
             createdOrderIds.push(orderId);
 
             // -----------------------------------------------------
@@ -239,113 +164,56 @@ export async function POST(
 
             const orderDoc = {
                 orderId,
-
                 checkoutReference,
-
                 buyerId,
-
-                // Customer information belongs to the order,
-                // NOT inside individual cart items.
                 customerEmail,
-
                 storeId,
-
                 storeName,
-
                 items,
-
                 deliveryAddress: address,
-
                 shippingMethod,
-
                 shippingCost,
-
                 handlingFee,
-
                 productSubtotal,
-
                 sellerCommission,
-
                 sellerPayout,
-
                 buyerPlatformFee,
-
                 platformRevenue,
-
                 escrowAmount,
-
                 total: orderTotal,
-
                 status: "PENDING_PAYMENT",
-
                 paymentStatus: "pending",
-
                 paymentMethod,
-
-                createdAt:
-                    FieldValue.serverTimestamp(),
-
-                updatedAt:
-                    FieldValue.serverTimestamp(),
+                createdAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
             };
 
-            batch.set(
-                adminDb
-                    .collection("orders")
-                    .doc(orderId),
-                orderDoc
-            );
+            batch.set(adminDb.collection("orders").doc(orderId), orderDoc);
 
             // -----------------------------------------------------
-            // CREATE SHIPMENT
+            // CREATE SHIPMENT (EXCLUDE SELF-ARRANGED)
             // -----------------------------------------------------
 
-            if (
-                shippingMethod !== "self_arranged" &&
-                shippingCost > 0
-            ) {
-                const shipmentId = `SHP_${Date.now()}_${Math.random()
-                    .toString(36)
-                    .substr(2, 5)}`;
+            if (!isSelfArranged && shippingCost > 0) {
+                const shipmentId = `SHP_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
                 const shipmentDoc = {
                     shipmentId,
-
                     orderId,
-
                     checkoutReference,
-
                     storeId,
-
                     buyerId,
-
                     customerEmail,
-
                     courierId: shippingMethod,
-
                     status: "PENDING_PICKUP",
-
-                    pickupAddress:
-                        storeData.address ||
-                        "Store Address",
-
+                    pickupAddress: storeData.address || "Store Address",
                     deliveryAddress: address,
-
                     shippingCost,
-
-                    createdAt:
-                        FieldValue.serverTimestamp(),
-
-                    updatedAt:
-                        FieldValue.serverTimestamp(),
+                    createdAt: FieldValue.serverTimestamp(),
+                    updatedAt: FieldValue.serverTimestamp(),
                 };
 
-                batch.set(
-                    adminDb
-                        .collection("shipments")
-                        .doc(shipmentId),
-                    shipmentDoc
-                );
+                batch.set(adminDb.collection("shipments").doc(shipmentId), shipmentDoc);
             }
         }
 
@@ -353,327 +221,145 @@ export async function POST(
         // VERIFY TOTAL
         // ---------------------------------------------------------
 
-        if (
-            Math.abs(
-                calculatedGrandTotal -
-                frontendTotal
-            ) > 1
-        ) {
+        if (Math.abs(calculatedGrandTotal - frontendTotal) > 1) {
             return NextResponse.json(
                 {
-                    error:
-                        "Total amount mismatch. Please refresh and try again.",
-
-                    expectedTotal:
-                        calculatedGrandTotal,
-
-                    providedTotal:
-                        frontendTotal,
+                    error: "Total amount mismatch. Please refresh and try again.",
+                    expectedTotal: calculatedGrandTotal,
+                    providedTotal: frontendTotal,
                 },
                 { status: 400 }
             );
         }
 
-        // ---------------------------------------------------------
-        // COMMIT ORDERS + SHIPMENTS
-        // ---------------------------------------------------------
-
-        console.log(
-            "🔵 [CHECKOUT API] Committing batch to Firestore..."
-        );
-
+        console.log("🔵 [CHECKOUT API] Committing batch to Firestore...");
         await batch.commit();
-
-        console.log(
-            "✅ [CHECKOUT API] Firestore batch committed successfully."
-        );
+        console.log("✅ [CHECKOUT API] Firestore batch committed successfully.");
 
         // ---------------------------------------------------------
-        // NOMBA INTEGRATION
+        // NOMBA PAYMENT INITIALIZATION
         // ---------------------------------------------------------
 
-        const nombaOrigin =
-            process.env.NOMBA_SANDBOX_URL ||
-            "https://sandbox.nomba.com";
-
+        const nombaOrigin = process.env.NOMBA_SANDBOX_URL || "https://sandbox.nomba.com";
         const isSandbox =
-            Boolean(
-                process.env.NOMBA_SANDBOX_URL
-            ) ||
-            process.env.NEXT_PUBLIC_ENVIRONMENT ===
-            "sandbox";
+            Boolean(process.env.NOMBA_SANDBOX_URL) ||
+            process.env.NEXT_PUBLIC_ENVIRONMENT === "sandbox";
 
-        const authBaseUrl =
-            `${nombaOrigin}/v1`;
-
+        const authBaseUrl = `${nombaOrigin}/v1`;
         const checkoutBaseUrls = isSandbox
-            ? [
-                `${nombaOrigin}/v1`,
-                `${nombaOrigin}/sandbox`,
-            ]
-            : [
-                `${nombaOrigin}/v1`,
-            ];
+            ? [`${nombaOrigin}/v1`, `${nombaOrigin}/sandbox`]
+            : [`${nombaOrigin}/v1`];
 
-        // ---------------------------------------------------------
-        // NOMBA AUTH
-        // ---------------------------------------------------------
+        console.log("🔵 [CHECKOUT API] Requesting Nomba Auth Token...");
 
-        console.log(
-            "🔵 [CHECKOUT API] Requesting Nomba Auth Token..."
-        );
-
-        const authRes =
-            await fetchWithRetry(
-                `${authBaseUrl}/auth/token/issue`,
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-
-                        accountId:
-                            process.env
-                                .NOMBA_ACCOUNT_ID!,
-                    },
-
-                    body: JSON.stringify({
-                        grant_type:
-                            "client_credentials",
-
-                        client_id:
-                            process.env
-                                .NOMBA_CLIENT_ID,
-
-                        client_secret:
-                            process.env
-                                .NOMBA_CLIENT_SECRET,
-                    }),
-                }
-            );
+        const authRes = await fetchWithRetry(`${authBaseUrl}/auth/token/issue`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                accountId: accountId,
+            },
+            body: JSON.stringify({
+                grant_type: "client_credentials",
+                client_id: clientId,
+                client_secret: clientSecret,
+            }),
+        });
 
         if (!authRes.ok) {
-            const errText =
-                await authRes.text();
-
-            throw new Error(
-                `Nomba Auth Failed: ${authRes.status} - ${errText}`
-            );
+            const errText = await authRes.text();
+            throw new Error(`Nomba Auth Failed: ${authRes.status} - ${errText}`);
         }
 
-        const authData =
-            await authRes.json();
-
-        const token =
-            authData.data?.access_token;
+        const authData = await authRes.json();
+        const token = authData.data?.access_token;
 
         if (!token) {
-            throw new Error(
-                "No access token from Nomba"
-            );
+            throw new Error("No access token received from Nomba");
         }
 
-        // ---------------------------------------------------------
-        // CALLBACK URL
-        // ---------------------------------------------------------
-
-        const appUrl =
-            process.env.NEXT_PUBLIC_APP_URL ||
-            "http://localhost:3000";
-
-        const callbackUrl =
-            `${appUrl}/payment/success?reference=${checkoutReference}`;
-
-        // ---------------------------------------------------------
-        // ITEM SUMMARY
-        // ---------------------------------------------------------
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+        const callbackUrl = `${appUrl}/payment/success?reference=${checkoutReference}`;
 
         const itemSummary =
             sellerOrders.length > 1
-                ? `${sellerOrders.reduce(
-                    (acc, curr) =>
-                        acc +
-                        curr.items.length,
-                    0
-                )} items from ${sellerOrders.length
-                } stores`
+                ? `${sellerOrders.reduce((acc, curr) => acc + curr.items.length, 0)} items from ${sellerOrders.length} stores`
                 : `${sellerOrders[0].items.length} items from ${sellerOrders[0].storeName}`;
 
-        // ---------------------------------------------------------
-        // NOMBA CHECKOUT REQUEST
-        // ---------------------------------------------------------
+        const formattedPaymentMethods = paymentMethod?.toLowerCase() === "transfer"
+            ? ["BANK_TRANSFER", "CARD"]
+            : ["CARD", "BANK_TRANSFER"];
 
         const checkoutRequest = {
             method: "POST",
-
             headers: {
-                Authorization:
-                    `Bearer ${token}`,
-
-                accountId:
-                    process.env
-                        .NOMBA_ACCOUNT_ID!,
-
-                "Content-Type":
-                    "application/json",
+                Authorization: `Bearer ${token}`,
+                accountId: accountId,
+                "Content-Type": "application/json",
             },
-
             body: JSON.stringify({
                 order: {
-                    orderReference:
-                        checkoutReference,
-
-                    amount:
-                        calculatedGrandTotal.toFixed(
-                            2
-                        ),
-
+                    orderReference: checkoutReference,
+                    amount: Number(calculatedGrandTotal.toFixed(2)),
                     currency: "NGN",
-
                     callbackUrl,
-
-                    // ✅ CORRECT:
-                    // Use the checkout customer's email.
-                    // Do NOT retrieve it from sellerOrders[0].items[0].
-                    customerEmail:
-                        customerEmail ||
-                        "customer@sowa.com",
-
-                    description:
-                        `Checkout: ${itemSummary}`,
-
-                    allowedPaymentMethods: [
-                        paymentMethod ||
-                        "Card",
-                        "Transfer",
-                    ],
-
+                    customerEmail: customerEmail || "customer@sowa.com",
+                    description: `Checkout: ${itemSummary}`,
+                    allowedPaymentMethods: formattedPaymentMethods,
                     metaData: {
                         checkoutReference,
-
-                        orderIds:
-                            createdOrderIds.join(
-                                ","
-                            ),
-
+                        orderIds: createdOrderIds.join(","),
                         buyerId,
                     },
                 },
             }),
         };
 
-        console.log(
-            "🔵 [CHECKOUT API] Creating Nomba Checkout Order..."
+        console.log("🔵 [CHECKOUT API] Creating Nomba Checkout Order...");
+
+        let nombaOrderRes = await fetchWithRetry(
+            `${checkoutBaseUrls[0]}/checkout/order`,
+            checkoutRequest
         );
-
-        console.log(
-            "📧 [CHECKOUT API] Nomba customer email:",
-            customerEmail
-        );
-
-        // ---------------------------------------------------------
-        // CREATE NOMBA CHECKOUT
-        // ---------------------------------------------------------
-
-        let nombaOrderRes =
-            await fetchWithRetry(
-                `${checkoutBaseUrls[0]}/checkout/order`,
-                checkoutRequest
-            );
-
-        // ---------------------------------------------------------
-        // SANDBOX FALLBACK
-        // ---------------------------------------------------------
 
         if (
             !nombaOrderRes.ok &&
             nombaOrderRes.status === 404 &&
             checkoutBaseUrls.length > 1
         ) {
-            console.warn(
-                "⚠️ Primary Nomba checkout route returned 404; trying sandbox checkout route."
+            console.warn("⚠️ Primary route returned 404; trying sandbox route.");
+            nombaOrderRes = await fetchWithRetry(
+                `${checkoutBaseUrls[1]}/checkout/order`,
+                checkoutRequest
             );
-
-            nombaOrderRes =
-                await fetchWithRetry(
-                    `${checkoutBaseUrls[1]}/checkout/order`,
-                    checkoutRequest
-                );
         }
-
-        // ---------------------------------------------------------
-        // NOMBA ERROR
-        // ---------------------------------------------------------
 
         if (!nombaOrderRes.ok) {
-            const errText =
-                await nombaOrderRes.text();
-
-            throw new Error(
-                `Nomba Order Creation Failed: ${nombaOrderRes.status} - ${errText}`
-            );
+            const errText = await nombaOrderRes.text();
+            throw new Error(`Nomba Order Creation Failed: ${nombaOrderRes.status} - ${errText}`);
         }
 
-        // ---------------------------------------------------------
-        // NOMBA RESPONSE
-        // ---------------------------------------------------------
+        const nombaData = await nombaOrderRes.json();
 
-        const nombaData =
-            await nombaOrderRes.json();
-
-        if (
-            nombaData.code === "00" ||
-            nombaData.status === "success"
-        ) {
-            const rawCheckoutLink =
-                nombaData.data
-                    ?.checkoutLink || "";
-
-            const querySeparator =
-                rawCheckoutLink.includes("?")
-                    ? "&"
-                    : "?";
-
-            const finalCheckoutLink =
-                rawCheckoutLink
-                    ? `${rawCheckoutLink}${querySeparator}orderRef=${checkoutReference}`
-                    : "";
-
-            // -----------------------------------------------------
-            // SUCCESS
-            // -----------------------------------------------------
+        if (nombaData.code === "00" || nombaData.status === "success" || nombaData.data?.checkoutLink) {
+            const rawCheckoutLink = nombaData.data?.checkoutLink || "";
+            const querySeparator = rawCheckoutLink.includes("?") ? "&" : "?";
+            const finalCheckoutLink = rawCheckoutLink
+                ? `${rawCheckoutLink}${querySeparator}orderRef=${checkoutReference}`
+                : "";
 
             return NextResponse.json({
                 success: true,
-
-                checkoutLink:
-                    finalCheckoutLink,
-
-                reference:
-                    checkoutReference,
-
-                orderIds:
-                    createdOrderIds,
+                checkoutLink: finalCheckoutLink,
+                reference: checkoutReference,
+                orderIds: createdOrderIds,
             });
         } else {
-            throw new Error(
-                nombaData.description ||
-                "Nomba Order creation failed"
-            );
+            throw new Error(nombaData.description || "Nomba Order creation failed");
         }
     } catch (error: any) {
-        console.error(
-            "❌ [CHECKOUT API] Fatal Error:",
-            error.message
-        );
-
+        console.error("❌ [CHECKOUT API] Fatal Error:", error.message);
         return NextResponse.json(
-            {
-                error:
-                    error.message ||
-                    "An unexpected error occurred. Please try again.",
-            },
+            { error: error.message || "An unexpected error occurred. Please try again." },
             { status: 500 }
         );
     }
