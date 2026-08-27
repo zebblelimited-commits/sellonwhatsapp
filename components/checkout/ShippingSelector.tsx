@@ -135,7 +135,7 @@ export default function ShippingSelector({
                                         <img
                                             src={option.logo}
                                             alt={option.name}
-                                            className="w-full h-full object-cover scale-100"
+                                            className="w-full h-full object-cover scale-90"
                                             onError={(e) => {
                                                 // Hide broken img tag if image fails to load
                                                 e.currentTarget.style.display = 'none';

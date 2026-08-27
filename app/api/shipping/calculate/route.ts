@@ -75,7 +75,14 @@ export async function POST(req: NextRequest) {
             shippingOptions.push({
                 id: doc.id,
                 name: courier.name,
-                logo: courier.logo || "/images/couriers/fezlogo.png",
+                // Dynamic logo fallback handling for both FEZ and GIG
+                logo: courier.logo || (
+                    courier.code === "gig" || courier.name?.toLowerCase().includes("gig")
+                        ? "/images/couriers/gigilogo.jpg"
+                        : courier.code === "fez" || courier.name?.toLowerCase().includes("fez")
+                            ? "/images/couriers/fezlogo.png"
+                            : "/images/couriers/default.png"
+                ),
                 estimatedDays: courier.estimatedDays || "2-5 Business Days",
                 shippingFee: finalFee,
             });
