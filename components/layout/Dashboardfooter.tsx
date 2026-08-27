@@ -65,9 +65,9 @@ export default function Footer() {
               <Image
                 src="/images/footer-qr.png"
                 alt="Scan to access SellOnWhatsApp"
-                width={120}
-                height={120}
-                className="h-auto w-28 md:w-32 object-contain"
+                width={140}
+                height={140}
+                className="h-auto w-28 md:w-32 object-contain rounded-[10px]"
               />
             </div>
           </div>
