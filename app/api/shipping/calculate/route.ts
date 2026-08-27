@@ -1,7 +1,8 @@
 // app/api/shipping/calculate/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { fetchFezDeliveryCost } from "@/lib/fez"; // Import FEZ helper[cite: 1]
+import { fetchFezDeliveryCost } from "@/lib/fez";
+import { fetchSendboxQuote } from "@/lib/sendbox";
 
 export const runtime = "nodejs";
 
@@ -51,37 +52,57 @@ export async function POST(req: NextRequest) {
         for (const doc of couriersSnap.docs) {
             const courier = doc.data();
             let finalFee = 0;
+            const courierCode = courier.code?.toLowerCase() || "";
+            const courierName = courier.name?.toLowerCase() || "";
 
             // Check if courier is FEZ Delivery
-            if (courier.code === "fez" || courier.name?.toLowerCase().includes("fez")) {
+            if (courierCode === "fez" || courierName.includes("fez")) {
                 try {
-                    // Call live FEZ API[cite: 1]
                     const fezRate = await fetchFezDeliveryCost({
                         state: destinationState,
                         weight: Math.max(1, totalWeightKg),
                     });
-
-                    // totalCost contains the fee including VAT[cite: 1]
                     finalFee = fezRate.totalCost;
                 } catch (fezErr) {
                     console.error("⚠️ [FEZ API RATE ERROR], falling back to static formula:", fezErr);
                     finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
                 }
-            } else {
-                // Fallback / default calculation for other couriers
+            }
+            // Check if courier is Sendbox
+            else if (courierCode === "sendbox" || courierName.includes("sendbox")) {
+                try {
+                    const quotes = await fetchSendboxQuote({
+                        destination_state: destinationState,
+                        weight: Math.max(1, totalWeightKg),
+                    });
+
+                    if (quotes && quotes.length > 0) {
+                        finalFee = quotes[0].fee || quotes[0].amount || 0;
+                    } else {
+                        finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
+                    }
+                } catch (sendboxErr) {
+                    console.error("⚠️ [SENDBOX API ERROR], falling back to static formula:", sendboxErr);
+                    finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
+                }
+            }
+            // Default static calculation for other couriers (e.g., GIG)
+            else {
                 finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
             }
 
             shippingOptions.push({
                 id: doc.id,
                 name: courier.name,
-                // Dynamic logo fallback handling for both FEZ and GIG
+                // Dynamic logo fallback handling for Sendbox, GIG, and FEZ
                 logo: courier.logo || (
-                    courier.code === "gig" || courier.name?.toLowerCase().includes("gig")
-                        ? "/images/couriers/gigilogo.jpg"
-                        : courier.code === "fez" || courier.name?.toLowerCase().includes("fez")
-                            ? "/images/couriers/fezlogo.png"
-                            : "/images/couriers/default.png"
+                    courierCode === "sendbox" || courierName.includes("sendbox")
+                        ? "/images/couriers/sendboxlogo.jpeg"
+                        : courierCode === "gig" || courierName.includes("gig")
+                            ? "/images/couriers/gigilogo.jpg"
+                            : courierCode === "fez" || courierName.includes("fez")
+                                ? "/images/couriers/fezlogo.png"
+                                : "/images/couriers/default.png"
                 ),
                 estimatedDays: courier.estimatedDays || "2-5 Business Days",
                 shippingFee: finalFee,
