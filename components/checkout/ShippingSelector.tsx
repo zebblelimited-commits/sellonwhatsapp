@@ -23,7 +23,7 @@ const SELF_ARRANGED_OPTION: ShippingOption = {
     id: "self_arranged",
     name: "Self-Arranged (Pickup / Direct Arrangement)",
     logo: "/images/couriers/self-arranged.png",
-    estimatedDays: "Flexible / Arrange with Seller",
+    estimatedDays: "Flexible / Seller handles delivery ₦0 shipping fee",
     shippingFee: 0,
 };
 
