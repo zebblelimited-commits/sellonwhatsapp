@@ -128,14 +128,14 @@ export default function ShippingSelector({
                         >
                             <div className="flex items-center gap-3">
                                 <div
-                                    className={`p-2.5 rounded-xl flex items-center justify-center w-11 h-11 ${isSelected ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                                    className={`w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0 ${isSelected ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
                                         }`}
                                 >
                                     {option.logo ? (
                                         <img
                                             src={option.logo}
                                             alt={option.name}
-                                            className="w-full h-full object-cover"
+                                            className="w-full h-full object-cover scale-110"
                                             onError={(e) => {
                                                 // Hide broken img tag if image fails to load
                                                 e.currentTarget.style.display = 'none';
