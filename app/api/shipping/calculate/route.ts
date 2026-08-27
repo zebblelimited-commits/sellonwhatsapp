@@ -1,6 +1,7 @@
 // app/api/shipping/calculate/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { fetchFezDeliveryCost } from "@/lib/fez"; // Import FEZ helper[cite: 1]
 
 export const runtime = "nodejs";
 
@@ -46,30 +47,39 @@ export async function POST(req: NextRequest) {
 
         const shippingOptions: CourierOption[] = [];
 
-        // 2. Calculate dynamic rate for each courier
-        couriersSnap.forEach((doc) => {
+        // 2. Loop through couriers and dynamically fetch or calculate rates
+        for (const doc of couriersSnap.docs) {
             const courier = doc.data();
-            const stateMultipliers = courier.stateMultipliers || {};
+            let finalFee = 0;
 
-            // Get state multiplier (default to 1.5 for unlisted or far states)
-            const multiplier = stateMultipliers[destinationState] || 1.5;
+            // Check if courier is FEZ Delivery
+            if (courier.code === "fez" || courier.name?.toLowerCase().includes("fez")) {
+                try {
+                    // Call live FEZ API[cite: 1]
+                    const fezRate = await fetchFezDeliveryCost({
+                        state: destinationState,
+                        weight: Math.max(1, totalWeightKg),
+                    });
 
-            // Formula: (Base Rate + (Weight * Rate Per Kg)) * State Multiplier
-            const baseRate = Number(courier.baseRate || 1500);
-            const ratePerKg = Number(courier.ratePerKg || 300);
-            const calculatedWeight = Math.max(1, totalWeightKg); // Minimum 1kg charge
-
-            const rawFee = (baseRate + (calculatedWeight - 1) * ratePerKg) * multiplier;
-            const roundedFee = Math.ceil(rawFee / 100) * 100; // Round up to nearest 100 NGN
+                    // totalCost contains the fee including VAT[cite: 1]
+                    finalFee = fezRate.totalCost;
+                } catch (fezErr) {
+                    console.error("⚠️ [FEZ API RATE ERROR], falling back to static formula:", fezErr);
+                    finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
+                }
+            } else {
+                // Fallback / default calculation for other couriers
+                finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
+            }
 
             shippingOptions.push({
                 id: doc.id,
                 name: courier.name,
                 logo: courier.logo || "/images/couriers/fezlogo.png",
                 estimatedDays: courier.estimatedDays || "2-5 Business Days",
-                shippingFee: roundedFee,
+                shippingFee: finalFee,
             });
-        });
+        }
 
         // 3. Sort options from lowest to highest fee
         shippingOptions.sort((a, b) => a.shippingFee - b.shippingFee);
@@ -84,4 +94,18 @@ export async function POST(req: NextRequest) {
         console.error("❌ [SHIPPING CALCULATION ERROR]:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
+}
+
+/**
+ * Helper function for static fee calculation fallback
+ */
+function calculateStaticFallback(courier: any, state: string, weight: number): number {
+    const stateMultipliers = courier.stateMultipliers || {};
+    const multiplier = stateMultipliers[state] || 1.5;
+    const baseRate = Number(courier.baseRate || 1500);
+    const ratePerKg = Number(courier.ratePerKg || 300);
+    const calculatedWeight = Math.max(1, weight);
+
+    const rawFee = (baseRate + (calculatedWeight - 1) * ratePerKg) * multiplier;
+    return Math.ceil(rawFee / 100) * 100; // Round up to nearest 100 NGN
 }

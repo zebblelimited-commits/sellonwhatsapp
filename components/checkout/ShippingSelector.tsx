@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Truck, Check, Loader2, AlertCircle, Store } from "lucide-react";
+import Image from "next/image";
 
 export interface ShippingOption {
     id: string;
@@ -18,7 +19,6 @@ interface ShippingSelectorProps {
     selectedOptionId?: string;
 }
 
-// Fixed Self-Arranged Shipping Option Constant
 const SELF_ARRANGED_OPTION: ShippingOption = {
     id: "self_arranged",
     name: "Self-Arranged (Pickup / Direct Arrangement)",
@@ -35,18 +35,22 @@ export default function ShippingSelector({
 }: ShippingSelectorProps) {
     const [options, setOptions] = useState<ShippingOption[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
-    const [error, setError] = useState<string | null>(null);
+
+    // Keep track of the latest onSelectOption reference
+    const onSelectRef = useRef(onSelectOption);
+    useEffect(() => {
+        onSelectRef.current = onSelectOption;
+    }, [onSelectOption]);
 
     useEffect(() => {
         if (!selectedState) {
             setOptions([]);
-            onSelectOption(null);
+            onSelectRef.current(null);
             return;
         }
 
         const fetchShippingRates = async () => {
             setLoading(true);
-            setError(null);
             try {
                 const response = await fetch("/api/shipping/calculate", {
                     method: "POST",
@@ -64,20 +68,18 @@ export default function ShippingSelector({
                     fetchedCouriers = data.options;
                 }
 
-                // Append Self-Arranged as the first selectable choice alongside calculated couriers
                 const combinedOptions = [SELF_ARRANGED_OPTION, ...fetchedCouriers];
                 setOptions(combinedOptions);
 
-                // Preserve existing selection if valid, otherwise default to first available option
+                // Auto-select valid option without triggering endless loops
                 const currentValid = combinedOptions.find((opt) => opt.id === selectedOptionId);
-                onSelectOption(currentValid || combinedOptions[0]);
+                onSelectRef.current(currentValid || combinedOptions[0]);
 
             } catch (err: any) {
                 console.error("Error fetching shipping rates:", err);
-                // Fallback to at least allowing Self-Arranged pickup even if logistics calculation fails
                 const fallbackOptions = [SELF_ARRANGED_OPTION];
                 setOptions(fallbackOptions);
-                onSelectOption(SELF_ARRANGED_OPTION);
+                onSelectRef.current(SELF_ARRANGED_OPTION);
             } finally {
                 setLoading(false);
             }
@@ -126,12 +128,24 @@ export default function ShippingSelector({
                         >
                             <div className="flex items-center gap-3">
                                 <div
-                                    className={`p-2.5 rounded-xl ${isSelected
-                                        ? "bg-green-100 text-green-700"
-                                        : "bg-gray-100 text-gray-600"
+                                    className={`p-2.5 rounded-xl flex items-center justify-center w-11 h-11 ${isSelected ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
                                         }`}
                                 >
-                                    {isSelfArranged ? <Store size={20} /> : <Truck size={20} />}
+                                    {option.logo ? (
+                                        <img
+                                            src={option.logo}
+                                            alt={option.name}
+                                            className="w-6 h-6 object-contain"
+                                            onError={(e) => {
+                                                // Hide broken img tag if image fails to load
+                                                e.currentTarget.style.display = 'none';
+                                            }}
+                                        />
+                                    ) : isSelfArranged ? (
+                                        <Store size={20} />
+                                    ) : (
+                                        <Truck size={20} />
+                                    )}
                                 </div>
                                 <div>
                                     <p className="font-bold text-sm text-gray-900">{option.name}</p>
