@@ -71,7 +71,12 @@ export default function Header({ isStorePage = false, storeName = "" }) {
             const storeData = storeSnap.exists() ? storeSnap.data() : vendorSnap?.data();
             setIsAdmin(false);
             setIsBuyer(false);
-            setVendorUsername(storeData?.username || "");
+
+            // Smart fallback: use username, or generate a slug from storeName if username is missing
+            const extractedUsername = storeData?.username ||
+              (storeData?.storeName ? storeData.storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-') : "");
+
+            setVendorUsername(extractedUsername);
           } else {
             setIsAdmin(false);
             setVendorUsername("");
@@ -165,7 +170,8 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   const getStoreUrl = () => {
     if (typeof window !== 'undefined') {
       const origin = window.location.origin;
-      return vendorUsername ? `${origin}/${vendorUsername}` : origin;
+      // Fallback to /store if no username is found, preventing just the bare domain
+      return vendorUsername ? `${origin}/${vendorUsername}` : `${origin}/store`;
     }
     return "https://sellonwhatsapp.com";
   };

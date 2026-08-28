@@ -27,70 +27,69 @@ export default function QrCodeModal({
     const [scanResult, setScanResult] = useState<string | null>(null);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
-    // Initialize QR Code
+    // Initialize and Update QR Code
     useEffect(() => {
-        if (qrCodeRef.current && !qrCodeInstance.current) {
+        if (!isOpen) return;
+
+        const targetUrl = storeUrl || "https://sellonwhatsapp.com";
+
+        if (!qrCodeInstance.current) {
+            // Initialize using your Knowledge Base structure + #09A03D green
             qrCodeInstance.current = new QRCodeStyling({
-                width: 300, // Increased size to prevent clipping
-                height: 300,
+                width: 280,
+                height: 280,
                 type: "canvas",
-                data: storeUrl || "https://example.com",
-                margin: 10,
+                data: targetUrl,
+                margin: 20,
                 qrOptions: {
                     typeNumber: 0,
                     mode: "Byte",
-                    errorCorrectionLevel: "Q",
+                    errorCorrectionLevel: "Q"
                 },
                 imageOptions: {
+                    saveAsBlob: true,
                     hideBackgroundDots: true,
                     imageSize: 0.4,
-                    margin: 6,
+                    margin: 4
                 },
                 dotsOptions: {
                     type: "dots",
-                    color: "#09A03D", // Updated green shade
+                    color: "#09A03D",
                     gradient: {
                         type: "linear",
                         rotation: 0,
                         colorStops: [
                             { offset: 0, color: "#09A03D" },
-                            { offset: 1, color: "#078030" },
-                        ],
-                    },
+                            { offset: 1, color: "#078030" }
+                        ]
+                    }
                 },
                 backgroundOptions: {
                     color: "#ffffff",
+                    round: 0
                 },
                 cornersSquareOptions: {
                     type: "extra-rounded",
-                    color: "#09A03D",
+                    color: "#09A03D"
                 },
                 cornersDotOptions: {
                     type: "dot",
-                    color: "#09A03D",
+                    color: "#09A03D"
                 },
                 image: "/icons/sowaicon.png",
             });
+        } else {
+            // If instance exists, just update the URL
+            qrCodeInstance.current.update({ data: targetUrl });
+        }
 
+        // Safely append to the DOM
+        if (qrCodeRef.current) {
+            qrCodeRef.current.innerHTML = ""; // Clear any previous canvas
             qrCodeInstance.current.append(qrCodeRef.current);
         }
 
-        return () => {
-            if (qrCodeRef.current) {
-                qrCodeRef.current.innerHTML = "";
-                qrCodeInstance.current = null;
-            }
-        };
-    }, []);
-
-    // Update QR Code when storeUrl changes
-    useEffect(() => {
-        if (qrCodeInstance.current && storeUrl) {
-            qrCodeInstance.current.update({
-                data: storeUrl,
-            });
-        }
-    }, [storeUrl]);
+    }, [isOpen, storeUrl]);
 
     // Camera Scanner Logic
     const startScanning = async () => {
@@ -100,23 +99,18 @@ export default function QrCodeModal({
 
         try {
             await html5QrCodeRef.current.start(
-                { facingMode: "environment" }, // Prefer back camera on mobile
-                {
-                    fps: 10,
-                    qrbox: { width: 250, height: 250 }
-                },
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 250, height: 250 } },
                 (decodedText) => {
                     setScanResult(decodedText);
                     stopScanning();
                 },
-                () => {
-                    // Ignore parse errors while scanning
-                }
+                () => { /* Ignore parse errors while scanning */ }
             );
             setIsScanning(true);
         } catch (err) {
-            console.error("Failed to start scanning. Ensure camera permissions are granted.", err);
-            alert("Could not access camera. Please check your browser permissions.");
+            console.error("Camera error:", err);
+            alert("Could not access camera. Please check browser permissions.");
         }
     };
 
@@ -136,7 +130,6 @@ export default function QrCodeModal({
             }
             setScanResult(null);
         }
-
         return () => {
             if (html5QrCodeRef.current && isScanning) {
                 html5QrCodeRef.current.stop().catch(() => { });
@@ -188,22 +181,18 @@ export default function QrCodeModal({
                         </svg>
                     </button>
 
-                    {/* Tabs with 12px border radius */}
+                    {/* Tabs */}
                     <div className="flex p-2 bg-gray-50 border-b border-gray-100">
                         <button
                             onClick={() => setActiveTab("generate")}
-                            className={`flex-1 py-3 px-4 text-sm font-semibold rounded-[12px] transition-all duration-200 ${activeTab === "generate"
-                                    ? "bg-[#09A03D] text-white shadow-md"
-                                    : "text-gray-500 hover:bg-gray-100"
+                            className={`flex-1 py-3 px-4 text-sm font-semibold rounded-[12px] transition-all duration-200 ${activeTab === "generate" ? "bg-[#09A03D] text-white shadow-md" : "text-gray-500 hover:bg-gray-100"
                                 }`}
                         >
                             Generate QR Code
                         </button>
                         <button
                             onClick={() => setActiveTab("scan")}
-                            className={`flex-1 py-3 px-4 text-sm font-semibold rounded-[12px] transition-all duration-200 ${activeTab === "scan"
-                                    ? "bg-[#09A03D] text-white shadow-md"
-                                    : "text-gray-500 hover:bg-gray-100"
+                            className={`flex-1 py-3 px-4 text-sm font-semibold rounded-[12px] transition-all duration-200 ${activeTab === "scan" ? "bg-[#09A03D] text-white shadow-md" : "text-gray-500 hover:bg-gray-100"
                                 }`}
                         >
                             Scan QR Code
@@ -214,8 +203,8 @@ export default function QrCodeModal({
                     <div className="p-6">
                         {activeTab === "generate" ? (
                             <div className="flex flex-col items-center space-y-6">
-                                {/* QR Code Display with rounded background */}
-                                <div className="bg-gray-50 p-6 rounded-[20px] border border-gray-100 shadow-inner flex items-center justify-center min-h-[340px] w-full">
+                                {/* QR Code Display */}
+                                <div className="bg-gray-50 p-6 rounded-[20px] border border-gray-100 shadow-inner flex items-center justify-center min-h-[320px] w-full">
                                     <div ref={qrCodeRef} className="flex justify-center items-center" />
                                 </div>
 
@@ -297,7 +286,7 @@ export default function QrCodeModal({
                                         )}
 
                                         <p className="text-gray-500 text-xs text-center px-4 max-w-[300px]">
-                                            Position the QR code within the frame. Ensure you have granted camera permissions in your browser.
+                                            Position the QR code within the frame. Ensure you have granted camera permissions.
                                         </p>
                                     </>
                                 )}
