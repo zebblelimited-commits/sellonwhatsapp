@@ -11,14 +11,12 @@ import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { collection, query as firestoreQuery, getDocs, getDoc, doc, limit } from "firebase/firestore";
 import { useCart } from "@/contexts/CartContext";
-import OffCanvasCart from "@/components/cart/OffCanvasCart";
 import dynamic from "next/dynamic";
 
-// Dynamically import the modal and disable SSR to prevent canvas/window errors
+// Dynamic import to prevent SSR issues with canvas/camera libraries
 const QrCodeModal = dynamic(() => import("@/components/store/QrCode"), {
   ssr: false,
 });
-
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
@@ -33,6 +31,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   const [query, setQuery] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [vendorUsername, setVendorUsername] = useState("");
+  const [storeData, setStoreData] = useState<any>(null); // NEW: Store complete store data
   const [isBuyer, setIsBuyer] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -67,31 +66,36 @@ export default function Header({ isStorePage = false, storeName = "" }) {
             setIsAdmin(true);
             setIsBuyer(false);
             setVendorUsername("");
+            setStoreData(null);
           } else if (storeSnap.exists() || vendorSnap?.exists()) {
-            const storeData = storeSnap.exists() ? storeSnap.data() : vendorSnap?.data();
+            const data = storeSnap.exists() ? storeSnap.data() : vendorSnap?.data();
             setIsAdmin(false);
             setIsBuyer(false);
 
             // Smart fallback: use username, or generate a slug from storeName if username is missing
-            const extractedUsername = storeData?.username ||
-              (storeData?.storeName ? storeData.storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-') : "");
+            const extractedUsername = data?.username ||
+              (data?.storeName ? data.storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-') : "");
 
             setVendorUsername(extractedUsername);
+            setStoreData(data); // NEW: Save complete store data for the QR banner
           } else {
             setIsAdmin(false);
             setVendorUsername("");
             setIsBuyer(Boolean(buyerSnap?.exists() || userSnap?.exists()));
+            setStoreData(null); // NEW: Clear store data for buyers
           }
         } catch (error) {
           console.error("Header: Error checking vendor status:", error);
           setVendorUsername("");
           setIsBuyer(false);
           setIsAdmin(false);
+          setStoreData(null);
         }
       } else {
         setVendorUsername("");
         setIsBuyer(false);
         setIsAdmin(false);
+        setStoreData(null);
       }
     });
     return () => unsubscribe();
@@ -170,7 +174,6 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   const getStoreUrl = () => {
     if (typeof window !== 'undefined') {
       const origin = window.location.origin;
-      // Fallback to /store if no username is found, preventing just the bare domain
       return vendorUsername ? `${origin}/${vendorUsername}` : `${origin}/store`;
     }
     return "https://sellonwhatsapp.com";
@@ -181,7 +184,8 @@ export default function Header({ isStorePage = false, storeName = "" }) {
     <button
       type="button"
       onClick={() => setIsQrModalOpen(true)}
-      aria-label="Scan Store QR Code"
+      aria-label="Open QR Code"
+      title="QR Code"
       className={`p-2 text-gray-600 hover:text-[#00a63e] transition-colors rounded-xl hover:bg-gray-50 active:scale-95 ${className}`}
     >
       <QrCode size={20} />
@@ -335,7 +339,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
             )}
           </div>
 
-          {/* Mobile Quick Action Buttons (QR scanner placed directly before Shopping Bag) */}
+          {/* Mobile Quick Action Buttons */}
           <div className="flex items-center lg:hidden shrink-0">
             <QrIconButton />
             <CartIcon />
@@ -352,7 +356,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
           <Link href="/faq" className="hover:text-green-600 transition-colors whitespace-nowrap">FAQ</Link>
         </nav>
 
-        {/* Desktop Quick Actions (QR scanner placed directly before Shopping Bag) */}
+        {/* Desktop Quick Actions */}
         <div className="hidden lg:flex items-center gap-2 shrink-0">
           <QrIconButton />
           <CartIcon />
@@ -379,12 +383,22 @@ export default function Header({ isStorePage = false, storeName = "" }) {
         </div>
       </header>
 
-      {/* QR Code Modal */}
+      {/* QR Code Modal with Intelligent Defaults and Full Store Data */}
       <QrCodeModal
         isOpen={isQrModalOpen}
         onClose={() => setIsQrModalOpen(false)}
         storeUrl={getStoreUrl()}
-        storeName={storeName || (vendorUsername ? `${vendorUsername}'s Store` : "Sowa")}
+        storeName={storeName || (vendorUsername ? `${vendorUsername}'s Store` : "SellOnWhatsApp")}
+        store={storeData ? {
+          storeName: storeData.storeName,
+          username: storeData.username || vendorUsername,
+          description: storeData.description,
+          logoUrl: storeData.logoUrl,
+          phone: storeData.phone,
+          address: storeData.address,
+          socials: storeData.socials,
+        } : undefined}
+        defaultTab={vendorUsername ? "generate" : "scan"}
       />
     </>
   );
