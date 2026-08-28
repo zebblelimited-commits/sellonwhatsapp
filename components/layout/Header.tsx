@@ -12,6 +12,7 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { collection, query as firestoreQuery, getDocs, getDoc, doc, limit } from "firebase/firestore";
 import { useCart } from "@/contexts/CartContext";
 import OffCanvasCart from "@/components/cart/OffCanvasCart";
+import QrCodeModal from "@/components/store/QrCode";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
@@ -153,6 +154,15 @@ export default function Header({ isStorePage = false, storeName = "" }) {
   };
 
   const dashboardUrl = isAdmin ? "/admin" : isBuyer ? "/buyer/dashboard" : "/dashboard";
+
+  // Construct store URL for QR code
+  const getStoreUrl = () => {
+    if (typeof window !== 'undefined') {
+      const origin = window.location.origin;
+      return vendorUsername ? `${origin}/${vendorUsername}` : origin;
+    }
+    return "https://sellonwhatsapp.com";
+  };
 
   // QR Code Icon Component Trigger
   const QrIconButton = ({ className = "" }: { className?: string }) => (
@@ -357,45 +367,13 @@ export default function Header({ isStorePage = false, storeName = "" }) {
         </div>
       </header>
 
-      {/* COMING SOON QR SCANNER MODAL */}
-      {isQrModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
-            onClick={() => setIsQrModalOpen(false)}
-          />
-          <div className="relative bg-white rounded-3xl w-full max-w-sm p-6 text-center shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
-            <button
-              type="button"
-              onClick={() => setIsQrModalOpen(false)}
-              className="absolute top-4 right-4 p-2 bg-gray-50 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-700 transition-colors"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="w-16 h-16 bg-green-50 text-[#00a63e] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-green-100 shadow-inner">
-              <QrCode size={32} />
-            </div>
-
-            <div className="inline-flex items-center gap-1.5 bg-green-100/60 text-[#00a63e] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3">
-              <Sparkles size={12} /> Coming Soon
-            </div>
-
-            <h3 className="text-lg font-extrabold text-gray-900 mb-2">Instant Store QR Scanner</h3>
-            <p className="text-xs text-gray-500 leading-relaxed mb-6 font-medium">
-              We are building a seamless QR scanning experience that allows you to scan physical store codes, instantly browse vendor catalogs, and complete checkouts on the spot.
-            </p>
-
-            <button
-              type="button"
-              onClick={() => setIsQrModalOpen(false)}
-              className="w-full py-3.5 rounded-xl bg-[#00a63e] hover:bg-[#008c34] text-white font-extrabold text-xs uppercase tracking-wider transition-all active:scale-95 shadow-md shadow-green-600/10"
-            >
-              Got it
-            </button>
-          </div>
-        </div>
-      )}
+      {/* QR Code Modal */}
+      <QrCodeModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        storeUrl={getStoreUrl()}
+        storeName={storeName || (vendorUsername ? `${vendorUsername}'s Store` : "Sowa")}
+      />
     </>
   );
 }
