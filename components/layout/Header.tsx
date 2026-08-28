@@ -12,7 +12,13 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { collection, query as firestoreQuery, getDocs, getDoc, doc, limit } from "firebase/firestore";
 import { useCart } from "@/contexts/CartContext";
 import OffCanvasCart from "@/components/cart/OffCanvasCart";
-import QrCodeModal from "@/components/store/QrCode";
+import dynamic from "next/dynamic";
+
+// Dynamically import the modal and disable SSR to prevent canvas/window errors
+const QrCodeModal = dynamic(() => import("@/components/store/QrCode"), {
+  ssr: false,
+});
+
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
