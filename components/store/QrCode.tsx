@@ -27,54 +27,61 @@ export default function QrCodeModal({
     const [scanResult, setScanResult] = useState<string | null>(null);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
-    // Initialize and Update QR Code
+    // 1. QR Code Generation Effect
     useEffect(() => {
-        if (!isOpen) return;
+        // CRITICAL: If modal is closed or we are on the scan tab, clear the QR code container
+        if (!isOpen || activeTab !== "generate") {
+            if (qrCodeRef.current) {
+                qrCodeRef.current.innerHTML = "";
+            }
+            return;
+        }
 
         const targetUrl = storeUrl || "https://sellonwhatsapp.com";
 
         if (!qrCodeInstance.current) {
-            // Initialize using your Knowledge Base structure + #09A03D green
+            // EXACT JSON configuration from options (4).json
             qrCodeInstance.current = new QRCodeStyling({
-                width: 280,
-                height: 280,
+                width: 250,
+                height: 250,
                 type: "canvas",
                 data: targetUrl,
                 margin: 20,
                 qrOptions: {
                     typeNumber: 0,
                     mode: "Byte",
-                    errorCorrectionLevel: "Q"
+                    errorCorrectionLevel: "Q",
                 },
                 imageOptions: {
                     saveAsBlob: true,
                     hideBackgroundDots: true,
                     imageSize: 0.4,
-                    margin: 4
+                    margin: 4,
                 },
                 dotsOptions: {
                     type: "dots",
-                    color: "#09A03D",
+                    color: "#0c2b08",
+                    roundSize: true,
                     gradient: {
                         type: "linear",
                         rotation: 0,
                         colorStops: [
-                            { offset: 0, color: "#09A03D" },
-                            { offset: 1, color: "#078030" }
-                        ]
-                    }
+                            { offset: 0, color: "#013c02" },
+                            { offset: 1, color: "#1e8a00" },
+                        ],
+                    },
                 },
                 backgroundOptions: {
-                    color: "#ffffff",
-                    round: 0
+                    round: 0,
+                    color: "#f5f5f5",
                 },
                 cornersSquareOptions: {
                     type: "extra-rounded",
-                    color: "#09A03D"
+                    color: "#03a51e",
                 },
                 cornersDotOptions: {
                     type: "dot",
-                    color: "#09A03D"
+                    color: "#000000",
                 },
                 image: "/icons/sowaicon.png",
             });
@@ -85,13 +92,19 @@ export default function QrCodeModal({
 
         // Safely append to the DOM
         if (qrCodeRef.current) {
-            qrCodeRef.current.innerHTML = ""; // Clear any previous canvas
+            qrCodeRef.current.innerHTML = ""; // Ensure clean slate
             qrCodeInstance.current.append(qrCodeRef.current);
         }
 
-    }, [isOpen, storeUrl]);
+        // Cleanup when tab changes or modal closes
+        return () => {
+            if (qrCodeRef.current) {
+                qrCodeRef.current.innerHTML = "";
+            }
+        };
+    }, [isOpen, activeTab, storeUrl]);
 
-    // Camera Scanner Logic
+    // 2. Camera Scanner Logic
     const startScanning = async () => {
         if (!html5QrCodeRef.current) {
             html5QrCodeRef.current = new Html5Qrcode("qr-reader");
@@ -105,12 +118,14 @@ export default function QrCodeModal({
                     setScanResult(decodedText);
                     stopScanning();
                 },
-                () => { /* Ignore parse errors while scanning */ }
+                () => {
+                    // Ignore parse errors while scanning
+                }
             );
             setIsScanning(true);
         } catch (err) {
             console.error("Camera error:", err);
-            alert("Could not access camera. Please check browser permissions.");
+            alert("Could not access camera. Please ensure:\n1. You are using HTTPS (or localhost).\n2. You have granted camera permissions in your browser settings.");
         }
     };
 
@@ -137,7 +152,7 @@ export default function QrCodeModal({
         };
     }, [isOpen, activeTab, isScanning]);
 
-    // Print Handler
+    // 3. Print Handler
     const handlePrint = async () => {
         if (!qrCodeInstance.current) return;
         const blob = (await qrCodeInstance.current.getRawData("png")) as Blob;
@@ -203,8 +218,8 @@ export default function QrCodeModal({
                     <div className="p-6">
                         {activeTab === "generate" ? (
                             <div className="flex flex-col items-center space-y-6">
-                                {/* QR Code Display */}
-                                <div className="bg-gray-50 p-6 rounded-[20px] border border-gray-100 shadow-inner flex items-center justify-center min-h-[320px] w-full">
+                                {/* QR Code Display with 10px border radius */}
+                                <div className="bg-[#f5f5f5] p-6 rounded-[10px] border border-gray-100 shadow-inner flex items-center justify-center min-h-[290px] w-full overflow-hidden">
                                     <div ref={qrCodeRef} className="flex justify-center items-center" />
                                 </div>
 
@@ -237,8 +252,8 @@ export default function QrCodeModal({
                                 </div>
                             </div>
                         ) : (
-                            /* Scan Tab UI */
-                            <div className="flex flex-col items-center justify-center space-y-4 py-4 w-full">
+                            /* Scan Tab UI - Key forces clean remount to prevent "empty page" camera errors */
+                            <div key="scanner-view" className="flex flex-col items-center justify-center space-y-4 py-4 w-full">
                                 {scanResult ? (
                                     <div className="text-center space-y-4 w-full">
                                         <div className="bg-green-50 border border-[#09A03D]/20 rounded-xl p-4">
@@ -254,7 +269,7 @@ export default function QrCodeModal({
                                     </div>
                                 ) : (
                                     <>
-                                        <div id="qr-reader" className="w-full max-w-[300px] rounded-[20px] overflow-hidden bg-gray-900 flex items-center justify-center min-h-[300px] relative">
+                                        <div id="qr-reader" className="w-full max-w-[300px] rounded-[10px] overflow-hidden bg-gray-900 flex items-center justify-center min-h-[300px] relative">
                                             {!isScanning && (
                                                 <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
                                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -286,7 +301,7 @@ export default function QrCodeModal({
                                         )}
 
                                         <p className="text-gray-500 text-xs text-center px-4 max-w-[300px]">
-                                            Position the QR code within the frame. Ensure you have granted camera permissions.
+                                            Position the QR code within the frame. Ensure you have granted camera permissions and are using HTTPS.
                                         </p>
                                     </>
                                 )}
