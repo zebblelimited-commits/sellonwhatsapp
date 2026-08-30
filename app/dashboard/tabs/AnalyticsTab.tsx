@@ -37,6 +37,7 @@ type FirestoreDate = { toDate?: () => Date } | Date | string | number | null | u
 interface Order {
   id: string;
   totalAmount?: number;
+  total?: number;
   createdAt?: FirestoreDate;
   status?: string;
   paymentStatus?: string;
@@ -255,7 +256,7 @@ export default function AnalyticsTab({ orders = [], stats = {}, storeId }: Analy
       whatsappClicks,
       totalEvents: analyticsData.length,
       conversionRate: views ? ((buyNowClicks / views) * 100).toFixed(1) : "0.0",
-      revenue: paidOrders.reduce((total, order) => total + amountOf(order.totalAmount), 0),
+      revenue: paidOrders.reduce((total, order) => total + amountOf(order.totalAmount ?? order.total), 0),
     };
   }, [analyticsData, paidOrders]);
 
@@ -265,7 +266,7 @@ export default function AnalyticsTab({ orders = [], stats = {}, storeId }: Analy
       const date = toDate(order.createdAt);
       if (!date) return;
       const bucket = values.get(bucketKey(date, timeRange));
-      if (bucket) bucket.Sales += amountOf(order.totalAmount);
+      if (bucket) bucket.Sales += amountOf(order.totalAmount ?? order.total);
     });
     return [...values.values()];
   }, [buckets, paidOrders, timeRange]);
@@ -273,7 +274,7 @@ export default function AnalyticsTab({ orders = [], stats = {}, storeId }: Analy
   const escrowData = useMemo(() => {
     const totals = { locked: 0, released: 0, pending: 0 };
     filteredOrders.forEach((order) => {
-      const amount = amountOf(order.totalAmount);
+      const amount = amountOf(order.totalAmount ?? order.total);
       const status = normalizedStatus(order);
       if (["PAID_HELD", "SHIPPED", "DISPUTED"].includes(status)) totals.locked += amount;
       else if (status === "COMPLETED") totals.released += amount;
@@ -315,7 +316,7 @@ export default function AnalyticsTab({ orders = [], stats = {}, storeId }: Analy
       if (!date) return;
       const bucket = values.get(bucketKey(date, timeRange));
       if (bucket) {
-        bucket.amount += amountOf(order.totalAmount);
+        bucket.amount += amountOf(order.totalAmount ?? order.total);
         bucket.count += 1;
         bucket.AOV = bucket.count ? Math.round(bucket.amount / bucket.count) : 0;
       }

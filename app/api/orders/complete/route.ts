@@ -33,7 +33,8 @@ export async function POST(request: NextRequest) {
       if (!orderSnap.exists) throw new CompletionError("Order not found", 404);
 
       const orderData = orderSnap.data() || {};
-      if (orderData.vendorId !== userId && orderData.buyerId !== userId) {
+      const sellerId = typeof orderData.storeId === "string" ? orderData.storeId : orderData.vendorId;
+      if (sellerId !== userId && orderData.buyerId !== userId) {
         throw new CompletionError("Forbidden", 403);
       }
 
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
         throw new CompletionError("Order has an invalid amount", 409);
       }
 
-      const storeId = orderData.vendorId;
+      const storeId = typeof orderData.storeId === "string" ? orderData.storeId : orderData.vendorId;
       if (!storeId || typeof storeId !== "string") {
         throw new CompletionError("Order has no vendor wallet", 409);
       }

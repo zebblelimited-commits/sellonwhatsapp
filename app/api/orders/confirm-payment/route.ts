@@ -183,7 +183,13 @@ export async function POST(request: NextRequest) {
           throw new PaymentConfirmationError("This order is already settled", 409);
         }
 
-        const orderAmount = amountOf(currentOrder.escrowReservedAmount ?? currentOrder.escrowReservationAmount ?? currentOrder.totalAmount);
+        const orderAmount = amountOf(
+          currentOrder.escrowReservedAmount ??
+          currentOrder.escrowReservationAmount ??
+          currentOrder.escrowAmount ??
+          currentOrder.totalAmount ??
+          currentOrder.total,
+        );
 
         // ✅ Support both vendorId (legacy) and storeId (new multi-seller)
         const vendorId = typeof currentOrder.vendorId === "string" ? currentOrder.vendorId.trim() : (typeof currentOrder.storeId === "string" ? currentOrder.storeId.trim() : "");

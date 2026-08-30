@@ -68,7 +68,7 @@ export async function PATCH(
       const orderStatus = normalizedStatus(order.status);
       const fundsState = String(order.fundsState || "").trim().toLowerCase();
       const orderAmount = finiteAmount(
-        order.escrowReservedAmount ?? order.escrowReservationAmount ?? order.totalAmount,
+        order.escrowReservedAmount ?? order.escrowReservationAmount ?? order.escrowAmount ?? order.totalAmount ?? order.total,
       );
       const existingReservationAmount = finiteAmount(order.escrowReservedAmount ?? order.escrowReservationAmount);
 
@@ -96,7 +96,11 @@ export async function PATCH(
         throw new OrderReconciliationError("Order has an invalid escrow amount", 409);
       }
 
-      const vendorId = typeof order.vendorId === "string" ? order.vendorId.trim() : "";
+      const vendorId = typeof order.storeId === "string"
+        ? order.storeId.trim()
+        : typeof order.vendorId === "string"
+          ? order.vendorId.trim()
+          : "";
       if (!vendorId) throw new OrderReconciliationError("Order has no seller wallet reference", 409);
 
       const storeRef = adminDb.collection("stores").doc(vendorId);
@@ -123,7 +127,7 @@ export async function PATCH(
         // it from canonical held-order reservations before adding this verified
         // payment, all inside the same transaction.
         const vendorOrders = await transaction.get(
-          adminDb.collection("orders").where("vendorId", "==", vendorId),
+          adminDb.collection("orders").where("storeId", "==", vendorId),
         );
         escrowBalance = vendorOrders.docs.reduce((total, vendorOrderSnap) => {
           const vendorOrder = vendorOrderSnap.data() || {};

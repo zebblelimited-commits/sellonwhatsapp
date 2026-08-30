@@ -50,9 +50,12 @@ export default function VendorChatTab({ vendorId, storeName }: { vendorId: strin
 
   useEffect(() => {
     if (!vendorId) return;
-    void getDocs(query(collection(db, "orders"), where("vendorId", "==", vendorId), limit(100))).then((snapshot) => {
+    void Promise.all([
+      getDocs(query(collection(db, "orders"), where("storeId", "==", vendorId), limit(100))),
+      getDocs(query(collection(db, "orders"), where("vendorId", "==", vendorId), limit(100))),
+    ]).then(([storeOrders, legacyOrders]) => {
       const options = new Map<string, BuyerOption>();
-      snapshot.docs.forEach((item) => {
+      [...storeOrders.docs, ...legacyOrders.docs].forEach((item) => {
         const data = item.data();
         const id = String(data.buyerId || "");
         if (id) options.set(id, { id, name: String(data.customerName || data.buyerName || id), email: String(data.customerEmail || data.buyerEmail || "") });

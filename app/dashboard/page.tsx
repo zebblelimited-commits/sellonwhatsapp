@@ -268,16 +268,31 @@ function Dashboard() {
         }, (err) => console.error("Handled Products permission exclusion:", err));
         activeListeners.push(unsubProducts);
 
-        const sQuery = query(
-          collection(db, "orders"),
-          where("vendorId", "==", user.uid),
-          where("status", "in", ["PENDING_PAYMENT", "PAID_HELD", "SHIPPED", "COMPLETED", "DISPUTED"])
-        );
-        const unsubSales = onSnapshot(sQuery, (snapshot) => {
-          const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setOrders(ordersData);
-        }, (err) => console.error("Handled Orders stream exclusion:", err));
-        activeListeners.push(unsubSales);
+        // New checkout orders are owned by storeId. Keep a second legacy
+        // listener for older orders that only contain vendorId, then merge by
+        // document ID so multi-seller orders are not duplicated.
+        const ordersBySource = new Map<string, Map<string, any>>();
+        const publishOrders = () => {
+          const merged = new Map<string, any>();
+          ordersBySource.forEach((sourceOrders) => {
+            sourceOrders.forEach((order, orderId) => merged.set(orderId, order));
+          });
+          setOrders(Array.from(merged.values()));
+        };
+
+        (["storeId", "vendorId"] as const).forEach((ownerField) => {
+          const sourceOrders = new Map<string, any>();
+          ordersBySource.set(ownerField, sourceOrders);
+          const ordersQuery = query(collection(db, "orders"), where(ownerField, "==", user.uid));
+          const unsubscribeOrders = onSnapshot(ordersQuery, (snapshot) => {
+            sourceOrders.clear();
+            snapshot.docs.forEach((orderDoc) => {
+              sourceOrders.set(orderDoc.id, { id: orderDoc.id, ...orderDoc.data() });
+            });
+            publishOrders();
+          }, (err) => console.error(`Handled Orders stream exclusion (${ownerField}):`, err));
+          activeListeners.push(unsubscribeOrders);
+        });
 
         const unsubPayouts = onSnapshot(
           query(collection(db, "payouts"), where("vendorId", "==", user.uid)),
@@ -500,7 +515,7 @@ function Dashboard() {
   // ✅ FIX: Calculate real-time total sales by summing up items from your active orders array
   const realTimeTotalSales = orders
     .filter(order => ["PAID_HELD", "SHIPPED", "COMPLETED"].includes(order.status?.toUpperCase()))
-    .reduce((sum, order) => sum + Number(order.totalAmount || order.amount || 0), 0);
+    .reduce((sum, order) => sum + Number(order.totalAmount || order.total || order.amount || 0), 0);
 
   // ✅ FIX: Extract follower metrics from your store snapshot document structure
   const totalFollowersCount = 

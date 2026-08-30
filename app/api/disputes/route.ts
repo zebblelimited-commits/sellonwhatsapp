@@ -40,16 +40,18 @@ export async function POST(request: NextRequest) {
 
       const disputeRef = adminDb.collection("disputes").doc();
       const now = FieldValue.serverTimestamp();
+      const vendorId = typeof order.storeId === "string" ? order.storeId : typeof order.vendorId === "string" ? order.vendorId : "";
+
       transaction.create(disputeRef, {
         orderId,
         buyerId: decoded.uid,
-        vendorId: typeof order.vendorId === "string" ? order.vendorId : "",
+        vendorId,
         buyerEmail: decoded.email || order.customerEmail || null,
         vendorName: order.storeName || null,
         reason,
         description,
         evidence,
-        amount: Number(order.totalAmount || 0),
+        amount: Number(order.totalAmount ?? order.total ?? 0),
         status: "open",
         read: false,
         buyerResponded: false,
@@ -67,7 +69,6 @@ export async function POST(request: NextRequest) {
         updatedAt: now,
       });
 
-      const vendorId = typeof order.vendorId === "string" ? order.vendorId : "";
       if (vendorId) {
         const notificationRef = adminDb.collection("notifications").doc();
         transaction.create(notificationRef, {

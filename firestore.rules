@@ -126,7 +126,16 @@ service cloud.firestore {
       allow update: if 
         (request.auth != null && request.auth.uid == storeId) ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'followerCount', 'views', 'clicks', 'buy_now_clicks', 'whatsapp_clicks', 'updatedAt'
+          'followersCount', 
+          'followerCount', 
+          'views', 
+          'clicks', 
+          'buy_now_clicks', 
+          'whatsapp_clicks', 
+          'add_to_cart_clicks', // ✅ NEW: Allows incrementing add to cart clicks
+          'follows',            // ✅ NEW: Allows incrementing follows
+          'unfollows',          // ✅ NEW: Allows incrementing unfollows
+          'updatedAt'
         ]);
       
       // ✅ Only owner can create/delete their store profile
@@ -159,28 +168,34 @@ service cloud.firestore {
     }
     
     // ═══════════════════════════════════════════════════════════
-    // 🛒 ORDERS: Buyer/vendor/admin access
+    // 🛒 ORDERS: Buyer/vendor/storeId/admin access (FIXED ROOT CAUSE)
     // ═══════════════════════════════════════════════════════════
     match /orders/{orderId} {
+      // ✅ FIXED: Seller dashboard can now read orders via storeId OR legacy vendorId
       allow read: if request.auth != null && (
+        resource.data.storeId == request.auth.uid ||
         resource.data.vendorId == request.auth.uid || 
         resource.data.buyerId == request.auth.uid ||
         isActiveAdmin()
       );
       
+      // ✅ Checkout writes compatible storeId, vendorId, totalAmount, and customer fields
       allow create: if request.auth != null && 
         request.resource.data.buyerId == request.auth.uid &&
+        request.resource.data.storeId is string &&
         request.resource.data.vendorId is string &&
         request.resource.data.totalAmount is number &&
         request.resource.data.status == "PAID_HELD" &&
         request.resource.data.createdAt is timestamp;
       
-            allow update: if request.auth != null && (
+      // ✅ Updated payment confirmation, completion, and reconciliation logic to support storeId
+      allow update: if request.auth != null && (
+        resource.data.storeId == request.auth.uid ||
         resource.data.vendorId == request.auth.uid || 
         resource.data.buyerId == request.auth.uid
       ) && request.resource.data.status in [
-        "PAID_HELD", "SHIPPED", "COMPLETED", "DISPUTED", "CANCELLED",
-        "paid_held", "shipped", "completed", "disputed", "cancelled", "under_review" // ✅ Added lowercase
+        "PAID_HELD", "SHIPPED", "WORK_DONE", "COMPLETED_PENDING_BUYER", "COMPLETED", "DISPUTED", "CANCELLED",
+        "paid_held", "shipped", "work_done", "completed_pending_buyer", "completed", "disputed", "cancelled", "under_review"
       ];
     }
     
@@ -189,12 +204,25 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
     match /analytics/{eventId} {
       // ✅ Allow anyone to create analytics events (even unauthenticated users)
-      allow create: if request.resource.data.storeId is string &&
-        request.resource.data.eventType in ["view", "click", "buy_now_click", "whatsapp_click"];
+      // Updated to include "search", "follow", "unfollow", and "add_to_cart_click"
+      // Also makes 'storeId' optional to support global search events
+      allow create: if request.resource.data.eventType in [
+          "view", 
+          "click", 
+          "buy_now_click", 
+          "whatsapp_click",
+          "follow",
+          "unfollow",
+          "search",
+          "add_to_cart_click" // ✅ NEW: Allows tracking add to cart events
+        ] && (
+          // If storeId is provided, it must be a string. If not provided (e.g., global search), that's also allowed.
+          !('storeId' in request.resource.data) || request.resource.data.storeId is string
+        );
         
-      // ✅ Store owners can read their own analytics
+      // ✅ Store owners can read their own analytics, and admins can read all
       allow read: if request.auth != null && (
-        request.auth.uid == resource.data.storeId ||
+        ('storeId' in resource.data && request.auth.uid == resource.data.storeId) ||
         get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role in ["admin", "super_admin"]
       );
 
@@ -232,10 +260,11 @@ service cloud.firestore {
     }
     
     // ═══════════════════════════════════════════════════════════
-    // ⚖️ DISPUTES: Two-sided access + admin read
+    // ⚖️ DISPUTES: Two-sided access + admin read (FIXED FOR STOREID)
     // ═══════════════════════════════════════════════════════════
     match /disputes/{disputeId} {
       allow read: if request.auth != null && (
+        resource.data.storeId == request.auth.uid ||
         resource.data.vendorId == request.auth.uid || 
         resource.data.buyerId == request.auth.uid ||
         isActiveAdmin()
@@ -251,6 +280,7 @@ service cloud.firestore {
         request.resource.data.updatedAt is timestamp;
 
       allow update: if request.auth != null && (
+        resource.data.storeId == request.auth.uid ||
         resource.data.vendorId == request.auth.uid || 
         resource.data.buyerId == request.auth.uid
       ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -267,12 +297,14 @@ service cloud.firestore {
     }
     
     match /disputes/{disputeId}/messages/{msgId} {
-      allow read: if request.auth != null && (
+      allow read: if request.auth != null && exists(/databases/$(database)/documents/disputes/$(disputeId)) && (
+        get(/databases/$(database)/documents/disputes/$(disputeId)).data.storeId == request.auth.uid ||
         get(/databases/$(database)/documents/disputes/$(disputeId)).data.buyerId == request.auth.uid ||
         get(/databases/$(database)/documents/disputes/$(disputeId)).data.vendorId == request.auth.uid ||
         isActiveAdmin()
       );
-      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid && (
+      allow create: if request.auth != null && request.resource.data.senderId == request.auth.uid && exists(/databases/$(database)/documents/disputes/$(disputeId)) && (
+        get(/databases/$(database)/documents/disputes/$(disputeId)).data.storeId == request.auth.uid ||
         get(/databases/$(database)/documents/disputes/$(disputeId)).data.buyerId == request.auth.uid ||
         get(/databases/$(database)/documents/disputes/$(disputeId)).data.vendorId == request.auth.uid ||
         isActiveAdmin()
@@ -284,6 +316,7 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
     match /notifications/{notifId} {
       allow read: if request.auth != null && (
+        resource.data.get("storeId", "") == request.auth.uid ||
         resource.data.get("vendorId", "") == request.auth.uid || 
         resource.data.get("buyerId", "") == request.auth.uid ||
         resource.data.get("recipientId", "") == request.auth.uid ||
@@ -292,12 +325,14 @@ service cloud.firestore {
       );
       allow create: if false;
       allow update: if request.auth != null && (
+        resource.data.get("storeId", "") == request.auth.uid ||
         resource.data.get("vendorId", "") == request.auth.uid ||
         resource.data.get("buyerId", "") == request.auth.uid ||
         resource.data.get("recipientId", "") == request.auth.uid ||
         resource.data.get("adminId", "") == request.auth.uid
       ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read", "readAt", "updatedAt"]);
       allow delete: if request.auth != null && (
+        resource.data.get("storeId", "") == request.auth.uid ||
         resource.data.get("vendorId", "") == request.auth.uid ||
         resource.data.get("buyerId", "") == request.auth.uid ||
         resource.data.get("recipientId", "") == request.auth.uid
@@ -319,6 +354,7 @@ service cloud.firestore {
     match /support_chats/{chatId} {
       allow read: if request.auth != null && (
         isActiveAdmin() ||
+        resource.data.storeId == request.auth.uid ||
         resource.data.buyerId == request.auth.uid ||
         resource.data.vendorId == request.auth.uid ||
         request.auth.uid in resource.data.participants
@@ -331,6 +367,7 @@ service cloud.firestore {
         allow read: if request.auth != null && (
           isActiveAdmin() ||
           (exists(/databases/$(database)/documents/support_chats/$(chatId)) && (
+            get(/databases/$(database)/documents/support_chats/$(chatId)).data.storeId == request.auth.uid ||
             get(/databases/$(database)/documents/support_chats/$(chatId)).data.buyerId == request.auth.uid ||
             get(/databases/$(database)/documents/support_chats/$(chatId)).data.vendorId == request.auth.uid ||
             request.auth.uid in get(/databases/$(database)/documents/support_chats/$(chatId)).data.participants
@@ -345,6 +382,7 @@ service cloud.firestore {
       allow read: if request.auth != null && (
         request.auth.uid == chatId ||
         (resource.data != null && (
+          resource.data.storeId == request.auth.uid ||
           resource.data.vendorId == request.auth.uid || 
           resource.data.buyerId == request.auth.uid ||
           request.auth.uid in resource.data.participants
@@ -355,6 +393,7 @@ service cloud.firestore {
       allow create, update, delete: if request.auth != null && (
         request.auth.uid == chatId ||
         (resource.data != null && (
+          request.auth.uid == resource.data.storeId ||
           request.auth.uid == resource.data.vendorId || 
           request.auth.uid == resource.data.buyerId ||
           request.auth.uid in resource.data.participants
@@ -366,6 +405,7 @@ service cloud.firestore {
         allow read: if request.auth != null && (
           request.auth.uid == chatId ||
           (exists(/databases/$(database)/documents/vendor_chats/$(chatId)) && (
+            get(/databases/$(database)/documents/vendor_chats/$(chatId)).data.storeId == request.auth.uid ||
             get(/databases/$(database)/documents/vendor_chats/$(chatId)).data.vendorId == request.auth.uid ||
             get(/databases/$(database)/documents/vendor_chats/$(chatId)).data.buyerId == request.auth.uid ||
             request.auth.uid in get(/databases/$(database)/documents/vendor_chats/$(chatId)).data.participants
@@ -397,11 +437,12 @@ service cloud.firestore {
     }
     
     match /chats/{chatId} {
-      // ✅ FIX: Explicitly allow read if user is the vendor, buyer, OR in the participants array.
-      // This satisfies the query: where("vendorId", "==", user.uid)
+      // ✅ FIX: Explicitly allow read if user is the vendor, buyer, store owner, OR in the participants array.
+      // This satisfies the query: where("vendorId", "==", user.uid) OR where("storeId", "==", user.uid)
       allow read, write: if request.auth != null && (
         request.auth.uid == chatId ||
         (resource.data != null && (
+          resource.data.storeId == request.auth.uid ||
           resource.data.vendorId == request.auth.uid ||
           resource.data.buyerId == request.auth.uid ||
           request.auth.uid in resource.data.participants
@@ -412,6 +453,7 @@ service cloud.firestore {
         allow read, write: if request.auth != null && (
           request.auth.uid == chatId ||
           (exists(/databases/$(database)/documents/chats/$(chatId)) && (
+            get(/databases/$(database)/documents/chats/$(chatId)).data.storeId == request.auth.uid ||
             get(/databases/$(database)/documents/chats/$(chatId)).data.vendorId == request.auth.uid ||
             get(/databases/$(database)/documents/chats/$(chatId)).data.buyerId == request.auth.uid ||
             request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants

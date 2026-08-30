@@ -11,7 +11,8 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useCart } from "@/contexts/CartContext";
 import { auth, db } from "@/lib/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import ShippingSelector, { ShippingOption } from "@/components/checkout/ShippingSelector";
 
@@ -26,20 +27,27 @@ const NIGERIAN_STATES = [
   "Sokoto", "Taraba", "Yobe", "Zamfara", "FCT - Abuja"
 ];
 
-// Default Buyer Data Template
-const INITIAL_BUYER_PROFILE = {
-  address: "Opposite Mining Gate State Low Cost",
-  city: "Jos",
-  country: "Nigeria",
-  displayName: "Zebble Limited",
-  email: "zebblelimited@gmail.com",
-  firstName: "Zebble",
-  lastName: "Limited",
-  lga: "", // <--- Add this property (or "Jos South" / "Jos North")
-  phone: "+2348037811869",
-  postalCode: "100232",
-  state: "Plateau",
-  uid: "UT6JBoIXU6ekalp4MqSgx638Kct1"
+type CheckoutAddress = {
+  id: string;
+  label: string;
+  name: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  lga: string;
+  postalCode: string;
+  isDefault?: boolean;
+};
+
+type SellerLocation = {
+  id: string;
+  storeName: string;
+  address: string;
+  city: string;
+  state: string;
+  lga: string;
+  phone: string;
 };
 
 export default function CheckoutPage() {
@@ -47,10 +55,10 @@ export default function CheckoutPage() {
   const { items: cartItems, clearCart } = useCart();
 
   const [loading, setLoading] = useState(true);
-  const [buyerData, setBuyerData] = useState<any>(INITIAL_BUYER_PROFILE);
-  const [addresses, setAddresses] = useState<any[]>([]);
+  const [buyerData, setBuyerData] = useState<any>(null);
+  const [addresses, setAddresses] = useState<CheckoutAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("default_addr");
-  const [selectedState, setSelectedState] = useState<string>("Plateau");
+  const [selectedState, setSelectedState] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState("card");
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -63,18 +71,18 @@ export default function CheckoutPage() {
 
   // Forms pre-filled with buyer details
   const [editForm, setEditForm] = useState({
-    address: INITIAL_BUYER_PROFILE.address,
-    city: INITIAL_BUYER_PROFILE.city,
-    state: INITIAL_BUYER_PROFILE.state,
-    postalCode: INITIAL_BUYER_PROFILE.postalCode,
-    phone: INITIAL_BUYER_PROFILE.phone
+    address: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    phone: ""
   });
 
   const [customAddressForm, setCustomAddressForm] = useState({
     name: "",
     phone: "",
     address: "",
-    state: "Plateau",
+    state: "",
     lga: ""
   });
 
@@ -82,6 +90,7 @@ export default function CheckoutPage() {
 
   // Real-time Per-Seller Shipping Selection
   const [sellerShipping, setSellerShipping] = useState<Record<string, ShippingOption | null>>({});
+  const [sellerLocations, setSellerLocations] = useState<SellerLocation[]>([]);
 
   // 1. Fetch Direct Session Order Data or standard Cart Data
   useEffect(() => {
@@ -101,56 +110,87 @@ export default function CheckoutPage() {
     }
   }, [cartItems]);
 
-  // 2. Fetch Buyer Profile & Hydrate Delivery Address Data
+  // 2. Fetch the authenticated buyer profile. Do not substitute a demo
+  // address when the profile is missing or incomplete.
   useEffect(() => {
-    async function fetchBuyerData() {
-      const user = auth.currentUser;
-
-      try {
-        let data = INITIAL_BUYER_PROFILE;
-        if (user) {
-          const { getDoc } = await import("firebase/firestore");
-          const buyerDoc = await getDoc(doc(db, "buyers", user.uid));
-          if (buyerDoc.exists()) {
-            data = { ...INITIAL_BUYER_PROFILE, ...buyerDoc.data() };
-          }
+    let active = true;
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        if (active) {
+          setBuyerData(null);
+          setAddresses([]);
+          setSelectedAddressId("");
+          setSelectedState("");
+          setLoading(false);
         }
+        return;
+      }
 
-        setBuyerData(data);
-        const currentState = data.state || "Plateau";
-        const fullAddress = [data.address, data.city, currentState, data.postalCode, data.country].filter(Boolean).join(", ");
+      setLoading(true);
+      try {
+        const [buyerDoc, userDoc] = await Promise.all([
+          getDoc(doc(db, "buyers", user.uid)),
+          getDoc(doc(db, "users", user.uid)),
+        ]);
+        // Email buyers historically live in `buyers`, while newer accounts
+        // keep their editable profile in `users`. Prefer the newer profile
+        // when both exist so checkout reflects the latest saved address.
+        const data = {
+          ...(buyerDoc.exists() ? buyerDoc.data() : {}),
+          ...(userDoc.exists() ? userDoc.data() : {}),
+        };
+        if (!active) return;
 
-        const defaultAddress = {
+        setBuyerData({ ...data, email: data.email || user.email || "" });
+
+        const profileAddress = typeof data.address === "string"
+          ? data.address
+          : typeof data.shippingAddress === "string"
+            ? data.shippingAddress
+            : "";
+        const currentState = typeof data.state === "string" ? data.state : "";
+        const hasAddress = Boolean(profileAddress || data.city || currentState);
+        const defaultAddress: CheckoutAddress = {
           id: "default_addr",
           label: "Default Address",
-          name: `${data.firstName || ''} ${data.lastName || ''}`.trim() || data.displayName || "Zebble Limited",
-          phone: data.phone || "+2348037811869",
-          address: fullAddress,
-          city: data.city || "Jos",
+          name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || data.displayName || user.displayName || "",
+          phone: data.phone || "",
+          address: [profileAddress, data.city, currentState, data.postalCode, data.country].filter(Boolean).join(", "),
+          city: data.city || "",
           state: currentState,
           lga: data.lga || "",
-          postalCode: data.postalCode || "100232",
+          postalCode: data.postalCode || "",
           isDefault: true,
         };
 
-        setAddresses([defaultAddress]);
-        setSelectedAddressId("default_addr");
+        setAddresses(hasAddress ? [defaultAddress] : []);
+        setSelectedAddressId(hasAddress ? "default_addr" : "");
         setSelectedState(currentState);
         setEditForm({
-          address: data.address || "Opposite Mining Gate State Low Cost",
-          city: data.city || "Jos",
+          address: profileAddress,
+          city: data.city || "",
           state: currentState,
-          postalCode: data.postalCode || "100232",
-          phone: data.phone || "+2348037811869"
+          postalCode: data.postalCode || "",
+          phone: data.phone || ""
         });
       } catch (error) {
         console.error("Error fetching buyer data:", error);
+        if (active) {
+          setBuyerData(null);
+          setAddresses([]);
+          setSelectedAddressId("");
+          setSelectedState("");
+        }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
-    }
-    fetchBuyerData();
-  }, [router]);
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   // Active items being checked out
   const activeCheckoutItems = sessionOrderItems;
@@ -169,6 +209,41 @@ export default function CheckoutPage() {
 
     return acc;
   }, {});
+
+  const sellerIds = Object.keys(groupedCartItems).filter((storeId) => storeId !== "unknown");
+  const sellerIdsKey = sellerIds.join("|");
+
+  // Store profiles are public because they are used by the storefront. Read
+  // each seller's pickup location from Firestore instead of reusing the buyer
+  // address card.
+  useEffect(() => {
+    let active = true;
+    if (sellerIds.length === 0) {
+      setSellerLocations([]);
+      return () => { active = false; };
+    }
+
+    Promise.all(sellerIds.map(async (storeId): Promise<SellerLocation> => {
+      const storeDoc = await getDoc(doc(db, "stores", storeId));
+      const data = storeDoc.exists() ? storeDoc.data() : {};
+      return {
+        id: storeId,
+        storeName: data.storeName || groupedCartItems[storeId]?.storeName || "Seller",
+        address: data.address || data.businessAddress || data.location || "",
+        city: data.city || "",
+        state: data.state || "",
+        lga: data.lga || "",
+        phone: data.phone || "",
+      };
+    })).then((locations) => {
+      if (active) setSellerLocations(locations);
+    }).catch((error) => {
+      console.error("Error fetching seller pickup locations:", error);
+      if (active) setSellerLocations([]);
+    });
+
+    return () => { active = false; };
+  }, [sellerIdsKey]);
 
   const selectedBuyerAddress = addresses.find((a: any) => a.id === selectedAddressId);
 
@@ -208,17 +283,25 @@ export default function CheckoutPage() {
     setIsSavingAddress(true);
     try {
       if (auth.currentUser) {
-        await updateDoc(doc(db, "buyers", auth.currentUser.uid), { ...editForm, updatedAt: new Date() });
+        await setDoc(doc(db, "users", auth.currentUser.uid), { ...editForm, updatedAt: new Date() }, { merge: true });
       }
-      const updatedAddress = {
+      const updatedAddress: CheckoutAddress = {
         ...addresses.find(a => a.id === "default_addr"),
+        id: "default_addr",
+        label: "Default Address",
+        name: addresses.find(a => a.id === "default_addr")?.name || buyerData?.displayName || auth.currentUser?.displayName || "Buyer",
         address: [editForm.address, editForm.city, editForm.state, editForm.postalCode].filter(Boolean).join(", "),
         city: editForm.city,
         state: editForm.state,
+        lga: addresses.find(a => a.id === "default_addr")?.lga || "",
         postalCode: editForm.postalCode,
-        phone: editForm.phone
+        phone: editForm.phone,
+        isDefault: true,
       };
-      setAddresses(prev => prev.map(a => a.id === "default_addr" ? updatedAddress : a));
+      setAddresses(prev => prev.some(a => a.id === "default_addr")
+        ? prev.map(a => a.id === "default_addr" ? updatedAddress : a)
+        : [updatedAddress, ...prev]);
+      setSelectedAddressId("default_addr");
       setSelectedState(editForm.state);
       setIsEditModalOpen(false);
     } catch (error) {
@@ -231,19 +314,21 @@ export default function CheckoutPage() {
   // Add Custom "Ship to another location" Address
   const handleAddCustomAddress = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customAddressForm.name || !customAddressForm.phone || !customAddressForm.address || !customAddressForm.lga) {
+    if (!customAddressForm.name || !customAddressForm.phone || !customAddressForm.address || !customAddressForm.state || !customAddressForm.lga) {
       alert("Please complete all required fields for the new shipping address.");
       return;
     }
 
-    const newAddressObj = {
+    const newAddressObj: CheckoutAddress = {
       id: `custom_addr_${Date.now()}`,
       label: "Custom Shipping Address",
       name: customAddressForm.name,
       phone: customAddressForm.phone,
       address: customAddressForm.address,
+      city: "",
       state: customAddressForm.state,
       lga: customAddressForm.lga,
+      postalCode: "",
       isDefault: false,
     };
 
@@ -262,6 +347,12 @@ export default function CheckoutPage() {
       alert("Please select a valid delivery address.");
       return;
     }
+    const user = auth.currentUser;
+    const customerEmail = user?.email || buyerData?.email || "";
+    if (!user || !customerEmail) {
+      alert("Please sign in with a valid buyer account before checking out.");
+      return;
+    }
 
     const missingShipping = Object.keys(groupedCartItems).some(
       (storeId) => !sellerShipping[storeId]
@@ -275,8 +366,8 @@ export default function CheckoutPage() {
     setIsProcessing(true);
     try {
       const payload = {
-        buyerId: auth.currentUser?.uid || INITIAL_BUYER_PROFILE.uid,
-        customerEmail: auth.currentUser?.email || INITIAL_BUYER_PROFILE.email,
+        buyerId: user.uid,
+        customerEmail,
         address: {
           name: selectedBuyerAddress.name,
           phone: selectedBuyerAddress.phone,
@@ -293,7 +384,11 @@ export default function CheckoutPage() {
             storeName: group.storeName,
             items: group.items,
             courierId: courier?.id,
-            shippingMethod: courier?.name,
+            // Persist the stable courier ID. The aggregation layer uses this
+            // value to route the shipment; the display name is resolved from
+            // courierName on the order/shipment record.
+            shippingMethod: courier?.id,
+            courierName: courier?.name,
             shippingCost: courier?.shippingFee || 0,
             estimatedDays: courier?.estimatedDays,
             totalWeightKg: group.totalWeightKg,
@@ -402,6 +497,7 @@ export default function CheckoutPage() {
                       onChange={(e) => setSelectedState(e.target.value)}
                       className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-bold text-gray-900 appearance-none focus:outline-none focus:border-[#00a63e] cursor-pointer shadow-sm pr-8"
                     >
+                      <option value="">Select state</option>
                       {NIGERIAN_STATES.map((state) => (
                         <option key={state} value={state}>
                           {state}
@@ -412,55 +508,78 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {/* Address Cards Grid: Default & Custom Shipping side-by-side */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {addresses.map((addr: any) => (
-                    <div
-                      key={addr.id}
-                      onClick={() => setSelectedAddressId(addr.id)}
-                      className={`relative rounded-2xl border-2 p-5 transition-all flex flex-col cursor-pointer ${selectedAddressId === addr.id
-                        ? "border-[#00a63e] bg-green-50/30"
-                        : "border-gray-100 hover:border-gray-200 bg-white"
-                        }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${addr.isDefault
-                          ? "bg-[#00a63e]/10 text-[#00a63e]"
-                          : "bg-blue-50 text-blue-600 border border-blue-100"
-                          }`}>
-                          {addr.label}
-                        </span>
-
-                        {addr.isDefault && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setIsEditModalOpen(true);
-                            }}
-                            className="text-[11px] font-bold text-[#00a63e] hover:underline flex items-center gap-0.5"
-                          >
-                            <Edit3 size={11} /> Edit
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="flex items-start gap-3 mt-1">
-                        <div className={`mt-1 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedAddressId === addr.id ? "border-[#00a63e]" : "border-gray-300"
-                          }`}>
-                          {selectedAddressId === addr.id && <div className="w-2 h-2 rounded-full bg-[#00a63e]" />}
-                        </div>
-
-                        {/* Complete Destination Details */}
-                        <div className="min-w-0 text-xs text-gray-600 space-y-1">
-                          <p className="font-bold text-sm text-gray-900">{addr.name}</p>
-                          <p className="text-gray-500 leading-relaxed"><span className="font-medium text-gray-700">Address:</span> {addr.address}</p>
-                          <p className="text-gray-500"><span className="font-medium text-gray-700">State:</span> {addr.state}</p>
-                          {addr.lga && <p className="text-gray-500"><span className="font-medium text-gray-700">LGA:</span> {addr.lga}</p>}
-                          <p className="text-gray-500"><span className="font-medium text-gray-700">Phone:</span> {addr.phone}</p>
-                        </div>
-                      </div>
+                {/* Pickup is rendered first; delivery remains the buyer's
+                    selected address. They must never share the same card data. */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Store size={17} className="text-blue-600" />
+                      <h3 className="text-xs font-black uppercase tracking-wider text-blue-900">Pickup from seller</h3>
                     </div>
-                  ))}
+                    <div className="space-y-3">
+                      {sellerLocations.length > 0 ? sellerLocations.map((location) => (
+                        <div key={location.id} className="rounded-xl border border-blue-100 bg-white p-4">
+                          <p className="font-bold text-sm text-gray-900">{location.storeName}</p>
+                          <p className="mt-2 text-xs leading-relaxed text-gray-600">
+                            <span className="font-medium text-gray-800">Address:</span>{" "}
+                            {[location.address, location.city, location.lga, location.state].filter(Boolean).join(", ") || "Seller pickup address not provided"}
+                          </p>
+                          {location.phone && <p className="mt-1 text-xs text-gray-600"><span className="font-medium text-gray-800">Phone:</span> {location.phone}</p>}
+                        </div>
+                      )) : (
+                        <div className="rounded-xl border border-dashed border-blue-200 bg-white p-4 text-xs text-blue-800">
+                          Seller pickup address is not available for this item.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <MapPin size={17} className="text-[#00a63e]" />
+                        <h3 className="text-xs font-black uppercase tracking-wider text-gray-900">Deliver to buyer</h3>
+                      </div>
+                      <button
+                        onClick={() => addresses.length > 0 ? setIsEditModalOpen(true) : setIsCustomAddressModalOpen(true)}
+                        className="text-[11px] font-bold text-[#00a63e] hover:underline flex items-center gap-0.5"
+                      >
+                        <Edit3 size={11} /> {addresses.length > 0 ? "Edit" : "Add address"}
+                      </button>
+                    </div>
+
+                    {addresses.length > 0 ? addresses.map((addr) => (
+                      <div
+                        key={addr.id}
+                        onClick={() => setSelectedAddressId(addr.id)}
+                        className={`relative rounded-2xl border-2 p-5 transition-all flex flex-col cursor-pointer ${selectedAddressId === addr.id
+                          ? "border-[#00a63e] bg-green-50/30"
+                          : "border-gray-100 hover:border-gray-200 bg-white"
+                          }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`mt-1 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedAddressId === addr.id ? "border-[#00a63e]" : "border-gray-300"
+                            }`}>
+                            {selectedAddressId === addr.id && <div className="w-2 h-2 rounded-full bg-[#00a63e]" />}
+                          </div>
+                          <div className="min-w-0 text-xs text-gray-600 space-y-1">
+                            <span className="inline-block text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#00a63e]/10 text-[#00a63e]">
+                              {addr.label}
+                            </span>
+                            <p className="font-bold text-sm text-gray-900">{addr.name || "Buyer"}</p>
+                            <p className="text-gray-500 leading-relaxed"><span className="font-medium text-gray-700">Address:</span> {addr.address || "Not provided"}</p>
+                            {addr.state && <p className="text-gray-500"><span className="font-medium text-gray-700">State:</span> {addr.state}</p>}
+                            {addr.lga && <p className="text-gray-500"><span className="font-medium text-gray-700">LGA:</span> {addr.lga}</p>}
+                            {addr.phone && <p className="text-gray-500"><span className="font-medium text-gray-700">Phone:</span> {addr.phone}</p>}
+                          </div>
+                        </div>
+                      </div>
+                    )) : (
+                      <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5 text-xs leading-relaxed text-gray-500">
+                        No delivery address is saved to this buyer account. Add one before continuing.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
 
@@ -664,6 +783,7 @@ export default function CheckoutPage() {
                   onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
                   className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"
                 >
+                  <option value="">Select state</option>
                   {NIGERIAN_STATES.map((state) => (
                     <option key={state} value={state}>
                       {state}
@@ -734,6 +854,7 @@ export default function CheckoutPage() {
                     onChange={(e) => setCustomAddressForm({ ...customAddressForm, state: e.target.value })}
                     className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"
                   >
+                    <option value="">Select state</option>
                     {NIGERIAN_STATES.map((state) => (
                       <option key={state} value={state}>
                         {state}

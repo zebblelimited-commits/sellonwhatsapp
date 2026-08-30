@@ -10,8 +10,11 @@ interface CheckoutRequestBody {
         storeId: string;
         storeName: string;
         items: any[];
+        courierId?: string;
+        courierName?: string;
         shippingMethod: string;
         shippingCost: number;
+        estimatedDays?: string;
         subtotal: number;
     }[];
     paymentMethod: string;
@@ -101,8 +104,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 storeId,
                 storeName,
                 items,
+                courierId: requestedCourierId,
+                courierName: requestedCourierName,
                 shippingMethod,
                 shippingCost: rawShippingCost,
+                estimatedDays,
                 subtotal: productSubtotal,
             } = sellerOrder;
 
@@ -131,7 +137,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             // CHECK SELF-ARRANGED SHIPPING & COMMISSIONS
             // -----------------------------------------------------
 
-            const isSelfArranged = shippingMethod === "self_arranged";
+            // The checkout client sends the selected courier ID. Keep the
+            // shipping method fallback for older clients that only sent it.
+            const courierId = requestedCourierId || shippingMethod;
+            const courierName = requestedCourierName || shippingMethod;
+            const isSelfArranged = courierId === "self_arranged" || shippingMethod === "self_arranged";
             const shippingCost = isSelfArranged ? 0 : rawShippingCost;
 
             const isPartner =
@@ -168,10 +178,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 buyerId,
                 customerEmail,
                 storeId,
+                // Keep the legacy ownership alias while all readers migrate
+                // to the canonical storeId field.
+                vendorId: storeId,
                 storeName,
                 items,
+                customerName: address.name || "",
+                customerPhone: address.phone || "",
                 deliveryAddress: address,
-                shippingMethod,
+                shippingMethod: courierId,
+                courierId,
+                courierName,
+                estimatedDays: estimatedDays || null,
                 shippingCost,
                 handlingFee,
                 productSubtotal,
@@ -181,6 +199,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 platformRevenue,
                 escrowAmount,
                 total: orderTotal,
+                // totalAmount is retained for older dashboard and admin
+                // consumers; total remains the checkout source of truth.
+                totalAmount: orderTotal,
                 status: "PENDING_PAYMENT",
                 paymentStatus: "pending",
                 paymentMethod,
@@ -204,7 +225,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     storeId,
                     buyerId,
                     customerEmail,
-                    courierId: shippingMethod,
+                    courierId,
+                    courierName,
                     status: "PENDING_PICKUP",
                     pickupAddress: storeData.address || "Store Address",
                     deliveryAddress: address,

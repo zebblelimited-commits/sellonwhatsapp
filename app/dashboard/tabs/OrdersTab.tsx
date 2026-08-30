@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { Package, Truck, CheckCircle, Clock, Info, X, Flag, AlertTriangle, MessageSquare, Search, Briefcase } from "lucide-react";
+import { Package, Truck, CheckCircle, Clock, Info, Flag, AlertTriangle, MessageSquare, Search, Briefcase } from "lucide-react";
 import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 import { showToast } from "@/lib/toast";
 import { supportChatRequest } from "@/components/chat/chatApi";
@@ -19,6 +19,10 @@ type SellerOrder = {
     customerPhone?: string;
     buyerPhone?: string;
     phone?: string;
+    storeId?: string;
+    courierId?: string;
+    courierName?: string;
+    shippingMethod?: string;
     trackingId?: string;
     buyerId?: string;
     [key: string]: any;
@@ -30,16 +34,12 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
     const [orders, setOrders] = useState<SellerOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [listenerError, setListenerError] = useState("");
-    const [shippingLoading, setShippingLoading] = useState(false);
     const [chatLoadingOrderId, setChatLoadingOrderId] = useState<string | null>(null);
     const [completionLoadingOrderId, setCompletionLoadingOrderId] = useState<string | null>(null);
 
     // Filter and Search State
     const [filter, setFilter] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
-
-    // UI State for shipping form
-    const [shippingForm, setShippingForm] = useState<{ orderId: string | null; trackingId: string; carrier: string }>({ orderId: null, trackingId: "", carrier: "Zebble Internal" });
 
     const [responseModal, setResponseModal] = useState<any>(null);
     const [responseText, setResponseText] = useState("");
@@ -59,9 +59,13 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
 
             setLoading(true);
             setListenerError("");
-            const q = query(collection(db, "orders"), where("vendorId", "==", user.uid));
-            unsubscribeOrders = onSnapshot(q, (snap) => {
-                const data: SellerOrder[] = snap.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data() }));
+            const ordersBySource = new Map<string, Map<string, SellerOrder>>();
+            const publishOrders = () => {
+                const merged = new Map<string, SellerOrder>();
+                ordersBySource.forEach((sourceOrders) => {
+                    sourceOrders.forEach((order, orderId) => merged.set(orderId, order));
+                });
+                const data = Array.from(merged.values());
                 data.sort((a, b) => {
                     const dateA = a.createdAt?.toMillis?.() || (a.createdAt?.seconds || 0) * 1000;
                     const dateB = b.createdAt?.toMillis?.() || (b.createdAt?.seconds || 0) * 1000;
@@ -69,12 +73,25 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                 });
                 setOrders(data);
                 setLoading(false);
-            }, (error) => {
-                console.error("Seller orders listener error:", error);
-                setOrders([]);
-                setLoading(false);
-                setListenerError("Orders could not be loaded. Check your seller permissions and try again.");
+            };
+
+            const unsubscribeOrderSources = (["storeId", "vendorId"] as const).map((ownerField) => {
+                const sourceOrders = new Map<string, SellerOrder>();
+                ordersBySource.set(ownerField, sourceOrders);
+                const ordersQuery = query(collection(db, "orders"), where(ownerField, "==", user.uid));
+                return onSnapshot(ordersQuery, (snap) => {
+                    sourceOrders.clear();
+                    snap.docs.forEach((orderDoc) => {
+                        sourceOrders.set(orderDoc.id, { id: orderDoc.id, ...orderDoc.data() });
+                    });
+                    publishOrders();
+                }, (error) => {
+                    console.error(`Seller orders listener error (${ownerField}):`, error);
+                    setLoading(false);
+                    setListenerError("Orders could not be loaded. Check your seller permissions and try again.");
+                });
             });
+            unsubscribeOrders = () => unsubscribeOrderSources.forEach((unsubscribe) => unsubscribe());
         });
 
         return () => {
@@ -82,47 +99,6 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
             unsubscribeOrders();
         };
     }, []);
-
-    const generateInternalTracking = () => {
-        const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
-        return `ZEB-${new Date().getFullYear()}-${randomStr}`;
-    };
-
-    const openShippingForm = (orderId: string) => {
-        setShippingForm({
-            orderId,
-            trackingId: generateInternalTracking(),
-            carrier: "Zebble Internal"
-        });
-    };
-
-    const handleFinalizeShipping = async () => {
-        if (!shippingForm.orderId || shippingLoading) return;
-        setShippingLoading(true);
-        try {
-            const user = auth.currentUser;
-            if (!user) throw new Error("Your seller session has expired. Please sign in again.");
-            const token = await user.getIdToken();
-            const response = await fetch("/api/orders/ship", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                body: JSON.stringify({
-                    orderId: shippingForm.orderId,
-                    trackingId: shippingForm.trackingId,
-                    carrier: shippingForm.carrier,
-                }),
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || "Failed to ship order");
-            setShippingForm({ orderId: null, trackingId: "", carrier: "" });
-            showToast("success", result.alreadyShipped ? "This order was already marked as shipped." : "Order marked as in transit.");
-        } catch (error) {
-            console.error("Error updating order:", error);
-            showToast("error", error instanceof Error ? error.message : "Failed to update shipment.");
-        } finally {
-            setShippingLoading(false);
-        }
-    };
 
     const handleOpenBuyerChat = async (order: SellerOrder) => {
         if (!order.buyerId || chatLoadingOrderId) {
@@ -254,7 +230,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                 o.id.toLowerCase().includes(q) ||
                 o.customerName?.toLowerCase().includes(q) ||
                 o.customerPhone?.includes(q) ||
-                o.totalAmount?.toString().includes(q) ||
+                (o.totalAmount ?? o.total)?.toString().includes(q) ||
                 o.trackingId?.toLowerCase().includes(q)
             );
         }
@@ -297,51 +273,6 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
 
     return (
         <div className="w-full min-w-0 max-w-full space-y-4 overflow-x-hidden animate-in fade-in duration-500 relative">
-            {/* SHIPPING MODAL */}
-            {shippingForm.orderId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in zoom-in duration-200">
-                    <div className="bg-white w-full max-w-md rounded-[32px] p-8 shadow-2xl border border-gray-100">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-black text-gray-900">Ship Order</h3>
-                            <button onClick={() => setShippingForm({ ...shippingForm, orderId: null })} className="p-2 bg-gray-50 rounded-full text-gray-400 hover:text-gray-900">
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Carrier Name</label>
-                                <select
-                                    className="w-full mt-1 p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-green-500/20"
-                                    value={shippingForm.carrier}
-                                    onChange={(e) => setShippingForm({ ...shippingForm, carrier: e.target.value })}
-                                >
-                                    <option value="Zebble Internal">Zebble Internal</option>
-                                    <option value="GIG Logistics">GIG Logistics</option>
-                                    <option value="DHL">DHL</option>
-                                    <option value="Local Park/Driver">Local Park / Driver</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Tracking ID (Auto-Generated)</label>
-                                <input
-                                    type="text"
-                                    className="w-full mt-1 p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-green-500/20"
-                                    value={shippingForm.trackingId}
-                                    onChange={(e) => setShippingForm({ ...shippingForm, trackingId: e.target.value })}
-                                />
-                            </div>
-                            <button
-                                onClick={handleFinalizeShipping}
-                                disabled={shippingLoading || !shippingForm.trackingId.trim() || !shippingForm.carrier.trim()}
-                                className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm shadow-lg shadow-green-100 transition-all active:scale-[0.98] mt-4"
-                            >
-                                {shippingLoading ? "Updating…" : "Confirm Shipment"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* FILTERS & SEARCH BAR */}
             {listenerError && <div className="rounded-2xl border border-red-100 bg-red-50 p-3 text-xs font-bold text-red-700">{listenerError}</div>}
             <div className="flex min-w-0 flex-col gap-3 sticky top-0 z-20 bg-[#fafafa] py-2 border-b border-gray-100 sm:-mx-2 sm:flex-row sm:px-2">
@@ -418,7 +349,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                                 {/* Row 2: Amount and Details */}
                                 <div className="flex items-center justify-between mb-3">
                                     <div>
-                                        <p className="text-sm font-extrabold text-gray-800">₦{order.totalAmount?.toLocaleString()}</p>
+                                        <p className="text-sm font-extrabold text-gray-800">₦{(order.totalAmount ?? order.total ?? 0).toLocaleString()}</p>
                                         <p className="text-[10px] text-gray-400 font-bold mt-0.5 truncate max-w-[120px]">{order.customerName || order.customerPhone || 'Customer'}</p>
                                     </div>
                                     <div className="text-right">
@@ -482,12 +413,9 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                                                 <Briefcase size={12} /> {completionLoadingOrderId === order.id ? "Updating…" : "Work Done"}
                                             </button>
                                         ) : (
-                                            <button
-                                                onClick={() => openShippingForm(order.id)}
-                                                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-gray-900 hover:bg-black text-white rounded-xl text-[10px] font-bold transition-all"
-                                            >
-                                                <Truck size={12} /> Ship
-                                            </button>
+                                            <div className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-blue-100 bg-blue-50 text-blue-700 text-[10px] font-bold">
+                                                <Truck size={12} /> {order.courierName || order.shippingMethod || "Courier processing"}
+                                            </div>
                                         )
                                     ) : ["SHIPPED", "OUT_FOR_DELIVERY", "WORK_DONE"].includes(orderStatus) ? (
                                         <button

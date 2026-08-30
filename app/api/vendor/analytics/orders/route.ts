@@ -46,7 +46,11 @@ export async function POST(request: NextRequest) {
     if (orderIds.length === 0) return NextResponse.json({ customers: {} });
 
     const orderSnapshots = await Promise.all(orderIds.map((orderId) => adminDb.collection("orders").doc(orderId).get()));
-    const ownedOrders = orderSnapshots.filter((snapshot) => snapshot.exists && snapshot.data()?.vendorId === decoded.uid);
+    const ownedOrders = orderSnapshots.filter((snapshot) => {
+      if (!snapshot.exists) return false;
+      const data = snapshot.data() || {};
+      return (data.storeId || data.vendorId) === decoded.uid;
+    });
     const buyerIds = Array.from(new Set(ownedOrders.map((snapshot) => snapshot.data()?.buyerId).filter((id): id is string => typeof id === "string" && id.length > 0)));
 
     const customerByBuyerId = new Map<string, CustomerDetails>();
