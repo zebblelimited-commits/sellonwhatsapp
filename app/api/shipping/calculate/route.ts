@@ -48,14 +48,24 @@ export async function POST(req: NextRequest) {
 
         const shippingOptions: CourierOption[] = [];
 
-        // 2. Loop through couriers and dynamically fetch or calculate rates
+        // 2. Loop through couriers and dynamically check availability & rates
         for (const doc of couriersSnap.docs) {
             const courier = doc.data();
-            let finalFee = 0;
             const courierCode = courier.code?.toLowerCase() || "";
             const courierName = courier.name?.toLowerCase() || "";
 
-            // Check if courier is FEZ Delivery
+            // Check State Availability: 
+            // If availableStates exists and is an array, ensure destinationState is included.
+            if (Array.isArray(courier.availableStates) && courier.availableStates.length > 0) {
+                const isAvailable = courier.availableStates.some(
+                    (state: string) => state.toLowerCase() === destinationState.toLowerCase()
+                );
+                if (!isAvailable) continue; // Skip courier if not available in this state
+            }
+
+            let finalFee = 0;
+
+            // Check FEZ Delivery
             if (courierCode === "fez" || courierName.includes("fez")) {
                 try {
                     const fezRate = await fetchFezDeliveryCost({
@@ -68,7 +78,7 @@ export async function POST(req: NextRequest) {
                     finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
                 }
             }
-            // Check if courier is Sendbox
+            // Check Sendbox
             else if (courierCode === "sendbox" || courierName.includes("sendbox")) {
                 try {
                     const quotes = await fetchSendboxQuote({
@@ -86,30 +96,43 @@ export async function POST(req: NextRequest) {
                     finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
                 }
             }
-            // Default static calculation for other couriers (e.g., GIG)
+            // Static fallback for other couriers (Chowdeck, Dellyman, Glovo, Kwikpik, GIG, etc.)
             else {
                 finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
+            }
+
+            // Determine image logo fallback path
+            let logoPath = courier.logo;
+            if (!logoPath) {
+                if (courierCode === "chowdeck" || courierName.includes("chowdeck")) {
+                    logoPath = "/images/couriers/chowdecklogo.jpg";
+                } else if (courierCode === "dellyman" || courierName.includes("dellyman")) {
+                    logoPath = "/images/couriers/dellymanlogo.jpg";
+                } else if (courierCode === "glovo" || courierName.includes("glovo")) {
+                    logoPath = "/images/couriers/glovologo.png";
+                } else if (courierCode === "kwikpik" || courierName.includes("kwikpik")) {
+                    logoPath = "/images/couriers/kwikpik.jpeg";
+                } else if (courierCode === "sendbox" || courierName.includes("sendbox")) {
+                    logoPath = "/images/couriers/sendboxlogo.jpeg";
+                } else if (courierCode === "gig" || courierName.includes("gig")) {
+                    logoPath = "/images/couriers/gigilogo.jpg";
+                } else if (courierCode === "fez" || courierName.includes("fez")) {
+                    logoPath = "/images/couriers/fezlogo.png";
+                } else {
+                    logoPath = "/images/couriers/default.png";
+                }
             }
 
             shippingOptions.push({
                 id: doc.id,
                 name: courier.name,
-                // Dynamic logo fallback handling for Sendbox, GIG, and FEZ
-                logo: courier.logo || (
-                    courierCode === "sendbox" || courierName.includes("sendbox")
-                        ? "/images/couriers/sendboxlogo.jpeg"
-                        : courierCode === "gig" || courierName.includes("gig")
-                            ? "/images/couriers/gigilogo.jpg"
-                            : courierCode === "fez" || courierName.includes("fez")
-                                ? "/images/couriers/fezlogo.png"
-                                : "/images/couriers/default.png"
-                ),
+                logo: logoPath,
                 estimatedDays: courier.estimatedDays || "2-5 Business Days",
                 shippingFee: finalFee,
             });
         }
 
-        // 3. Sort options from lowest to highest fee
+        // 3. Sort active options from lowest to highest fee
         shippingOptions.sort((a, b) => a.shippingFee - b.shippingFee);
 
         return NextResponse.json({
@@ -135,5 +158,5 @@ function calculateStaticFallback(courier: any, state: string, weight: number): n
     const calculatedWeight = Math.max(1, weight);
 
     const rawFee = (baseRate + (calculatedWeight - 1) * ratePerKg) * multiplier;
-    return Math.ceil(rawFee / 100) * 100; // Round up to nearest 100 NGN
+    return Math.ceil(rawFee / 100) * 100;
 }

@@ -7,6 +7,54 @@ export async function POST(req: NextRequest) {
     try {
         const couriers = [
             {
+                id: "chowdeck",
+                name: "Chowdeck",
+                code: "chowdeck",
+                logo: "/images/couriers/chowdecklogo.jpg",
+                isActive: true,
+                baseRate: 1000,
+                ratePerKg: 200,
+                estimatedDays: "Same Day Delivery",
+                availableStates: ["Lagos", "Abuja", "Oyo", "Ogun"], // Filtered states
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            {
+                id: "dellyman",
+                name: "Dellyman",
+                code: "dellyman",
+                logo: "/images/couriers/dellymanlogo.jpg",
+                isActive: true,
+                baseRate: 1200,
+                ratePerKg: 250,
+                estimatedDays: "1-2 Business Days",
+                availableStates: ["Lagos", "Abuja", "Rivers", "Oyo"],
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            {
+                id: "glovo",
+                name: "Glovo",
+                code: "glovo",
+                logo: "/images/couriers/glovologo.png",
+                isActive: true,
+                baseRate: 1100,
+                ratePerKg: 200,
+                estimatedDays: "Express Same Day",
+                availableStates: ["Lagos", "Abuja"],
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            {
+                id: "kwikpik",
+                name: "Kwikpik",
+                code: "kwikpik",
+                logo: "/images/couriers/kwikpik.jpeg",
+                isActive: true,
+                baseRate: 1300,
+                ratePerKg: 250,
+                estimatedDays: "1-2 Business Days",
+                availableStates: ["Lagos", "Ogun"],
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            {
                 id: "gig_logistics",
                 name: "GIG Logistics",
                 code: "gig",
@@ -15,16 +63,7 @@ export async function POST(req: NextRequest) {
                 baseRate: 2000,
                 ratePerKg: 400,
                 estimatedDays: "2-4 Business Days",
-                stateMultipliers: {
-                    Lagos: 1.0,
-                    Ogun: 1.1,
-                    Oyo: 1.2,
-                    Abuja: 1.35,
-                    Rivers: 1.4,
-                    Kano: 1.5,
-                    Delta: 1.3,
-                    Enugu: 1.4,
-                },
+                availableStates: [], // Empty array = Nationwide
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             },
             {
@@ -36,14 +75,7 @@ export async function POST(req: NextRequest) {
                 baseRate: 1500,
                 ratePerKg: 350,
                 estimatedDays: "1-3 Business Days",
-                stateMultipliers: {
-                    Lagos: 1.0,
-                    Ogun: 1.1,
-                    Oyo: 1.15,
-                    Abuja: 1.4,
-                    Rivers: 1.5,
-                    Kano: 1.6,
-                },
+                availableStates: [], // Nationwide
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             },
             {
@@ -55,14 +87,7 @@ export async function POST(req: NextRequest) {
                 baseRate: 1800,
                 ratePerKg: 350,
                 estimatedDays: "2-4 Business Days",
-                stateMultipliers: {
-                    Lagos: 1.0,
-                    Ogun: 1.1,
-                    Oyo: 1.2,
-                    Abuja: 1.35,
-                    Rivers: 1.45,
-                    Kano: 1.5,
-                },
+                availableStates: [], // Nationwide
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             },
         ];

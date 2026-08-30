@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Truck, Check, Loader2, AlertCircle, Store } from "lucide-react";
-import Image from "next/image";
 
 export interface ShippingOption {
     id: string;
@@ -68,10 +67,11 @@ export default function ShippingSelector({
                     fetchedCouriers = data.options;
                 }
 
-                const combinedOptions = [SELF_ARRANGED_OPTION, ...fetchedCouriers];
+                // Place SELF_ARRANGED_OPTION as the last option
+                const combinedOptions = [...fetchedCouriers, SELF_ARRANGED_OPTION];
                 setOptions(combinedOptions);
 
-                // Auto-select valid option without triggering endless loops
+                // Auto-select valid option (defaults to the first real courier instead of self-arranged)
                 const currentValid = combinedOptions.find((opt) => opt.id === selectedOptionId);
                 onSelectRef.current(currentValid || combinedOptions[0]);
 
@@ -137,7 +137,6 @@ export default function ShippingSelector({
                                             alt={option.name}
                                             className="w-full h-full object-cover scale-90"
                                             onError={(e) => {
-                                                // Hide broken img tag if image fails to load
                                                 e.currentTarget.style.display = 'none';
                                             }}
                                         />
