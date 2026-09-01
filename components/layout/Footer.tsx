@@ -89,6 +89,7 @@ export default function Footer() {
               <li><Link href="/pricing" className="hover:text-green-600 transition-colors">Pricing</Link></li>
               <li><Link href="/boost-store" className="hover:text-green-600 transition-colors">Boost Store</Link></li>
               <li><Link href="/faq" className="hover:text-green-600 transition-colors">FAQ</Link></li>
+              <li><Link href="/contact" className="hover:text-green-600 transition-colors">Contact Us</Link></li>
               <li><Link href="/login" className="hover:text-green-600 transition-colors">Login</Link></li>
               <li><Link href="/register" className="hover:text-green-600 transition-colors">Create Store</Link></li>
             </ul>
@@ -116,10 +117,10 @@ export default function Footer() {
               {/* Contact Info */}
               <ul className="flex flex-col gap-3 mb-6 text-xs font-medium text-gray-500">
                 <li className="flex items-center gap-2 transition-colors hover:text-green-600 group">
-                  <MapPin size={14} className="text-gray-400 group-hover:text-green-600" /> Lagos, Nigeria
+                  <MapPin size={14} className="shrink-0 text-gray-400 group-hover:text-green-600" /> <span>PLOT 6992, BESIDE NELO PLAZA, OPPOSITE MINING QUARTERS, RANTYA, JOS, PLATEAU, NIGERIA</span>
                 </li>
-                <li className="flex items-center gap-2 transition-colors hover:text-green-600 group">
-                  <Phone size={14} className="text-gray-400 group-hover:text-green-600" /> +234 800 000 0000
+                <li className="flex items-start gap-2 transition-colors hover:text-green-600 group">
+                  <Phone size={14} className="mt-0.5 shrink-0 text-gray-400 group-hover:text-green-600" /> <span><a href="tel:+2349135146692">0913 514 6692</a><br /><a href="tel:+2348037811869">0803 781 1869</a></span>
                 </li>
                 <li className="flex items-center gap-2 transition-colors hover:text-green-600 group">
                   <Mail size={14} className="text-gray-400 group-hover:text-green-600" /> support@sellonwhatsapp.com
@@ -129,33 +130,43 @@ export default function Footer() {
               {/* Social Grid */}
               <div className="flex flex-wrap gap-2">
                 {/* WhatsApp */}
-                <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] transition-all">
+                <a href="https://wa.me/2349135146692" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] transition-all">
                   <Image src="/icons/whatsapplogo.svg" width={18} height={18} alt="WhatsApp" />
                 </a>
 
                 {/* Threads */}
-                <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] transition-all">
+                <a href="https://www.threads.net/@sellonwhatsapp" target="_blank" rel="noopener noreferrer" aria-label="Threads" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] transition-all">
                   <Image src="/icons/threadslogo.svg" width={18} height={18} alt="Threads" />
                 </a>
 
                 {/* X (Twitter) */}
-                <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-black transition-all">
+                <a href="https://x.com/sellonwhatsapp" target="_blank" rel="noopener noreferrer" aria-label="X" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-black transition-all">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z" /><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772" /></svg>
                 </a>
 
                 {/* Instagram */}
-                <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-pink-600 transition-all">
+                <a href="https://www.instagram.com/sellonwhatsapp" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-pink-600 transition-all">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
                 </a>
 
                 {/* Facebook */}
-                <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-blue-600 transition-all">
+                <a href="https://www.facebook.com/sellonwhatsapp" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-blue-600 transition-all">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
                 </a>
 
                 {/* YouTube */}
-                <a href="#" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-red-600 transition-all">
+                <a href="https://www.youtube.com/@sellonwhatsapp" target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-red-600 transition-all">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 2-2 68.4 68.4 0 0 1 15 0 2 2 0 0 1 2 2 24.12 24.12 0 0 1 0 10 2 2 0 0 1-2 2 68.4 68.4 0 0 1-15 0 2 2 0 0 1-2-2Z" /><path d="m10 15 5-3-5-3z" /></svg>
+                </a>
+
+                {/* TikTok */}
+                <a href="https://www.tiktok.com/@sellonwhatsapp" target="_blank" rel="noopener noreferrer" aria-label="TikTok" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-black transition-all">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 8.29a7.72 7.72 0 0 1-4.35-1.35v6.15a5.56 5.56 0 1 1-4.81-5.5v2.27a3.29 3.29 0 1 0 3.58 3.28V2h2.38a5.36 5.36 0 0 0 3.2 3.22V8.3z" /></svg>
+                </a>
+
+                {/* LinkedIn */}
+                <a href="https://www.linkedin.com/company/sellonwhatsapp" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-[#f7fee7] hover:border-[#ecfcca] hover:text-[#0a66c2] transition-all">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6.5 8.25H3.1V21h3.4V8.25ZM4.8 3A2 2 0 1 0 4.8 7a2 2 0 0 0 0-4ZM21 13.7c0-3.84-2.05-5.63-4.78-5.63-2.2 0-3.18 1.2-3.73 2.04V8.25H9.1V21h3.39v-6.3c0-1.66.31-3.27 2.37-3.27 2.03 0 2.05 1.9 2.05 3.38V21H21v-7.3Z" /></svg>
                 </a>
               </div>
             </div>

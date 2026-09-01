@@ -566,7 +566,7 @@ export default function QrCodeModal({
                                             }}
                                             className="w-full bg-[#09A03D] hover:bg-[#078030] text-white font-semibold py-3 px-8 rounded-[12px] transition-colors shadow-sm"
                                         >
-                                            Scan Another
+                                            Continue Scanning
                                         </button>
                                     </div>
                                 ) : (
