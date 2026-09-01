@@ -14,7 +14,7 @@ import {
   Users, Store, CreditCard, Landmark, AlertTriangle, TrendingUp, Clock,
   CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight, Loader2,
   Search, Bell, ShieldCheck, ChevronRight, Eye, Flag, MessageSquare,
-  LayoutDashboard, Settings, LogOut, SlidersHorizontal, ClipboardList, Send, ArrowLeft, MoreVertical, User, Phone, FileText, X, Menu, Package
+  LayoutDashboard, Settings, LogOut, SlidersHorizontal, ClipboardList, Send, ArrowLeft, MoreVertical, User, Phone, FileText, X, Menu, Package, Truck
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -27,6 +27,7 @@ import AdminAuditLogsTab from "@/components/admin/AdminAuditLogsTab";
 import AdminVerificationsPanel from "@/components/admin/AdminVerificationsTab";
 import AdminBankVerificationsTab from "@/components/admin/AdminBankVerificationsTab";
 import AdminProductsTab from "@/components/admin/AdminProductsTab";
+import AdminShipping from "@/components/admin/AdminShipping Tab";
 import { adminMutation } from "@/components/admin/adminApi";
 import { supportChatRequest } from "@/components/chat/chatApi";
 import { showToast } from "@/lib/toast";
@@ -1678,6 +1679,7 @@ export default function AdminDashboard() {
       case "stores": return <AdminStoresManagement />;
       case "products": return <AdminProductsTab />;
       case "orders": return <AdminOrdersTab />;
+      case "shipping": return <AdminShipping />;
       case "payouts": return <AdminPayoutsTab />;
       case "disputes": return <AdminDisputesTab />;
       case "notifications": return <AdminNotificationsTab />;
@@ -1724,6 +1726,7 @@ export default function AdminDashboard() {
               <NavItem icon={<Store size={18} />} label="Stores" active={activeTab === "stores"} onClick={() => handleTabChange("stores")} badge={stats.activeStores > 100 ? "100+" : null} />
               <NavItem icon={<Package size={18} />} label="Products" active={activeTab === "products"} onClick={() => handleTabChange("products")} />
               <NavItem icon={<ClipboardList size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => handleTabChange("orders")} />
+              <NavItem icon={<Truck size={18} />} label="Shipping" active={activeTab === "shipping"} onClick={() => handleTabChange("shipping")} />
               <NavItem icon={<CreditCard size={18} />} label="Payouts" active={activeTab === "payouts"} onClick={() => handleTabChange("payouts")} badge={stats.pendingPayouts > 0 ? stats.pendingPayouts : null} />
               <NavItem icon={<AlertTriangle size={18} />} label="Disputes" active={activeTab === "disputes"} onClick={() => handleTabChange("disputes")} badge={stats.openDisputes > 0 ? stats.openDisputes : null} />
               <NavItem icon={<MessageSquare size={18} />} label="Chat" active={activeTab === "chat"} onClick={() => handleTabChange("chat")} badge={totalUnreadChats > 0 ? totalUnreadChats : null} />
@@ -1755,6 +1758,7 @@ export default function AdminDashboard() {
           <NavItem icon={<Store size={18} />} label="Stores" active={activeTab === "stores"} onClick={() => handleTabChange("stores")} badge={stats.activeStores > 100 ? "100+" : null} />
           <NavItem icon={<Package size={18} />} label="Products" active={activeTab === "products"} onClick={() => handleTabChange("products")} />
           <NavItem icon={<ClipboardList size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => handleTabChange("orders")} />
+          <NavItem icon={<Truck size={18} />} label="Shipping" active={activeTab === "shipping"} onClick={() => handleTabChange("shipping")} />
           <NavItem icon={<CreditCard size={18} />} label="Payouts" active={activeTab === "payouts"} onClick={() => handleTabChange("payouts")} badge={stats.pendingPayouts > 0 ? stats.pendingPayouts : null} />
           <NavItem icon={<AlertTriangle size={18} />} label="Disputes" active={activeTab === "disputes"} onClick={() => handleTabChange("disputes")} badge={stats.openDisputes > 0 ? stats.openDisputes : null} />
           <NavItem icon={<MessageSquare size={18} />} label="Chat" active={activeTab === "chat"} onClick={() => handleTabChange("chat")} badge={totalUnreadChats > 0 ? totalUnreadChats : null} />
@@ -1793,6 +1797,7 @@ export default function AdminDashboard() {
                   activeTab === "users" ? "Manage buyer and vendor accounts" :
                     activeTab === "stores" ? "Review, approve, and manage vendor stores" :
                       activeTab === "orders" ? "Monitor marketplace orders and escrow states" :
+                        activeTab === "shipping" ? "Monitor courier handoffs and delivery operations" :
                         activeTab === "payouts" ? "Review and approve vendor payout requests" :
                           activeTab === "disputes" ? "Review and resolve customer disputes" :
                             activeTab === "chat" ? "Real-time support & user communication hub" :

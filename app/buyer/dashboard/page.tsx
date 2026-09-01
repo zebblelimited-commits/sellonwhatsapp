@@ -34,6 +34,7 @@ import { BuyerNotification } from "@/components/buyer/BuyerNotification";
 import BuyerSupportChat from "@/components/buyer/BuyerSupportChat";
 import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 import { BuyerProfile as ProfileTab } from "@/components/buyer/BuyerProfile";
+import BuyerShipping from "@/components/buyer/BuyerShipping";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -330,6 +331,7 @@ export default function BuyerDashboard() {
               <NavItem icon={<Search size={18} />} label="Explore" active={activeTab === "explore"} onClick={() => selectTab("explore")} />
               <NavItem icon={<ShoppingBag size={18} />} label="My Purchases" active={activeTab === "purchases"} onClick={() => selectTab("purchases")} />
               <NavItem icon={<ClipboardList size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => selectTab("orders")} />
+              <NavItem icon={<Truck size={18} />} label="Shipping" active={activeTab === "shipping"} onClick={() => selectTab("shipping")} />
               <NavItem icon={<ShieldAlert size={18} />} label="Disputes" active={activeTab === "disputes"} onClick={() => selectTab("disputes")} badge={buyerDisputeStats.open > 0 ? buyerDisputeStats.open : null} />
               <NavItem icon={<Bell size={18} />} label="Notifications" active={activeTab === "notifications"} onClick={() => selectTab("notifications")} badge={notificationStats.unread > 0 ? notificationStats.unread : null} />
               <NavItem icon={<MessageCircle size={18} />} label="Support Chat" active={activeTab === "support-chat"} onClick={() => selectTab("support-chat")} badge={chatStats.unread > 0 ? chatStats.unread : null} />
@@ -355,6 +357,7 @@ export default function BuyerDashboard() {
           <NavItem icon={<Search size={18} />} label="Explore" active={activeTab === "explore"} onClick={() => setActiveTab("explore")} />
           <NavItem icon={<ShoppingBag size={18} />} label="My Purchases" active={activeTab === "purchases"} onClick={() => setActiveTab("purchases")} />
           <NavItem icon={<ClipboardList size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => setActiveTab("orders")} />
+          <NavItem icon={<Truck size={18} />} label="Shipping" active={activeTab === "shipping"} onClick={() => setActiveTab("shipping")} />
           <NavItem
             icon={<ShieldAlert size={18} />}
             label="Disputes"
@@ -468,6 +471,7 @@ export default function BuyerDashboard() {
                 onDisputeAction={handleBuyerDisputeAction}
               />
             )}
+            {activeTab === "shipping" && <BuyerShipping buyerId={auth.currentUser?.uid} />}
             {activeTab === "account" && <AccountTab onEditProfile={() => setActiveTab("profile")} />}
             {activeTab === "settings" && <SettingsTab />}
             {activeTab === "disputes" && (

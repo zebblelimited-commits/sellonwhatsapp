@@ -168,6 +168,21 @@ service cloud.firestore {
     }
     
     // ═══════════════════════════════════════════════════════════
+    // 🚚 SHIPMENTS: Buyer, seller, and active-admin visibility
+    // ═══════════════════════════════════════════════════════════
+    match /shipments/{shipmentId} {
+      allow read: if request.auth != null && (
+        isActiveAdmin() ||
+        resource.data.buyerId == request.auth.uid ||
+        resource.data.storeId == request.auth.uid ||
+        resource.data.vendorId == request.auth.uid
+      );
+
+      // Shipment creation and courier status updates are server-owned.
+      allow create, update, delete: if false;
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // 🛒 ORDERS: Buyer/vendor/storeId/admin access (FIXED ROOT CAUSE)
     // ═══════════════════════════════════════════════════════════
     match /orders/{orderId} {

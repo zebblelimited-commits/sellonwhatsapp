@@ -19,7 +19,8 @@ import {
   Crown, 
   MessageSquare,
   CreditCard,
-  Menu
+  Menu,
+  Truck
 } from "lucide-react";
 import {
   doc, getDoc, getDocs, collection, query, where, onSnapshot,
@@ -35,6 +36,7 @@ import SettingsTab from "./tabs/settings/SettingsTab";
 import NotificationsTab from "./tabs/NotificationsTab";
 import WithdrawTab from "./tabs/WithdrawTab";
 import OrdersTab from "./tabs/OrdersTab";
+import ShippingTab from "./tabs/ShippingTab";
 import DisputesTab from "./tabs/DisputesTab";
 import VendorChatTab from "./tabs/VendorChatTab";
 import PartnerTab from "./tabs/PartnerTab";
@@ -550,6 +552,7 @@ function Dashboard() {
             <nav className="space-y-1 overflow-y-auto no-scrollbar">
               <NavItem icon={<LayoutDashboard size={18} />} label="Overview" active={activeTab === "overview"} onClick={() => selectSellerTab("overview")} />
               <NavItem icon={<ShoppingCart size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => selectSellerTab("orders")} />
+              <NavItem icon={<Truck size={18} />} label="Shipping" active={activeTab === "shipping"} onClick={() => selectSellerTab("shipping")} />
               <NavItem icon={<Store size={18} />} label="My Store" active={activeTab === "store"} onClick={() => selectSellerTab("store")} />
               <NavItem icon={<Wallet size={18} />} label="Withdraw" active={activeTab === "withdraw"} onClick={() => selectSellerTab("withdraw")} />
               <NavItem icon={<CreditCard size={18} />} label="Payouts" active={activeTab === "payouts"} onClick={() => selectSellerTab("payouts")} />
@@ -596,6 +599,7 @@ function Dashboard() {
         <nav className="space-y-1">
           <NavItem icon={<LayoutDashboard size={18} />} label="Overview" active={activeTab === "overview"} onClick={() => setActiveTab("overview")} />
           <NavItem icon={<ShoppingCart size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => setActiveTab("orders")} />
+          <NavItem icon={<Truck size={18} />} label="Shipping" active={activeTab === "shipping"} onClick={() => setActiveTab("shipping")} />
           <NavItem icon={<Store size={18} />} label="My Store" active={activeTab === "store"} onClick={() => setActiveTab("store")} />
           <NavItem icon={<Wallet size={18} />} label="Withdraw" active={activeTab === "withdraw"} onClick={() => setActiveTab("withdraw")} />
           <NavItem icon={<CreditCard size={18} />} label="Payouts" active={activeTab === "payouts"} onClick={() => setActiveTab("payouts")} />
@@ -690,6 +694,7 @@ function Dashboard() {
           )}
 
           {activeTab === "orders" && <OrdersTab disputes={disputes} onDisputeAction={handleDisputeAction} />}
+          {activeTab === "shipping" && <ShippingTab />}
           {activeTab === "store" && <MyStoreTab initialData={storeData} />}
           {activeTab === "products" && (
             <ProductsTab
