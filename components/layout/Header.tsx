@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import {
-  Search, LayoutDashboard, LogOut, ExternalLink, Store, Menu, X, ShoppingBag, QrCode, Sparkles, MapPin, Phone
+  Search, LayoutDashboard, LogOut, ExternalLink, Store, Menu, X, ShoppingBag, QrCode, Sparkles
 } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
@@ -206,11 +206,6 @@ export default function Header({ isStorePage = false, storeName = "" }) {
 
   return (
     <>
-      <div className={`${font.className} flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b border-green-100 bg-green-50 px-4 py-2 text-center text-[10px] font-semibold text-green-900`}>
-        <span className="inline-flex items-center gap-1.5"><MapPin size={12} className="shrink-0 text-green-700" /> PLOT 6992, BESIDE NELO PLAZA, OPPOSITE MINING QUARTERS, RANTYA, JOS, PLATEAU, NIGERIA</span>
-        <span className="inline-flex items-center gap-1.5"><Phone size={12} className="shrink-0 text-green-700" /> <a href="tel:+2349135146692" className="hover:underline">0913 514 6692</a> · <a href="tel:+2348037811869" className="hover:underline">0803 781 1869</a></span>
-        <Link href="/contact" className="font-extrabold text-green-700 hover:text-green-900 hover:underline">Contact Us</Link>
-      </div>
       <header className={`${font.className} flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 lg:px-6 py-3.5 border-b border-gray-200 bg-white sticky top-0 z-50`}>
 
         {/* Logo & Mobile Menu Toggle */}
@@ -264,7 +259,6 @@ export default function Header({ isStorePage = false, storeName = "" }) {
             <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Pricing</Link>
             <Link href="/boost-store" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Boost Store</Link>
             <Link href="/faq" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">FAQ</Link>
-            <Link href="/contact" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Contact Us</Link>
             {user && vendorUsername && <Link href={`/${vendorUsername}`} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-green-700 hover:bg-green-50">Visit Store</Link>}
             {user ? (
               <>
@@ -360,7 +354,6 @@ export default function Header({ isStorePage = false, storeName = "" }) {
           <Link href="/pricing" className="hover:text-green-600 transition-colors whitespace-nowrap">Pricing</Link>
           <Link href="/boost-store" className="hover:text-green-600 transition-colors whitespace-nowrap">Boost Store</Link>
           <Link href="/faq" className="hover:text-green-600 transition-colors whitespace-nowrap">FAQ</Link>
-          <Link href="/contact" className="hover:text-green-600 transition-colors whitespace-nowrap">Contact Us</Link>
         </nav>
 
         {/* Desktop Quick Actions */}
