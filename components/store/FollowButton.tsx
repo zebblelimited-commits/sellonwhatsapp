@@ -6,9 +6,6 @@ import { User } from "firebase/auth";
 import {
   doc,
   getDoc,
-  increment,
-  writeBatch,
-  serverTimestamp
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
@@ -80,33 +77,18 @@ export default function FollowButton({ vendorId, currentCount, onFollowChange }:
     setActionLoading(true);
     void trackMetric(vendorId, "click");
 
-    const followDocId = `${user.uid}_${vendorId}`;
-    const followRef = doc(db, "follows", followDocId);
-    const storeRef = doc(db, "stores", vendorId);
-    const batch = writeBatch(db);
-
     try {
-      if (isFollowing) {
-        batch.delete(followRef);
-        batch.update(storeRef, { followerCount: increment(-1) });
-        await batch.commit();
-        
-        setIsFollowing(false);
-        onFollowChange(currentCount - 1); // ✅ Instantly update parent UI
-        showAlert("Unfollowed successfully", "success");
-      } else {
-        batch.set(followRef, {
-          followerId: user.uid,
-          vendorId: vendorId,
-          createdAt: serverTimestamp(),
-        });
-        batch.update(storeRef, { followerCount: increment(1) });
-        await batch.commit();
-        
-        setIsFollowing(true);
-        onFollowChange(currentCount + 1); // ✅ Instantly update parent UI
-        showAlert("You are now following this store!", "success");
-      }
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/stores/${encodeURIComponent(vendorId)}/follow`, {
+        method: isFollowing ? "DELETE" : "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Unable to update store follow status");
+
+      setIsFollowing(Boolean(result.following));
+      onFollowChange(typeof result.followerCount === "number" ? result.followerCount : currentCount + (isFollowing ? -1 : 1));
+      showAlert(isFollowing ? "Unfollowed successfully" : "You are now following this store!", "success");
     } catch (error) {
       console.error("Error toggling follow:", error);
       showAlert("Something went wrong. Please try again.", "error");

@@ -359,8 +359,9 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
     match /follows/{followId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && request.resource.data.followerId == request.auth.uid;
-      allow delete: if request.auth != null && resource.data.followerId == request.auth.uid;
+      // Follow mutations go through /api/stores/{storeId}/follow so the
+      // seller's WhatsApp notification is emitted transactionally.
+      allow create, update, delete: if false;
     }
     
     // ═══════════════════════════════════════════════════════════

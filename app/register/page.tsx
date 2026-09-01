@@ -17,6 +17,7 @@ import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 
 // Import the Server Action to set Custom Claims
 import { setUserRole } from "@/lib/auth-actions";
+import { triggerWelcomeNotifications } from "@/lib/client-welcome";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -126,7 +127,7 @@ export default function RegisterPage() {
       }
 
       // ✅ Set Custom Claims so Middleware knows their role
-      await setUserRole(user.uid, role as any); 
+      await setUserRole(user.uid, role as "buyer" | "vendor");
 
       // ✅ Force refresh the token to include the new claims
       await user.getIdToken(true);
@@ -138,6 +139,8 @@ export default function RegisterPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken: newIdToken }),
       });
+
+      triggerWelcomeNotifications(user, role as "buyer" | "vendor");
 
       localStorage.removeItem("registration_progress");
       

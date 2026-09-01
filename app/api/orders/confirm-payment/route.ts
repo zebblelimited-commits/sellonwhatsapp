@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 import { inventoryAdjustment } from "@/lib/inventory";
+import { notifyOrderPaymentConfirmed } from "@/lib/novu-events";
 
 class PaymentConfirmationError extends Error {
   status: number;
@@ -280,6 +281,21 @@ export async function POST(request: NextRequest) {
 
       return processedOrders;
     });
+
+    // Notify only after the escrow transaction has committed. The Novu fan-out
+    // is isolated from payment confirmation and is idempotent across retries.
+    try {
+      await Promise.allSettled(
+        results.map((result, index) => result.alreadyProcessed
+          ? Promise.resolve()
+          : notifyOrderPaymentConfirmed({
+            id: ordersToProcess[index]?.ref.id,
+            ...ordersToProcess[index]?.data,
+          })),
+      );
+    } catch (notificationError) {
+      console.error("[NOVU WHATSAPP] Payment confirmation fan-out failed:", notificationError);
+    }
 
     return NextResponse.json({ success: true, confirmed: true, results });
   } catch (error: unknown) {

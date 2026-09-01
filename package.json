@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@headlessui/react": "^2.2.10",
+    "@novu/api": "^3.19.0",
     "@novu/node": "^2.6.6",
     "@novu/react": "^3.16.0",
     "@remixicon/react": "^4.9.0",

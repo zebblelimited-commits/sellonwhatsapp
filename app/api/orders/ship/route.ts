@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { notifyOrderStatus } from "@/lib/novu-events";
 
 class ShipOrderError extends Error {
   status: number;
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
 
       // If already shipped or completed, return early
       if (["SHIPPED", "WORK_DONE", "COMPLETED_PENDING_BUYER"].includes(rawStatus)) {
-        return { alreadyUpdated: true, status: rawStatus };
+        return { alreadyUpdated: true, status: rawStatus, notificationOrder: null };
       }
 
       if (!["PAID_HELD", "PENDING", "IN_PROGRESS"].includes(rawStatus)) {
@@ -91,10 +92,19 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      return { alreadyUpdated: false, status: nextStatus };
+      return { alreadyUpdated: false, status: nextStatus, notificationOrder: { id: orderSnap.id, ...order } };
     });
 
-    return NextResponse.json({ success: true, ...result });
+    if (!result.alreadyUpdated && result.notificationOrder) {
+      try {
+        await notifyOrderStatus(result.notificationOrder, "order-shipped");
+      } catch (notificationError) {
+        console.error("[NOVU WHATSAPP] Order-shipped notification failed:", notificationError);
+      }
+    }
+
+    const { notificationOrder: _notificationOrder, ...responseResult } = result;
+    return NextResponse.json({ success: true, ...responseResult });
   } catch (error: unknown) {
     console.error("Update order API error:", error);
     const status = error instanceof ShipOrderError ? error.status : 500;

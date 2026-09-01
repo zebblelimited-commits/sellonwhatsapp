@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 import { Novu } from "@novu/node";
 import { inventoryAdjustment } from "@/lib/inventory";
+import { notifyOrderPaymentConfirmed, notifyOrderStatus, notifyPayoutCompleted } from "@/lib/novu-events";
 
 // ✅ 1. SAFELY Initialize Novu
 const novuApiKey = process.env.NOVU_API_KEY || process.env.NOVU_SECRET_KEY;
@@ -190,6 +191,7 @@ export async function POST(request: NextRequest) {
             };
             await adminDb.collection("notifications").add({ vendorId: targetUserId, ...notifConfig, actionable: true, read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() });
             await triggerNovuNotification(targetUserId, notifConfig.title, notifConfig.body, notifConfig.actionUrl, notifConfig.actionLabel, notifConfig.priority);
+            await notifyPayoutCompleted({ id: docSnap.id, ...localData });
           }
 
         } else if (isPartner) {
@@ -333,6 +335,9 @@ export async function POST(request: NextRequest) {
             });
 
             console.log(`✅ [ESCROW] Order ${orderRef} ${holdResult.transitioned ? `reserved ₦${holdResult.amount}` : "was already reserved"}.`);
+            if (holdResult.transitioned) {
+              await notifyOrderPaymentConfirmed({ id: docSnap.id, ...localData });
+            }
           } else {
             // Calculate plan expiration
             const activeDuration = Number(localData.durationDays || localData.durationMonths || 7);
@@ -447,6 +452,9 @@ export async function POST(request: NextRequest) {
           }
         } else {
           await documentRef.update({ status: "failed", ...(collectionName === "orders" ? { paymentStatus: "failed" } : {}), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+          if (collectionName === "orders" && ["REFUNDED", "CANCELLED"].includes(gatewayStatus)) {
+            await notifyOrderStatus({ id: docSnap.id, ...localData }, gatewayStatus === "REFUNDED" ? "order-refunded" : "order-cancelled");
+          }
           if (targetUserId) {
             const failConfig = { type: "payment", priority: "urgent", title: "Payment Failed ❌", body: `Your payment could not be processed.`, actionUrl: collectionName === "orders" ? "/dashboard?tab=orders" : "/dashboard?tab=overview", actionLabel: "View Details" };
             await adminDb.collection("notifications").add({ vendorId: targetUserId, ...failConfig, actionable: true, read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() });

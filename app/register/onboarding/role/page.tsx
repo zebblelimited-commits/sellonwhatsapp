@@ -11,6 +11,7 @@ import { signInWithPopup } from "firebase/auth";
 import { auth, db, googleProvider } from "@/lib/firebase";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { setUserRole } from "@/lib/auth-actions";
+import { triggerWelcomeNotifications } from "@/lib/client-welcome";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -114,6 +115,8 @@ export default function RoleSelectionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken: newIdToken }),
       });
+
+      triggerWelcomeNotifications(user, role);
 
       // 4. Route to Dashboard
       router.push(role === "vendor" ? "/dashboard" : "/buyer/dashboard");

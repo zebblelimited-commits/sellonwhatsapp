@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { requireAdmin } from "@/lib/admin-auth";
+import { notifyPayoutCompleted } from "@/lib/novu-events";
 
 const PAYOUT_STATUSES = ["pending", "processing", "completed", "failed", "refunded"] as const;
 type PayoutStatus = (typeof PAYOUT_STATUSES)[number];
@@ -106,6 +107,15 @@ export async function PATCH(
 
       return { alreadyProcessed: false, status: nextStatus, balanceRestored };
     });
+
+    if (!result.alreadyProcessed && nextStatus === "completed") {
+      try {
+        const payoutSnapshot = await adminDb.collection("payouts").doc(id).get();
+        if (payoutSnapshot.exists) await notifyPayoutCompleted({ id: payoutSnapshot.id, ...payoutSnapshot.data() });
+      } catch (notificationError) {
+        console.error("[NOVU WHATSAPP] Reconciled payout notification failed:", notificationError);
+      }
+    }
 
     return NextResponse.json({ success: true, ...result });
   } catch (error: unknown) {

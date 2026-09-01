@@ -3,6 +3,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { requireAdmin } from "@/lib/admin-auth";
 import { inventoryAdjustment } from "@/lib/inventory";
+import { notifyOrderPaymentConfirmed } from "@/lib/novu-events";
 
 class OrderReconciliationError extends Error {
   status: number;
@@ -188,6 +189,15 @@ export async function PATCH(
 
       return { alreadyProcessed: false, amount: orderAmount, status: nextStatus, fundsState: "held" };
     });
+
+    if (!result.alreadyProcessed) {
+      try {
+        const reconciledOrder = await adminDb.collection("orders").doc(id).get();
+        if (reconciledOrder.exists) await notifyOrderPaymentConfirmed({ id: reconciledOrder.id, ...reconciledOrder.data() });
+      } catch (notificationError) {
+        console.error("[NOVU WHATSAPP] Reconciled order notification failed:", notificationError);
+      }
+    }
 
     return NextResponse.json({ success: true, ...result });
   } catch (error: unknown) {

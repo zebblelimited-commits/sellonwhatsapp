@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
+import { notifyFundsReleased, notifyOrderStatus } from "@/lib/novu-events";
 
 class CompletionError extends Error {
   status: number;
@@ -105,8 +106,19 @@ export async function POST(request: NextRequest) {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      return { alreadyCompleted: false, orderAmount };
+      return { alreadyCompleted: false, orderAmount, notificationOrder: { id: orderSnap.id, ...orderData } };
     });
+
+    if (!result.alreadyCompleted && result.notificationOrder) {
+      try {
+        await Promise.allSettled([
+          notifyOrderStatus(result.notificationOrder, "order-delivered"),
+          notifyFundsReleased({ ...result.notificationOrder, settlementAmount: result.orderAmount }),
+        ]);
+      } catch (notificationError) {
+        console.error("[NOVU WHATSAPP] Completion notification fan-out failed:", notificationError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

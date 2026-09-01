@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue, type DocumentReference } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { notifyFundsReleased, notifyOrderStatus } from "@/lib/novu-events";
 
 const TERMINAL_STATUSES = ["resolved_refund", "resolved_vendor", "closed"];
 
@@ -302,6 +303,17 @@ export async function POST(
         const result = await settleDispute(disputeId, nextStatus, resolution, access.decodedToken.uid, access.decodedToken.email || access.adminProfile?.email || "", access.disputeRef);
         if (!result.alreadyProcessed) {
           await notifyParties(access.dispute, disputeId, nextStatus === "resolved_refund" ? "Admin recorded a buyer refund for this dispute." : "Admin released the escrow funds to the seller.");
+          try {
+            const settledOrder = await adminDb.collection("orders").doc(access.dispute.orderId).get();
+            if (settledOrder.exists) {
+              const order = { id: settledOrder.id, ...settledOrder.data(), settlementAmount: result.amount };
+              await Promise.allSettled(nextStatus === "resolved_refund"
+                ? [notifyOrderStatus(order, "order-refunded")]
+                : [notifyFundsReleased(order)]);
+            }
+          } catch (notificationError) {
+            console.error("[NOVU WHATSAPP] Dispute settlement notification failed:", notificationError);
+          }
         }
         return NextResponse.json({ success: true, status: nextStatus, financialOutcome: result.outcome, amount: result.amount, alreadyProcessed: result.alreadyProcessed });
       }
