@@ -240,11 +240,18 @@ export const getProductAnalytics = async (
   }
 };
 
+export type SearchAnalytics = {
+  totalSearches: number;
+  uniqueSearches: number;
+  topSearches: Array<{ query: string; count: number }>;
+};
+
 /**
- * ✅ NEW: Get top search queries for the Admin Dashboard
- * Note: Firestore doesn't do native GROUP BY easily, so we fetch recent searches and aggregate in memory.
+ * Get product-search analytics for the Admin Dashboard.
+ * Firestore does not provide a native GROUP BY, so recent search events are
+ * aggregated in memory after a bounded query.
  */
-export const getTopSearches = async (limitCount: number = 20) => {
+export const getSearchAnalytics = async (limitCount: number = 20): Promise<SearchAnalytics> => {
   try {
     const q = query(
       collection(db, "analytics"),
@@ -273,11 +280,20 @@ export const getTopSearches = async (limitCount: number = 20) => {
 
     console.log(`[Analytics] 📊 Fetched top ${limitCount} searches. Top result: ${sortedSearches.length > 0 ? sortedSearches[0].query : "None"}`);
 
-    return sortedSearches;
+    return {
+      totalSearches: snapshot.size,
+      uniqueSearches: Object.keys(searchCounts).length,
+      topSearches: sortedSearches,
+    };
   } catch (error) {
     console.error("[Analytics] ❌ Error fetching top searches:", error);
-    return [];
+    return { totalSearches: 0, uniqueSearches: 0, topSearches: [] };
   }
+};
+
+export const getTopSearches = async (limitCount: number = 20) => {
+  const result = await getSearchAnalytics(limitCount);
+  return result.topSearches;
 };
 
 export default {
@@ -291,5 +307,6 @@ export default {
   trackSearch,         // ✅ NEW
   getStoreAnalytics,
   getProductAnalytics,
-  getTopSearches       // ✅ NEW
+  getTopSearches,
+  getSearchAnalytics
 };

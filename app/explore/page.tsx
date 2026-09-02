@@ -1,6 +1,6 @@
 "use client";
 import Footer from "@/components/layout/Footer"; // ✅ 1. Import it
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
@@ -19,6 +19,26 @@ import { trackMetric } from "@/lib/analytics";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
+type Coordinates = { latitude: number; longitude: number };
+
+function storeCoordinates(store: Record<string, any>): Coordinates | null {
+  const location = store.location && typeof store.location === "object" ? store.location : {};
+  const latitude = Number(store.latitude ?? store.lat ?? location.latitude ?? location.lat);
+  const longitude = Number(store.longitude ?? store.lng ?? location.longitude ?? location.lng);
+  return Number.isFinite(latitude) && Number.isFinite(longitude) && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
+    ? { latitude, longitude }
+    : null;
+}
+
+function distanceInKm(from: Coordinates, to: Coordinates) {
+  const radians = (value: number) => value * Math.PI / 180;
+  const earthRadius = 6371;
+  const deltaLatitude = radians(to.latitude - from.latitude);
+  const deltaLongitude = radians(to.longitude - from.longitude);
+  const a = Math.sin(deltaLatitude / 2) ** 2 + Math.cos(radians(from.latitude)) * Math.cos(radians(to.latitude)) * Math.sin(deltaLongitude / 2) ** 2;
+  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export default function ExplorePage() {
   const [stores, setStores] = useState<any[]>([]);
   const [recommendedStores, setRecommendedStores] = useState<any[]>([]);
@@ -29,6 +49,8 @@ export default function ExplorePage() {
   const [locationSearch, setLocationSearch] = useState("");
   const [selectedState, setSelectedState] = useState("All Nigeria");
   const [onlyVerified, setOnlyVerified] = useState(false);
+  const [userLocation, setUserLocation] = useState<Coordinates | null>(null);
+  const [locationStatus, setLocationStatus] = useState<"idle" | "loading" | "ready" | "denied">("idle");
 
   const categories = [
     { name: "All", icon: <LayoutGrid size={16} /> },
@@ -49,17 +71,33 @@ export default function ExplorePage() {
     state.toLowerCase().includes(locationSearch.toLowerCase())
   );
 
+  const requestUserLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus("denied");
+      return;
+    }
+    setLocationStatus("loading");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+        setLocationStatus("ready");
+      },
+      () => setLocationStatus("denied"),
+      { enableHighAccuracy: false, maximumAge: 300000, timeout: 10000 },
+    );
+  };
+
   useEffect(() => {
     const fetchStores = async () => {
       setLoading(true);
       try {
-        let q = query(collection(db, "stores"), limit(12));
+        let q = query(collection(db, "stores"), limit(100));
         if (selectedCategory !== "All") {
-          q = query(collection(db, "stores"), where("category", "==", selectedCategory), limit(12));
+          q = query(collection(db, "stores"), where("category", "==", selectedCategory), limit(100));
         }
         const [querySnapshot, recommendedSnapshot] = await Promise.all([
           getDocs(q),
-          getDocs(query(collection(db, "stores"), limit(6)))
+          getDocs(query(collection(db, "stores"), limit(12)))
         ]);
         const storesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         const recommendedData = recommendedSnapshot.docs
@@ -77,6 +115,19 @@ export default function ExplorePage() {
     };
     fetchStores();
   }, [selectedCategory]);
+
+  const nearbyStores = useMemo(() => {
+    const withCoordinates = stores
+      .map((store) => ({ store, coordinates: storeCoordinates(store) }))
+      .filter((entry): entry is { store: any; coordinates: Coordinates } => Boolean(entry.coordinates));
+
+    if (!userLocation) return withCoordinates.slice(0, 4).map(({ store }) => store);
+    return withCoordinates
+      .map(({ store, coordinates }) => ({ store, distanceKm: distanceInKm(userLocation, coordinates) }))
+      .sort((left, right) => left.distanceKm - right.distanceKm)
+      .slice(0, 4)
+      .map(({ store, distanceKm }) => ({ ...store, distanceKm }));
+  }, [stores, userLocation]);
 
   return (
     <main className={`${jakarta.className} min-h-screen bg-[#FAFAFA]`}>
@@ -144,21 +195,29 @@ export default function ExplorePage() {
           <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-6 gap-4">
             <div>
               <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Stores Near You</h2>
-              <p className="text-gray-500 font-medium mt-1">Discover local sellers in your area. <span className="text-[#00a63e] font-bold">(Location filtering coming soon)</span></p>
+              <p className="text-gray-500 font-medium mt-1">{userLocation ? "Closest sellers based on your current location." : "Discover local sellers in your area."}</p>
             </div>
-            <Link href="/stores" className="flex items-center gap-1 text-sm font-bold text-[#00a63e] hover:text-[#008f35] transition-colors shrink-0">
-              View all stores <span className="text-lg">›</span>
-            </Link>
+            <div className="flex items-center gap-3">
+              <button onClick={requestUserLocation} disabled={locationStatus === "loading"} className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs font-bold text-[#00a63e] transition hover:bg-green-100 disabled:opacity-60">
+                <MapPin size={14} /> {locationStatus === "loading" ? "Locating…" : userLocation ? "Refresh location" : "Use my location"}
+              </button>
+              <Link href="/stores" className="hidden items-center gap-1 text-sm font-bold text-[#00a63e] hover:text-[#008f35] transition-colors sm:flex">
+                View all stores <span className="text-lg">›</span>
+              </Link>
+            </div>
           </div>
+          {locationStatus === "denied" && <p className="mb-4 text-xs font-semibold text-amber-700">Location access was unavailable. Showing stores with saved coordinates instead.</p>}
           
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {loading ? (
               [1, 2, 3, 4].map(i => <StoreSkeleton key={`near-${i}`} />)
-            ) : (
-              // Placeholder: Reusing fetched stores until lat/lng is implemented
-              stores.slice(0, 4).map((store) => (
-                <StoreCardExplore key={`near-${store.id}`} store={store} />
-              ))
+            ) : nearbyStores.length > 0 ? nearbyStores.map((store) => (
+              <div key={`near-${store.id}`} className="relative">
+                <StoreCardExplore store={store} />
+                {typeof store.distanceKm === "number" && <span className="absolute right-4 top-4 rounded-full bg-white/90 px-2 py-1 text-[10px] font-black text-green-700 shadow-sm">{store.distanceKm.toFixed(1)} km</span>}
+              </div>
+            )) : (
+              <div className="col-span-full rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500">No stores have a saved map location yet.</div>
             )}
           </div> {/* ✅ FIXED: Added the missing closing ">" here */}
         </section>

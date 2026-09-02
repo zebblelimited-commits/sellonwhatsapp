@@ -8,7 +8,7 @@ import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import {
   Calendar, CheckCircle2, Package, Search, X, Loader2, CreditCard, ShieldCheck, Info
 } from "lucide-react";
-import { collection, doc, getDoc, getDocs, limit, orderBy, query } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, limit, query } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
@@ -45,6 +45,8 @@ type Product = {
   orderCount?: number;
   views?: number;
   clicks?: number;
+  add_to_cart_clicks?: number;
+  addToCartClicks?: number;
   createdAt?: unknown;
 };
 
@@ -61,7 +63,19 @@ function timestampValue(value: unknown) {
     return value.toMillis();
   }
   if (value instanceof Date) return value.getTime();
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
   return 0;
+}
+
+function productEngagementScore(product: Product) {
+  return Number(product.popularityScore ?? 0) ||
+    Number(product.salesCount ?? product.orderCount ?? 0) * 10 +
+    Number(product.add_to_cart_clicks ?? product.addToCartClicks ?? 0) * 5 +
+    Number(product.clicks ?? 0) * 3 +
+    Number(product.views ?? 0);
 }
 
 function productIsVisible(product: Product) {
@@ -133,21 +147,10 @@ export default function ProductSection({
       setError("");
 
       try {
-        let productsQuery;
-
-        switch (sectionType) {
-          case "trending":
-            productsQuery = query(collection(db, "products"), orderBy("views", "desc"), limit(60));
-            break;
-          case "newest":
-            productsQuery = query(collection(db, "products"), orderBy("createdAt", "desc"), limit(60));
-            break;
-          case "popular":
-          case "recommended":
-          default:
-            productsQuery = query(collection(db, "products"), limit(60));
-            break;
-        }
+        // Do not order in Firestore: legacy products often do not have a
+        // views/createdAt field, and orderBy silently excludes those records.
+        // Fetch a bounded public set and apply a tolerant client-side sort.
+        const productsQuery = query(collection(db, "products"), limit(100));
 
         const productSnapshot = await getDocs(productsQuery);
         const rawProducts = productSnapshot.docs
@@ -170,15 +173,16 @@ export default function ProductSection({
             vendorName: product.vendorName || store?.storeName || store?.name || "Marketplace seller",
             username: product.username || store?.username || "",
             nombaAccountId: store?.nombaAccountId || "",
-            popularityScore: Number(product.popularityScore ?? product.salesCount ?? product.orderCount ?? product.views ?? product.clicks ?? 0),
+            popularityScore: productEngagementScore(product),
           };
         });
 
         const sortedProducts = enrichedProducts.sort((left, right) => {
-          if (sectionType === "popular" || sectionType === "recommended") {
+          if (sectionType === "trending" || sectionType === "popular" || sectionType === "recommended") {
             return right.popularityScore! - left.popularityScore! || timestampValue(right.createdAt) - timestampValue(left.createdAt);
           }
-          return 0;
+          if (sectionType === "newest") return timestampValue(right.createdAt) - timestampValue(left.createdAt);
+          return right.popularityScore! - left.popularityScore! || timestampValue(right.createdAt) - timestampValue(left.createdAt);
         });
 
         if (!cancelled) setProducts(sortedProducts.slice(0, maxItems));

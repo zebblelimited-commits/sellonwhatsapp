@@ -19,7 +19,7 @@ import {
 import {
   Eye, MousePointer2, Users, Package,
   Store, ExternalLink, ShoppingBag, TrendingUp, Share2, ShieldCheck, Loader2,
-  MessageCircle, Crown
+  MessageCircle, Crown, ShoppingCart
 } from "lucide-react";
 
 const compactNumber = (num: number) => {
@@ -40,7 +40,7 @@ export default function OverviewTab({
   hasProAccess = false,
   views,
   clicks,
-  buyNowClicks
+  buyNowClicks,
 }: {
   username: string,
   storeUrl: string,
@@ -93,22 +93,24 @@ export default function OverviewTab({
     const clicks = analyticsData.filter(d => d.eventType === "click").length;
     const buyNowClicks = analyticsData.filter(d => d.eventType === "buy_now_click").length;
     const whatsappClicks = analyticsData.filter(d => d.eventType === "whatsapp_click").length;
-    return { views, clicks, buyNowClicks, whatsappClicks, total: analyticsData.length };
+    const addToCartClicks = analyticsData.filter(d => d.eventType === "add_to_cart_click").length;
+    return { views, clicks, buyNowClicks, whatsappClicks, addToCartClicks, total: analyticsData.length };
   }, [analyticsData]);
 
   // 🌟 UPDATED: Added WhatsApp to the chart data generation
   const chartData = useMemo(() => {
-    const grouped: Record<string, { Sales: number; Clicks: number; WhatsApp: number }> = {};
+    const grouped: Record<string, { Sales: number; Clicks: number; WhatsApp: number; AddToCart: number }> = {};
     analyticsData.forEach(item => {
       const timestamp = item.timestamp?.toDate ? item.timestamp.toDate() : new Date(item.timestamp);
       let dateKey: string;
       if (timeRange === "1Y") dateKey = timestamp.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
       else dateKey = `${timestamp.getMonth() + 1}/${timestamp.getDate()}`;
 
-      if (!grouped[dateKey]) grouped[dateKey] = { Sales: 0, Clicks: 0, WhatsApp: 0 };
+      if (!grouped[dateKey]) grouped[dateKey] = { Sales: 0, Clicks: 0, WhatsApp: 0, AddToCart: 0 };
       if (item.eventType === "buy_now_click") grouped[dateKey].Sales++;
       else if (item.eventType === "click") grouped[dateKey].Clicks++;
       else if (item.eventType === "whatsapp_click") grouped[dateKey].WhatsApp++;
+      else if (item.eventType === "add_to_cart_click") grouped[dateKey].AddToCart++;
     });
 
     const data = [];
@@ -122,7 +124,8 @@ export default function OverviewTab({
         date: label, 
         Sales: grouped[label]?.Sales || 0, 
         Clicks: grouped[label]?.Clicks || 0, 
-        WhatsApp: grouped[label]?.WhatsApp || 0 
+        WhatsApp: grouped[label]?.WhatsApp || 0,
+        AddToCart: grouped[label]?.AddToCart || 0,
       });
     }
     return data;
@@ -161,6 +164,7 @@ export default function OverviewTab({
           <StatCard label="Total Clicks" value={stats.clicks.toLocaleString()} icon={<MousePointer2 size={18} />} color="text-green-600" bg="bg-green-50" subtitle={`${timeRange} period`} />
           <StatCard label="Buy Now" value={stats.buyNowClicks.toLocaleString()} icon={<ShoppingBag size={18} />} color="text-purple-600" bg="bg-purple-50" subtitle="Purchase intents" />
           <StatCard label="WhatsApp Clicks" value={stats.whatsappClicks.toLocaleString()} icon={<MessageCircle size={18} />} color="text-green-600" bg="bg-green-50" subtitle="Premium Metric" isLocked={!hasProAccess} />
+          <StatCard label="Add to Cart" value={stats.addToCartClicks.toLocaleString()} icon={<ShoppingCart size={18} />} color="text-amber-600" bg="bg-amber-50" subtitle="Cart additions" />
           <StatCard label="Conversion" value={stats.views > 0 ? `${((stats.buyNowClicks / stats.views) * 100).toFixed(1)}%` : "0%"} icon={<TrendingUp size={18} />} color="text-emerald-600" bg="bg-emerald-50" subtitle="Buy Now / Views" />
         </div>
 
@@ -172,6 +176,7 @@ export default function OverviewTab({
           <StatCard label="Total Clicks" value={stats.clicks.toLocaleString()} icon={<MousePointer2 size={18} />} color="text-green-600" bg="bg-green-50" subtitle={`${timeRange} period`} />
           <StatCard label="Buy Now" value={stats.buyNowClicks.toLocaleString()} icon={<ShoppingBag size={18} />} color="text-purple-600" bg="bg-purple-50" subtitle="Purchase intents" />
           <StatCard label="WhatsApp Clicks" value={stats.whatsappClicks.toLocaleString()} icon={<MessageCircle size={18} />} color="text-green-600" bg="bg-green-50" subtitle="Premium Metric" isLocked={!hasProAccess} />
+          <StatCard label="Add to Cart" value={stats.addToCartClicks.toLocaleString()} icon={<ShoppingCart size={18} />} color="text-amber-600" bg="bg-amber-50" subtitle="Cart additions" />
           <StatCard label="Conversion" value={stats.views > 0 ? `${((stats.buyNowClicks / stats.views) * 100).toFixed(1)}%` : "0%"} icon={<TrendingUp size={18} />} color="text-emerald-600" bg="bg-emerald-50" subtitle="Buy Now / Views" />
         </div>
       </div>
@@ -200,6 +205,7 @@ export default function OverviewTab({
             <div className="flex flex-wrap gap-x-3 gap-y-2 sm:gap-4">
               <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-purple-500" /><span className="text-[9px] font-black text-slate-500 uppercase">Buy Now</span></div>
               <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-[9px] font-black text-slate-500 uppercase">Clicks</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500" /><span className="text-[9px] font-black text-slate-500 uppercase">Add to Cart</span></div>
               
               {/* WhatsApp Legend Item */}
               <div className="flex items-center gap-1.5">
@@ -229,6 +235,10 @@ export default function OverviewTab({
                     <stop offset="5%" stopColor="#25D366" stopOpacity={0.15}/>
                     <stop offset="95%" stopColor="#25D366" stopOpacity={0}/>
                   </linearGradient>
+                  <linearGradient id="colorAddToCart" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15}/>
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                  </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} stroke="#e2e8f0" strokeDasharray="4 4" />
                 <XAxis dataKey="date" axisLine={false} tickLine={false} interval={timeRange === "7D" ? 0 : timeRange === "1M" ? 5 : timeRange === "6M" ? 30 : 1} tick={{ fontSize: 12, fontWeight: 900, fill: "#475569" }} />
@@ -241,6 +251,7 @@ export default function OverviewTab({
                 />
                 <Area type="monotone" dataKey="Sales" stroke="#a855f7" strokeWidth={2.5} fillOpacity={1} fill="url(#colorSales)" activeDot={{ r: 5, strokeWidth: 0 }} />
                 <Area type="monotone" dataKey="Clicks" stroke="#3b82f6" strokeWidth={2.5} fillOpacity={1} fill="url(#colorClicks)" activeDot={{ r: 5, strokeWidth: 0 }} />
+                <Area type="monotone" dataKey="AddToCart" stroke="#f59e0b" strokeWidth={2.5} fillOpacity={1} fill="url(#colorAddToCart)" activeDot={{ r: 5, strokeWidth: 0 }} />
                 
                 {/* 🌟 CONDITIONAL: Only render WhatsApp line if user has Pro access */}
                 {hasProAccess && (

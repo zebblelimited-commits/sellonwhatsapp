@@ -28,6 +28,7 @@ import AdminVerificationsPanel from "@/components/admin/AdminVerificationsTab";
 import AdminBankVerificationsTab from "@/components/admin/AdminBankVerificationsTab";
 import AdminProductsTab from "@/components/admin/AdminProductsTab";
 import AdminShipping from "@/components/admin/AdminShipping Tab";
+import AdminSearchAnalyticsTab from "@/components/admin/AdminSearchAnalyticsTab";
 import { adminMutation } from "@/components/admin/adminApi";
 import { supportChatRequest } from "@/components/chat/chatApi";
 import { showToast } from "@/lib/toast";
@@ -1685,6 +1686,7 @@ export default function AdminDashboard() {
       case "notifications": return <AdminNotificationsTab />;
       case "chat": return <AdminChatTab initialChats={chats} />;
       case "analytics": return <AdminAnalyticsTab />;
+      case "search-analytics": return <AdminSearchAnalyticsTab />;
       case "audit": return <AdminAuditLogsTab />;
       case "verifications": return <AdminVerificationsTab />;
       case "bank-verifications": return <AdminBankVerificationsTab />;
@@ -1732,6 +1734,7 @@ export default function AdminDashboard() {
               <NavItem icon={<MessageSquare size={18} />} label="Chat" active={activeTab === "chat"} onClick={() => handleTabChange("chat")} badge={totalUnreadChats > 0 ? totalUnreadChats : null} />
               <NavItem icon={<Bell size={18} />} label="Notifications" active={activeTab === "notifications"} onClick={() => handleTabChange("notifications")} />
               <NavItem icon={<TrendingUp size={18} />} label="Analytics" active={activeTab === "analytics"} onClick={() => handleTabChange("analytics")} />
+              <NavItem icon={<Search size={18} />} label="Search analytics" active={activeTab === "search-analytics"} onClick={() => handleTabChange("search-analytics")} />
               <NavItem icon={<ClipboardList size={18} />} label="Audit logs" active={activeTab === "audit"} onClick={() => handleTabChange("audit")} />
               <NavItem icon={<ShieldCheck size={18} />} label="Verifications" active={activeTab === "verifications"} onClick={() => handleTabChange("verifications")} badge={pendingVerifications > 0 ? pendingVerifications : null} />
               <NavItem icon={<Landmark size={18} />} label="Bank accounts" active={activeTab === "bank-verifications"} onClick={() => handleTabChange("bank-verifications")} badge={pendingBankVerifications > 0 ? pendingBankVerifications : null} />
@@ -1764,6 +1767,7 @@ export default function AdminDashboard() {
           <NavItem icon={<MessageSquare size={18} />} label="Chat" active={activeTab === "chat"} onClick={() => handleTabChange("chat")} badge={totalUnreadChats > 0 ? totalUnreadChats : null} />
           <NavItem icon={<Bell size={18} />} label="Notifications" active={activeTab === "notifications"} onClick={() => handleTabChange("notifications")} />
           <NavItem icon={<TrendingUp size={18} />} label="Analytics" active={activeTab === "analytics"} onClick={() => handleTabChange("analytics")} />
+          <NavItem icon={<Search size={18} />} label="Search analytics" active={activeTab === "search-analytics"} onClick={() => handleTabChange("search-analytics")} />
           <NavItem icon={<ClipboardList size={18} />} label="Audit logs" active={activeTab === "audit"} onClick={() => handleTabChange("audit")} />
           <NavItem icon={<ShieldCheck size={18} />} label="Verifications" active={activeTab === "verifications"} onClick={() => handleTabChange("verifications")} badge={pendingVerifications > 0 ? pendingVerifications : null} />
           <NavItem icon={<Landmark size={18} />} label="Bank accounts" active={activeTab === "bank-verifications"} onClick={() => handleTabChange("bank-verifications")} badge={pendingBankVerifications > 0 ? pendingBankVerifications : null} />

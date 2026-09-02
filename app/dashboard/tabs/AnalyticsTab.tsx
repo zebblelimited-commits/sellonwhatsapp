@@ -76,6 +76,7 @@ interface AnalyticsTabProps {
   views?: number;
   clicks?: number;
   buyNowClicks?: number;
+  addToCartClicks?: number;
 }
 
 interface Bucket {
@@ -249,11 +250,13 @@ export default function AnalyticsTab({ orders = [], stats = {}, storeId }: Analy
     const buyNowClicks = count("buy_now_click");
     const clicks = count("click");
     const whatsappClicks = count("whatsapp_click");
+    const addToCartClicks = count("add_to_cart_click");
     return {
       views,
       clicks,
       buyNowClicks,
       whatsappClicks,
+      addToCartClicks,
       totalEvents: analyticsData.length,
       conversionRate: views ? ((buyNowClicks / views) * 100).toFixed(1) : "0.0",
       revenue: paidOrders.reduce((total, order) => total + amountOf(order.totalAmount ?? order.total), 0),
@@ -339,6 +342,7 @@ export default function AnalyticsTab({ orders = [], stats = {}, storeId }: Analy
         <AnalyticsCard label="Views" value={realStats.views.toLocaleString()} icon={<Eye size={18} />} iconColor="text-blue-600" iconBg="bg-blue-50" subtitle={`${timeRange} period`} />
         <AnalyticsCard label="Clicks" value={realStats.clicks.toLocaleString()} icon={<MousePointer2 size={18} />} iconColor="text-indigo-600" iconBg="bg-indigo-50" subtitle="Product/store clicks" />
         <AnalyticsCard label="Buy Now" value={realStats.buyNowClicks.toLocaleString()} icon={<ShoppingBag size={18} />} iconColor="text-purple-600" iconBg="bg-purple-50" subtitle="Purchase intents" />
+        <AnalyticsCard label="Add to Cart" value={realStats.addToCartClicks.toLocaleString()} icon={<ShoppingBag size={18} />} iconColor="text-amber-600" iconBg="bg-amber-50" subtitle="Cart additions" />
         <AnalyticsCard label="WhatsApp Clicks" value={realStats.whatsappClicks.toLocaleString()} icon={<MessageCircle size={18} />} iconColor="text-green-600" iconBg="bg-green-50" subtitle="Direct chats" />
         <AnalyticsCard label="Conversion" value={`${realStats.conversionRate}%`} icon={<Percent size={18} />} iconColor="text-emerald-600" iconBg="bg-emerald-50" subtitle="Buy Now / Views" />
         <AnalyticsCard label="Total Events" value={realStats.totalEvents.toLocaleString()} icon={<Activity size={18} />} iconColor="text-slate-600" iconBg="bg-slate-50" subtitle="Tracked actions" />

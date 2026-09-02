@@ -27,6 +27,8 @@ interface StoreData {
   category?: string; // Kept for backward compatibility
   state: string;
   lga: string;
+  latitude?: number;
+  longitude?: number;
   phone: string;
   address: string;
   email: string;
@@ -171,6 +173,8 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
     lga: initialData?.lga || "",
     phone: initialData?.phone || "",
     address: initialData?.address || "",
+    latitude: initialData?.latitude != null ? String(initialData.latitude) : "",
+    longitude: initialData?.longitude != null ? String(initialData.longitude) : "",
     email: initialData?.email || "",
     socials: {
       instagram: initialData?.socials?.instagram || "",
@@ -491,6 +495,25 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
     }
   };
 
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      showNotification("error", "Location Unavailable", "Your browser does not support location access.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setFormData(prev => ({
+          ...prev,
+          latitude: position.coords.latitude.toFixed(6),
+          longitude: position.coords.longitude.toFixed(6),
+        }));
+        showNotification("success", "Location Captured", "Your store coordinates will be saved when you save the profile.");
+      },
+      () => showNotification("error", "Location Permission Needed", "Allow location access, then try again."),
+      { enableHighAccuracy: false, maximumAge: 300000, timeout: 10000 },
+    );
+  };
+
   const handleImgChange = (e: React.ChangeEvent<HTMLInputElement>, type: "banner" | "logo") => {
     const file = e.target.files?.[0];
     if (file) {
@@ -566,6 +589,8 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
 
       await updateDoc(doc(db, "stores", auth.currentUser.uid), {
         ...formData,
+        latitude: Number(formData.latitude) || null,
+        longitude: Number(formData.longitude) || null,
         bannerUrl: currentBannerUrl,
         logoUrl: currentLogoUrl,
         updatedAt: new Date()
@@ -792,6 +817,8 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
                     lga: initialData?.lga || "",
                     phone: initialData?.phone || "",
                     address: initialData?.address || "",
+                    latitude: initialData?.latitude != null ? String(initialData.latitude) : "",
+                    longitude: initialData?.longitude != null ? String(initialData.longitude) : "",
                     email: initialData?.email || "",
                     socials: {
                       instagram: initialData?.socials?.instagram || "",
@@ -1108,6 +1135,19 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
                 <span>{formData.state && formData.lga ? `${formData.lga}, ${formData.state} State` : "Not set"}</span>
               </div>
             )}
+            {isEditing && <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-black text-blue-900">Map coordinates</p>
+                  <p className="mt-1 text-[10px] font-medium text-blue-700">Used to show your store to nearby buyers.</p>
+                </div>
+                <button type="button" onClick={handleUseCurrentLocation} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-[10px] font-black text-white transition hover:bg-blue-700"><MapPin size={13} /> Use current location</button>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <input aria-label="Store latitude" value={formData.latitude} onChange={(event) => handleInputChange("latitude", event.target.value)} placeholder="Latitude" inputMode="decimal" className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500" />
+                <input aria-label="Store longitude" value={formData.longitude} onChange={(event) => handleInputChange("longitude", event.target.value)} placeholder="Longitude" inputMode="decimal" className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500" />
+              </div>
+            </div>}
           </div>
 
           <EditableDetail label="WhatsApp Phone Number" value={formData.phone} icon={<Phone size={14}/>} isEditing={isEditing} onChange={(v) => handleInputChange('phone', v)} />

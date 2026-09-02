@@ -30,6 +30,16 @@ const statusOf = (value: unknown) => {
   return status;
 };
 
+const orderSummaries = (orders: Array<{ ref: FirebaseFirestore.DocumentReference; data: FirebaseFirestore.DocumentData }>) =>
+  orders.map(({ ref, data }) => ({
+    id: ref.id,
+    isBooking: data.isBooking === true,
+    buyerId: typeof data.buyerId === "string" ? data.buyerId : "",
+    status: String(data.status || ""),
+    total: amountOf(data.total ?? data.totalAmount ?? data.amount),
+    totalAmount: amountOf(data.totalAmount ?? data.total ?? data.amount),
+  }));
+
 type ProviderTransaction = {
   status?: unknown;
   responseCode?: unknown;
@@ -107,10 +117,21 @@ export async function POST(request: NextRequest) {
 
       const initialFundsState = String(data.fundsState || "").trim().toLowerCase();
       if (initialFundsState === "held" && data.escrowReservedAt) {
-        return NextResponse.json({ success: true, confirmed: true, status: "PAID_HELD", alreadyProcessed: true });
+        return NextResponse.json({
+          success: true,
+          confirmed: true,
+          status: "PAID_HELD",
+          alreadyProcessed: true,
+          orders: orderSummaries(ordersToProcess),
+        });
       }
       if (["released", "refunded", "refund_pending"].includes(initialFundsState)) {
-        return NextResponse.json({ success: true, confirmed: true, status: String(data.status || "") });
+        return NextResponse.json({
+          success: true,
+          confirmed: true,
+          status: String(data.status || ""),
+          orders: orderSummaries(ordersToProcess),
+        });
       }
     }
 
@@ -297,7 +318,12 @@ export async function POST(request: NextRequest) {
       console.error("[NOVU WHATSAPP] Payment confirmation fan-out failed:", notificationError);
     }
 
-    return NextResponse.json({ success: true, confirmed: true, results });
+    return NextResponse.json({
+      success: true,
+      confirmed: true,
+      results,
+      orders: orderSummaries(ordersToProcess),
+    });
   } catch (error: unknown) {
     console.error("Order payment confirmation error:", error);
     return jsonError(error, error instanceof PaymentConfirmationError ? error.status : 502);

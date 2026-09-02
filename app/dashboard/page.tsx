@@ -108,6 +108,7 @@ function Dashboard() {
     views: 0,
     clicks: 0,
     buyNowClicks: 0, // 🌟 Added for Buy Now tracking
+    addToCartClicks: 0,
     followers: 0,
     totalSales: 0,
     escrowBalance: 0,
@@ -247,11 +248,13 @@ function Dashboard() {
           const viewsQuery = query(collection(db, "analytics"), where("storeId", "==", storeId), where("eventType", "==", "view"));
           const clicksQuery = query(collection(db, "analytics"), where("storeId", "==", storeId), where("eventType", "==", "click"));
           const buyNowQuery = query(collection(db, "analytics"), where("storeId", "==", storeId), where("eventType", "==", "buy_now_click"));
+          const addToCartQuery = query(collection(db, "analytics"), where("storeId", "==", storeId), where("eventType", "==", "add_to_cart_click"));
 
-          const [viewsSnap, clicksSnap, buyNowSnap] = await Promise.all([
+          const [viewsSnap, clicksSnap, buyNowSnap, addToCartSnap] = await Promise.all([
             getCountFromServer(viewsQuery),
             getCountFromServer(clicksQuery),
-            getCountFromServer(buyNowQuery)
+            getCountFromServer(buyNowQuery),
+            getCountFromServer(addToCartQuery),
           ]);
 
           setStats(prev => ({
@@ -259,6 +262,7 @@ function Dashboard() {
             views: viewsSnap.data().count,
             clicks: clicksSnap.data().count,
             buyNowClicks: buyNowSnap.data().count,
+            addToCartClicks: addToCartSnap.data().count,
           }));
         } catch (analyticsError) {
           console.error("Failed to fetch analytics counts:", analyticsError);

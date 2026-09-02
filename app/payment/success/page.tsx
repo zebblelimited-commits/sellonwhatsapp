@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { db, auth } from "@/lib/firebase";
-import { collection, query, where, onSnapshot, updateDoc } from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { CheckCircle2, Loader2, ArrowRight, ShieldCheck, ShoppingBag, CalendarCheck, Smartphone } from "lucide-react";
+import { CheckCircle2, Loader2, ShieldCheck, ShoppingBag, CalendarCheck } from "lucide-react";
 
 type SuccessOrder = {
     isBooking?: boolean;
@@ -49,9 +49,17 @@ export default function SuccessPage() {
 
     useEffect(() => {
         if (authLoading) return;
+        if (!currentUser) return;
         if (!orderReference) return;
 
-        const q = query(collection(db, "orders"), where("checkoutReference", "==", orderReference));
+        // The orders security rule requires buyerId to be provable for a
+        // collection query. The previous single-document flow did not need
+        // this constraint, but the current multi-seller checkout does.
+        const q = query(
+            collection(db, "orders"),
+            where("checkoutReference", "==", orderReference),
+            where("buyerId", "==", currentUser.uid),
+        );
 
         const unsub = onSnapshot(q, async (querySnapshot) => {
             if (!querySnapshot.empty) {
@@ -77,14 +85,6 @@ export default function SuccessPage() {
                         allPaid = false;
                     }
                 });
-
-                if (currentUser && !firstOrderData.buyerId) {
-                    try {
-                        querySnapshot.forEach(async (d) => {
-                            if (!d.data().buyerId) await updateDoc(d.ref, { buyerId: currentUser.uid });
-                        });
-                    } catch (patchError) { console.error("Auto-patching buyerId failed:", patchError); }
-                }
 
                 const displayData = { ...firstOrderData, totalAmount };
                 setOrderData(displayData as SuccessOrder);
@@ -114,7 +114,15 @@ export default function SuccessPage() {
                     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                     body: JSON.stringify({ orderReference }),
                 });
-                const result = await response.json().catch(() => ({}));
+                const result = await response.json().catch(() => ({})) as {
+                    confirmed?: boolean;
+                    pending?: boolean;
+                    orders?: SuccessOrder[];
+                };
+                if (result.orders?.length) {
+                    const totalAmount = result.orders.reduce((total, order) => total + amountOf(order.total, order.totalAmount), 0);
+                    setOrderData({ ...result.orders[0], totalAmount });
+                }
                 return { confirmed: result.confirmed === true, pending: response.status === 202 };
             } catch (error) {
                 if (error instanceof DOMException && error.name === "AbortError") return { confirmed: false, pending: true };
@@ -149,8 +157,6 @@ export default function SuccessPage() {
             ? "verifying"
             : status;
     const handleViewDetails = () => router.push(isBooking ? '/buyer/dashboard/bookings' : '/buyer/dashboard');
-    const deepLinkUrl = `sowa://payment-success?orderRef=${orderReference}&reference=${orderReference}`;
-
     return (
         <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4 font-plus-jakarta">
             <div className="max-w-[380px] w-full bg-white rounded-[20px] shadow-xl border border-slate-100 overflow-hidden">
