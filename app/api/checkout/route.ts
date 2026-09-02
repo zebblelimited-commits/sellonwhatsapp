@@ -307,9 +307,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 ? `${sellerOrders.reduce((acc, curr) => acc + curr.items.length, 0)} items from ${sellerOrders.length} stores`
                 : `${sellerOrders[0].items.length} items from ${sellerOrders[0].storeName}`;
 
+        // Nomba expects the hosted-checkout method labels, not the internal
+        // gateway enum names. Sending CARD/BANK_TRANSFER can produce a link
+        // that opens without any usable payment method in the hosted UI.
         const formattedPaymentMethods = paymentMethod?.toLowerCase() === "transfer"
-            ? ["BANK_TRANSFER", "CARD"]
-            : ["CARD", "BANK_TRANSFER"];
+            ? ["Transfer", "Card"]
+            : ["Card", "Transfer"];
 
         const checkoutRequest = {
             method: "POST",
@@ -321,13 +324,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             body: JSON.stringify({
                 order: {
                     orderReference: checkoutReference,
-                    amount: Number(calculatedGrandTotal.toFixed(2)),
+                    amount: calculatedGrandTotal.toFixed(2),
                     currency: "NGN",
                     callbackUrl,
                     customerEmail: customerEmail || "customer@sowa.com",
                     description: `Checkout: ${itemSummary}`,
                     allowedPaymentMethods: formattedPaymentMethods,
-                    metaData: {
+                    orderMetaData: {
                         checkoutReference,
                         orderIds: createdOrderIds.join(","),
                         buyerId,
@@ -362,16 +365,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
         const nombaData = await nombaOrderRes.json();
 
-        if (nombaData.code === "00" || nombaData.status === "success" || nombaData.data?.checkoutLink) {
-            const rawCheckoutLink = nombaData.data?.checkoutLink || "";
-            const querySeparator = rawCheckoutLink.includes("?") ? "&" : "?";
-            const finalCheckoutLink = rawCheckoutLink
-                ? `${rawCheckoutLink}${querySeparator}orderRef=${checkoutReference}`
-                : "";
+        const checkoutLink = nombaData.data?.checkoutLink ||
+            nombaData.data?.checkoutUrl ||
+            nombaData.checkoutLink ||
+            nombaData.checkoutUrl ||
+            "";
 
+        if ((nombaData.code === "00" || nombaData.status === "success" || checkoutLink) && checkoutLink) {
+            // Nomba checkout links are signed/encrypted. Use the exact URL
+            // returned by Nomba; adding orderRef to it can invalidate the
+            // hosted checkout page. The callback already carries our ref.
             return NextResponse.json({
                 success: true,
-                checkoutLink: finalCheckoutLink,
+                checkoutLink,
                 reference: checkoutReference,
                 orderIds: createdOrderIds,
             });
