@@ -2,14 +2,13 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
-import { doc, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, getDocs, onSnapshot, query, updateDoc, where, serverTimestamp } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { 
   Bell, Shield, Phone, LogOut, User, Download, Trash2, 
-  ChevronRight, Loader2, CheckCircle2, Moon, Globe, 
-  Mail, MessageCircle, AlertTriangle 
+  ChevronRight, Loader2, CheckCircle2, Globe,
+  Mail, MessageCircle, AlertTriangle
 } from "lucide-react";
-import Image from "next/image";
 
 export function BuyerSettings() {
   const router = useRouter();
@@ -21,6 +20,8 @@ export function BuyerSettings() {
     pushNotifs: true
   });
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Fetch buyer profile & preferences
@@ -76,6 +77,15 @@ useEffect(() => {
   }, [message]);
 
   const handlePrefToggle = async (key: string, value: boolean) => {
+  if (key === "pushNotifs" && value && typeof window !== "undefined" && "Notification" in window) {
+    const permission = Notification.permission === "granted"
+      ? "granted"
+      : await Notification.requestPermission();
+    if (permission !== "granted") {
+      setMessage({ type: "error", text: "Browser notifications are blocked. Allow them in your browser settings first." });
+      return;
+    }
+  }
   const newPrefs = { ...prefs, [key]: value };
   setPrefs(newPrefs);
   setSaving(true);
@@ -122,6 +132,56 @@ useEffect(() => {
       router.replace("/login");
     } catch (err) {
       console.error("Sign out failed:", err);
+    }
+  };
+
+  const handleExportData = async () => {
+    const user = auth.currentUser;
+    if (!user || exporting) return;
+    setExporting(true);
+    setMessage(null);
+    try {
+      const snapshot = await getDocs(query(collection(db, "orders"), where("buyerId", "==", user.uid)));
+      const purchases = snapshot.docs.map((orderDoc) => serializeForDownload({ id: orderDoc.id, ...orderDoc.data() }));
+      const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), purchases }, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `sellonwhatsapp-purchase-history-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setMessage({ type: "success", text: `${purchases.length} purchase${purchases.length === 1 ? "" : "s"} exported successfully.` });
+    } catch (error) {
+      console.error("Purchase history export failed:", error);
+      setMessage({ type: "error", text: "We could not export your purchase history. Please try again." });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const user = auth.currentUser;
+    if (!user || deleting) return;
+    const confirmed = window.confirm("Delete your SellOnWhatsApp account permanently? Your profile will be removed and this action cannot be undone.");
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setMessage(null);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Account deletion failed");
+      await signOut(auth);
+      await fetch("/api/session", { method: "DELETE" }).catch(() => undefined);
+      router.replace("/");
+    } catch (error: any) {
+      console.error("Account deletion failed:", error);
+      setMessage({ type: "error", text: error?.message || "Account deletion failed. Please contact support." });
+      setDeleting(false);
     }
   };
 
@@ -201,8 +261,8 @@ useEffect(() => {
         </div>
         <div className="divide-y divide-gray-50">
           <SettingItem icon={<Globe size={16} />} label="Change Password" desc="Update your account password" href="/settings/password" />
-          <SettingItem icon={<Download size={16} />} label="Export Data" desc="Download your purchase history" />
-          <SettingItem icon={<Trash2 size={16} />} label="Delete Account" desc="Permanently remove your account" danger />
+          <SettingItem icon={<Download size={16} />} label="Export Data" desc={exporting ? "Preparing your purchase history..." : "Download your purchase history"} onClick={handleExportData} />
+          <SettingItem icon={<Trash2 size={16} />} label="Delete Account" desc={deleting ? "Deleting your account..." : "Permanently remove your account"} danger onClick={handleDeleteAccount} />
         </div>
       </div>
 
@@ -213,8 +273,8 @@ useEffect(() => {
           <h3 className="font-bold text-gray-900 text-sm">Support</h3>
         </div>
         <div className="divide-y divide-gray-50">
-          <SettingItem icon={<MessageCircle size={16} />} label="Help Center" desc="Browse FAQs & guides" href="/support" />
-          <SettingItem icon={<Mail size={16} />} label="Contact Support" desc="Email us at help@zebble.com" href="mailto:help@zebble.com" />
+          <SettingItem icon={<MessageCircle size={16} />} label="Help Center" desc="Browse FAQs & guides" href="/faq" />
+          <SettingItem icon={<Mail size={16} />} label="Contact Support" desc="Email support@sellonwhatsapp.com" href="mailto:support@sellonwhatsapp.com" />
         </div>
       </div>
 
@@ -261,12 +321,13 @@ function SettingToggle({ icon, label, desc, checked, onChange }: {
   );
 }
 
-function SettingItem({ icon, label, desc, href, danger }: {
+function SettingItem({ icon, label, desc, href, danger, onClick }: {
   icon: React.ReactNode;
   label: string;
   desc: string;
   href?: string;
   danger?: boolean;
+  onClick?: () => void;
 }) {
   const content = (
     <div className={`p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors ${danger ? "text-red-600" : ""}`}>
@@ -282,8 +343,17 @@ function SettingItem({ icon, label, desc, href, danger }: {
   );
 
   return href ? (
-    <a href={href} target={href.startsWith("mailto") ? "_self" : "_blank"} rel="noopener noreferrer">{content}</a>
+    <a href={href} target={href.startsWith("mailto") ? "_self" : undefined} rel={href.startsWith("mailto") ? undefined : "noopener noreferrer"}>{content}</a>
   ) : (
-    <div onClick={() => console.log("Clicked:", label)}>{content}</div>
+    <button type="button" onClick={onClick} className="block w-full text-left">{content}</button>
   );
+}
+
+function serializeForDownload(value: unknown): unknown {
+  if (value && typeof value === "object") {
+    if ("toDate" in value && typeof value.toDate === "function") return value.toDate().toISOString();
+    if (Array.isArray(value)) return value.map(serializeForDownload);
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, serializeForDownload(entry)]));
+  }
+  return value;
 }

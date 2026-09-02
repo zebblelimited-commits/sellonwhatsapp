@@ -68,12 +68,12 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
   const escrowBalance = Number.isFinite(rawEscrow) ? Math.max(0, rawEscrow) : 0;
 
   useEffect(() => {
-    if (netAvailable > 0 && !withdrawAmount) {
+    if (rawAvailable > 0 && !withdrawAmount) {
       // This effect fills the initial amount after the canonical ledger loads.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setWithdrawAmount(netAvailable.toString());
+      setWithdrawAmount(rawAvailable.toString());
     }
-  }, [netAvailable, withdrawAmount]);
+  }, [rawAvailable, withdrawAmount]);
 
   useEffect(() => {
     if (notification) {
@@ -89,7 +89,7 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
     if (isWithdrawing || withdrawalControllerRef.current) return;
 
     const amount = parseFloat(withdrawAmount) || 0;
-    if (amount <= 0 || amount > netAvailable) {
+    if (amount <= 0 || amount > rawAvailable) {
       setNotification({ type: 'error', message: 'Invalid amount. Please enter a valid value up to your available balance.' });
       return;
     }
@@ -141,7 +141,7 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
     }
   };
 
-  const handleQuickPercent = (percent: number) => setWithdrawAmount(Math.floor(netAvailable * (percent / 100)).toString());
+  const handleQuickPercent = (percent: number) => setWithdrawAmount(Math.floor(rawAvailable * (percent / 100)).toString());
   
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -202,7 +202,8 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
           
           {/* 🌟 ENHANCED TYPOGRAPHY FOR EMPHASIS */}
           <p className="text-x font-black text-white uppercase tracking-wider mb-1">Withdraw to Bank</p>
-          <p className="text-xl font-black text-white mb-4">Net: {formatCurrency(netAvailable)}</p>
+          <p className="text-xl font-black text-white mb-1">Receive: {formatCurrency(netAvailable)}</p>
+          <p className="mb-4 text-[10px] font-semibold text-white/75">After the {FEE_DISPLAY} platform fee</p>
 
           {/* Compact Withdraw Form INSIDE the green card */}
           <div className="mt-auto space-y-2">
@@ -228,12 +229,12 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(e.target.value)}
                 disabled={isWithdrawing}
-                max={netAvailable}
+                max={rawAvailable}
                 className="w-full bg-white/20 backdrop-blur-sm border-2 border-white/30 rounded-xl pl-10 pr-16 py-3 text-xl font-black text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/40 transition-all"
                 placeholder="0"
               />
               <button 
-                onClick={() => setWithdrawAmount(netAvailable.toString())}
+                onClick={() => setWithdrawAmount(rawAvailable.toString())}
                 disabled={isWithdrawing}
                 className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-white/20 hover:bg-white/30 rounded-md text-[9px] font-bold text-white transition-colors"
               >
@@ -242,14 +243,14 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
             </div>
 
             {/* Withdraw Button */}
-            <button 
+            <button
               onClick={handleWithdraw}
-              disabled={isWithdrawing || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > netAvailable || netAvailable <= 0}
+              disabled={isWithdrawing || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > rawAvailable || rawAvailable <= 0}
               className="w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-gray-50 text-gray-900"
             >
               {isWithdrawing ? (
                 <>Processing <Loader2 size={14} className="animate-spin" /></>
-              ) : netAvailable <= 0 ? (
+              ) : rawAvailable <= 0 ? (
                 <>No Funds Available</>
               ) : (
                 <>Withdraw {formatCurrency(parseFloat(withdrawAmount) || 0)} <ArrowUpRight size={14} /></>

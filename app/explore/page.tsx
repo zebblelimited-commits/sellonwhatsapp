@@ -117,7 +117,13 @@ export default function ExplorePage() {
   }, [selectedCategory]);
 
   const nearbyStores = useMemo(() => {
-    const withCoordinates = stores
+    const filteredStores = stores.filter((store) => {
+      const state = String(store.state || store.location?.state || "").toLowerCase();
+      const stateMatches = selectedState === "All Nigeria" || state === selectedState.toLowerCase();
+      const verifiedMatches = !onlyVerified || store.isVerified === true;
+      return stateMatches && verifiedMatches;
+    });
+    const withCoordinates = filteredStores
       .map((store) => ({ store, coordinates: storeCoordinates(store) }))
       .filter((entry): entry is { store: any; coordinates: Coordinates } => Boolean(entry.coordinates));
 
@@ -127,7 +133,13 @@ export default function ExplorePage() {
       .sort((left, right) => left.distanceKm - right.distanceKm)
       .slice(0, 4)
       .map(({ store, distanceKm }) => ({ ...store, distanceKm }));
-  }, [stores, userLocation]);
+  }, [stores, selectedState, onlyVerified, userLocation]);
+
+  const visibleStores = useMemo(() => stores.filter((store) => {
+    const state = String(store.state || store.location?.state || "").toLowerCase();
+    const stateMatches = selectedState === "All Nigeria" || state === selectedState.toLowerCase();
+    return stateMatches && (!onlyVerified || store.isVerified === true);
+  }), [stores, selectedState, onlyVerified]);
 
   return (
     <main className={`${jakarta.className} min-h-screen bg-[#FAFAFA]`}>
@@ -162,9 +174,10 @@ export default function ExplorePage() {
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {loading ? [1, 2, 3, 4, 5, 6].map(i => <StoreSkeleton key={i} />) : stores.map((store) => (
+            {loading ? [1, 2, 3, 4, 5, 6].map(i => <StoreSkeleton key={i} />) : visibleStores.map((store) => (
               <StoreCardExplore key={store.id} store={store} />
             ))}
+            {!loading && visibleStores.length === 0 && <div className="col-span-full rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500">No stores match the selected filters.</div>}
           </div>
 
           <aside className="h-fit rounded-[28px] border border-gray-100 bg-white p-5 shadow-sm lg:sticky lg:top-6">

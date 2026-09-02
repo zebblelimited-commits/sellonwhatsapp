@@ -300,19 +300,34 @@ function Dashboard() {
           activeListeners.push(unsubscribeOrders);
         });
 
-        const unsubPayouts = onSnapshot(
-          query(collection(db, "payouts"), where("vendorId", "==", user.uid)),
-          (snapshot) => {
-            const payouts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-            payouts.sort((a, b) => {
-                const dateA = a.requestedAt?.toDate?.() || new Date(0);
-                const dateB = b.requestedAt?.toDate?.() || new Date(0);
-                return dateB.getTime() - dateA.getTime();
-              });
-            setPayoutHistory(payouts);
-          }, (err) => console.error("Handled Payout tracking exclusion:", err)
-        );
-        activeListeners.push(unsubPayouts);
+        // Support both payout ownership fields while older records migrate to
+        // the canonical vendorId/storeId pair.
+        const payoutsBySource = new Map<string, Map<string, any>>();
+        const publishPayouts = () => {
+          const merged = new Map<string, any>();
+          payoutsBySource.forEach((sourcePayouts) => sourcePayouts.forEach((payout, payoutId) => merged.set(payoutId, payout)));
+          const payouts = Array.from(merged.values());
+          payouts.sort((a, b) => {
+            const dateA = a.requestedAt?.toDate?.() || new Date(0);
+            const dateB = b.requestedAt?.toDate?.() || new Date(0);
+            return dateB.getTime() - dateA.getTime();
+          });
+          setPayoutHistory(payouts);
+        };
+        (['vendorId', 'storeId'] as const).forEach((ownerField) => {
+          const sourcePayouts = new Map<string, any>();
+          payoutsBySource.set(ownerField, sourcePayouts);
+          const unsubscribePayouts = onSnapshot(
+            query(collection(db, "payouts"), where(ownerField, "==", user.uid)),
+            (snapshot) => {
+              sourcePayouts.clear();
+              snapshot.docs.forEach((payoutDoc) => sourcePayouts.set(payoutDoc.id, { id: payoutDoc.id, ...payoutDoc.data() }));
+              publishPayouts();
+            },
+            (err) => console.error(`Handled Payout tracking exclusion (${ownerField}):`, err),
+          );
+          activeListeners.push(unsubscribePayouts);
+        });
 
         const unsubDisputes = onSnapshot(
           query(

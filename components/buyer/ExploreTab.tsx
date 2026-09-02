@@ -85,6 +85,13 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
     fetchStores();
   }, [selectedCategory]);
 
+  const visibleStores = stores.filter((store) => {
+    const record = store as Record<string, unknown>;
+    const location = record.location && typeof record.location === "object" ? record.location as Record<string, unknown> : {};
+    const state = String(record.state || location.state || "").toLowerCase();
+    return (selectedState === "All Nigeria" || state === selectedState.toLowerCase()) && (!onlyVerified || record.isVerified === true);
+  });
+
   return (
     <div className={`w-full ${jakarta.className}`}>
       {/* Header & Filters */}
@@ -116,9 +123,10 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
       {/* Main Grid + Sidebar */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {loading ? [1, 2, 3, 4, 5, 6].map(i => <StoreSkeleton key={i} />) : stores.map((store) => (
+          {loading ? [1, 2, 3, 4, 5, 6].map(i => <StoreSkeleton key={i} />) : visibleStores.map((store) => (
             <StoreCardExplore key={store.id} store={store} />
           ))}
+          {!loading && visibleStores.length === 0 && <div className="col-span-full rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500">No stores match the selected filters.</div>}
         </div>
 
         <aside className="h-fit rounded-[28px] border border-gray-100 bg-white p-5 shadow-sm lg:sticky lg:top-6">
@@ -156,7 +164,7 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
           {loading ? (
             [1, 2, 3, 4].map(i => <StoreSkeleton key={`near-${i}`} />)
           ) : (
-            stores.slice(0, 4).map((store) => (
+            visibleStores.slice(0, 4).map((store) => (
               <StoreCardExplore key={`near-${store.id}`} store={store} />
             ))
           )}
