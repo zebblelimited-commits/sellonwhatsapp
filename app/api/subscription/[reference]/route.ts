@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 import { Novu } from "@novu/node";
+import { sendSubscriptionConfirmationEmail } from "@/lib/email/events";
 
 // ✅ Initialize Novu (Make sure you have NOVU_SECRET_KEY in your .env)
 const novu = new Novu(process.env.NOVU_SECRET_KEY!);
@@ -182,6 +183,12 @@ export async function GET(
         }, { merge: true });
 
         console.log(`🎉 [ Activation Success ] Upgraded User & Store ${verifiedData.userId} to ${verifiedData.planName}.`);
+
+        await sendSubscriptionConfirmationEmail({
+          ...updatedSubPayload,
+          id: docRef.id,
+          nombaReference: reference,
+        });
 
         // ==========================================
         // ✅ SEND SUBSCRIPTION NOTIFICATION (FIRESTORE + NOVU)

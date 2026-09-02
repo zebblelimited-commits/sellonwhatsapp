@@ -1,0 +1,525 @@
+How to send it
+
+From your server-side order creation/payment flow:
+
+
+import { sendEmail } from "@/lib/email";
+import OrderConfirmation from "@/emails/OrderConfirmation";
+
+await sendEmail({
+  to: {
+    email: order.customerEmail,
+    name: order.customerName,
+  },
+
+  subject: `Order #${order.orderNumber} received 🎉`,
+
+  react: (
+    <OrderConfirmation
+      customerName={order.customerName}
+      orderNumber={order.orderNumber}
+      storeName={order.storeName}
+      items={order.items}
+      subtotal={order.subtotal}
+      shipping={order.shipping}
+      discount={order.discount}
+      total={order.total}
+      orderUrl={`https://sellonwhatsapp.com/orders/${order.id}`}
+    />
+  ),
+
+  type: "order_confirmation",
+
+  idempotencyKey: `order_confirmation:${order.id}`,
+
+  metadata: {
+    orderId: order.id,
+    customerId: order.customerId,
+    storeId: order.storeId,
+  },
+});
+
+///////////
+How to send it
+
+Use this after your payment webhook or server-side payment verification confirms the transaction:
+
+import { sendEmail } from "@/lib/email";
+import PaymentConfirmation from "@/emails/PaymentConfirmation";
+
+await sendEmail({
+  to: {
+    email: order.customerEmail,
+    name: order.customerName,
+  },
+
+  subject: `Payment confirmed for order #${order.orderNumber} 🎉`,
+
+  react: (
+    <PaymentConfirmation
+      customerName={order.customerName}
+      orderNumber={order.orderNumber}
+      amount={payment.amount}
+      paymentReference={payment.reference}
+      paymentMethod={payment.method}
+      orderUrl={`https://sellonwhatsapp.com/orders/${order.id}`}
+    />
+  ),
+
+  type: "payment_confirmation",
+
+  idempotencyKey: `payment_confirmation:${payment.reference}`,
+
+  metadata: {
+    orderId: order.id,
+    customerId: order.customerId,
+    storeId: order.storeId,
+    paymentReference: payment.reference,
+  },
+});
+
+How to send the seller notification
+
+This should happen after payment has been confirmed, not merely when a customer starts checkout.
+
+import { sendEmail } from "@/lib/email";
+import NewOrder from "@/emails/NewOrder";
+
+await sendEmail({
+  to: {
+    email: seller.email,
+    name: seller.name,
+  },
+
+  subject: `New paid order #${order.orderNumber} 🎉`,
+
+  react: (
+    <NewOrder
+      sellerName={seller.name}
+      orderNumber={order.orderNumber}
+      customerName={order.customerName}
+      items={order.items}
+      subtotal={order.subtotal}
+      shipping={order.shipping}
+      discount={order.discount}
+      total={order.total}
+      paymentStatus="Paid"
+      orderUrl={`https://sellonwhatsapp.com/dashboard/orders/${order.id}`}
+    />
+  ),
+
+  type: "new_order",
+
+  idempotencyKey: `new_order:${order.id}`,
+
+  metadata: {
+    orderId: order.id,
+    sellerId: seller.id,
+    storeId: seller.storeId,
+    paymentStatus: "paid",
+  },
+});
+
+Example: sending a shipping update
+
+When your courier integration changes the order status:
+
+import { sendEmail } from "@/lib/email";
+import ShippingUpdate from "@/emails/ShippingUpdate";
+
+await sendEmail({
+  to: {
+    email: order.customerEmail,
+    name: order.customerName,
+  },
+
+  subject: `Shipping update for order #${order.orderNumber} 📦`,
+
+  react: (
+    <ShippingUpdate
+      customerName={order.customerName}
+      orderNumber={order.orderNumber}
+      storeName={order.storeName}
+      courierName={shipment.courierName}
+      trackingNumber={shipment.trackingNumber}
+      trackingUrl={shipment.trackingUrl}
+      status="Shipped"
+      statusDescription="Your order has been handed over to the courier and is now on its way."
+      estimatedDelivery={shipment.estimatedDelivery}
+      steps={[
+        {
+          label: "Order placed",
+          description: "Your order was received.",
+          completed: true,
+          date: order.createdAt,
+        },
+        {
+          label: "Payment confirmed",
+          description: "Your payment was successfully confirmed.",
+          completed: true,
+          date: payment.confirmedAt,
+        },
+        {
+          label: "Order shipped",
+          description: "Your order has been handed over to the courier.",
+          completed: true,
+          current: true,
+          date: shipment.shippedAt,
+        },
+        {
+          label: "Out for delivery",
+          description: "Your order will be delivered to you.",
+          completed: false,
+        },
+        {
+          label: "Delivered",
+          description: "Your order has been delivered.",
+          completed: false,
+        },
+      ]}
+      orderUrl={`https://sellonwhatsapp.com/orders/${order.id}`}
+    />
+  ),
+
+  type: "shipping_update",
+
+  idempotencyKey: `shipping_update:${order.id}:${shipment.status}`,
+
+  metadata: {
+    orderId: order.id,
+    customerId: order.customerId,
+    storeId: order.storeId,
+    courierName: shipment.courierName,
+    trackingNumber: shipment.trackingNumber,
+    shippingStatus: shipment.status,
+  },
+});
+
+Recommended subject
+subject: `Your order #${order.orderNumber} has been delivered 🎉`,
+Recommended usage
+await sendEmail({
+  to: {
+    email: order.customerEmail,
+    name: order.customerName,
+  },
+
+  subject: `Your order #${order.orderNumber} has been delivered 🎉`,
+
+  react: (
+    <OrderDelivered
+      customerName={order.customerName}
+      orderNumber={order.orderNumber}
+      storeName={order.storeName}
+      deliveredAt={shipment.deliveredAt}
+      orderUrl={`https://sellonwhatsapp.com/orders/${order.id}`}
+    />
+  ),
+
+  type: "order_delivered",
+
+  idempotencyKey: `order_delivered:${order.id}`,
+
+  metadata: {
+    orderId: order.id,
+    customerId: order.customerId,
+    storeId: order.storeId,
+    deliveredAt: shipment.deliveredAt,
+  },
+});
+
+
+Using it for all three subscriptions
+1. Seller Subscription
+await sendEmail({
+  to: {
+    email: seller.email,
+    name: seller.name,
+  },
+
+  subject: `Your ${subscription.planName} subscription is now active 🎉`,
+
+  react: (
+    <SubscriptionConfirmation
+      customerName={seller.name}
+      subscriptionType="seller"
+      planName={subscription.planName}
+      amount={`₦${subscription.amount.toLocaleString()}`}
+      billingPeriod="Monthly"
+      startDate={subscription.startDate}
+      expiryDate={subscription.expiryDate}
+      transactionReference={payment.reference}
+      benefits={[
+        "Access to your seller plan features",
+        "Manage your online store",
+        "Receive and manage customer orders",
+      ]}
+      dashboardUrl="https://sellonwhatsapp.com/dashboard"
+    />
+  ),
+
+  type: "subscription_confirmation",
+
+  idempotencyKey:
+    `subscription_confirmation:${subscription.id}`,
+
+  metadata: {
+    subscriptionId: subscription.id,
+    subscriptionType: "seller",
+    sellerId: seller.id,
+    planName: subscription.planName,
+    paymentReference: payment.reference,
+  },
+});
+2. Store Boost Subscription
+await sendEmail({
+  to: {
+    email: seller.email,
+    name: seller.name,
+  },
+
+  subject: `Your Store Boost is now active 🚀`,
+
+  react: (
+    <SubscriptionConfirmation
+      customerName={seller.name}
+      subscriptionType="store_boost"
+      planName={storeBoost.planName}
+      amount={`₦${storeBoost.amount.toLocaleString()}`}
+      billingPeriod="Monthly"
+      startDate={storeBoost.startDate}
+      expiryDate={storeBoost.expiryDate}
+      transactionReference={payment.reference}
+      benefits={[
+        "Boost your store visibility",
+        "Reach more potential customers",
+        "Promote your products and services",
+      ]}
+      dashboardUrl="https://sellonwhatsapp.com/dashboard"
+    />
+  ),
+
+  type: "subscription_confirmation",
+
+  idempotencyKey:
+    `subscription_confirmation:store_boost:${storeBoost.id}`,
+
+  metadata: {
+    subscriptionId: storeBoost.id,
+    subscriptionType: "store_boost",
+    sellerId: seller.id,
+    planName: storeBoost.planName,
+    paymentReference: payment.reference,
+  },
+});
+3. Marketplace Partner Subscription
+
+This one is particularly useful for your current SellOnWhatsApp commission model because the email can explicitly communicate the Partner status and benefits.
+
+await sendEmail({
+  to: {
+    email: seller.email,
+    name: seller.name,
+  },
+
+  subject: `You're now a SellOnWhatsApp Marketplace Partner 🤝`,
+
+  react: (
+    <SubscriptionConfirmation
+      customerName={seller.name}
+      subscriptionType="marketplace_partner"
+      planName={partner.planName}
+      amount={`₦${partner.amount.toLocaleString()}`}
+      billingPeriod="Monthly"
+      startDate={partner.startDate}
+      expiryDate={partner.expiryDate}
+      transactionReference={payment.reference}
+      benefits={[
+        "Marketplace Partner status",
+        "Partner benefits while your subscription is active",
+        "Seller commission benefit while your Partner subscription is active",
+        "Access to Partner features and opportunities",
+      ]}
+      dashboardUrl="https://sellonwhatsapp.com/dashboard"
+    />
+  ),
+
+  type: "subscription_confirmation",
+
+  idempotencyKey:
+    `subscription_confirmation:marketplace_partner:${partner.id}`,
+
+  metadata: {
+    subscriptionId: partner.id,
+    subscriptionType: "marketplace_partner",
+    sellerId: seller.id,
+    planName: partner.planName,
+    paymentReference: payment.reference,
+  },
+});
+
+I recommend keeping the template's subscriptionType as a controlled union:
+
+type SubscriptionType =
+  | "seller"
+  | "store_boost"
+  | "marketplace_partner
+
+  Recommended usage
+await sendEmail({
+  to: {
+    email: seller.email,
+    name: seller.name,
+  },
+
+  subject:
+    `Your ${subscription.planName} subscription renews soon ⏰`,
+
+  react: (
+    <RenewalReminder
+      customerName={seller.name}
+      subscriptionType="seller"
+      planName={subscription.planName}
+      amount={`₦${subscription.amount.toLocaleString()}`}
+      billingPeriod="Monthly"
+      expiryDate={subscription.expiryDate}
+      renewalDate={subscription.renewalDate}
+      dashboardUrl="https://sellonwhatsapp.com/dashboard"
+    />
+  ),
+
+  type: "renewal_reminder",
+
+  idempotencyKey:
+    `renewal_reminder:${subscription.id}:${subscription.expiryDate}`,
+
+  metadata: {
+    subscriptionId: subscription.id,
+    subscriptionType: "seller",
+    sellerId: seller.id,
+    planName: subscription.planName,
+    expiryDate: subscription.expiryDate,
+  },
+});
+
+Recommended usage
+await sendEmail({
+  to: {
+    email: seller.email,
+    name: seller.name,
+  },
+
+  subject:
+    `Action needed: payment failed for your ${subscription.planName} subscription`,
+
+  react: (
+    <PaymentFailed
+      customerName={seller.name}
+      subscriptionType="seller"
+      planName={subscription.planName}
+      amount={`₦${subscription.amount.toLocaleString()}`}
+      failureReason="Your payment method could not be charged."
+      expiryDate={subscription.expiryDate}
+      gracePeriodEnds={subscription.gracePeriodEnds}
+      attemptDate={new Date().toLocaleDateString()}
+      paymentUrl="https://sellonwhatsapp.com/dashboard/subscription"
+      dashboardUrl="https://sellonwhatsapp.com/dashboard"
+    />
+  ),
+
+  type: "payment_failed",
+
+  idempotencyKey:
+    `payment_failed:${subscription.id}:${subscription.renewalAttemptId}`,
+
+  metadata: {
+    subscriptionId: subscription.id,
+    subscriptionType: "seller",
+    sellerId: seller.id,
+    planName: subscription.planName,
+    amount: subscription.amount,
+    expiryDate: subscription.expiryDate,
+    gracePeriodEnds: subscription.gracePeriodEnds,
+  },
+});
+
+For your Marketplace Partner subscription
+
+I'd specifically use:
+
+<PaymentFailed
+  customerName={seller.name}
+  subscriptionType="marketplace_partner"
+  planName={partner.planName}
+  amount={`₦${partner.amount.toLocaleString()}`}
+  failureReason="Your payment method could not be charged."
+  expiryDate={partner.expiryDate}
+  gracePeriodEnds={partner.gracePeriodEnds}
+  benefits={[
+    "Keep your Marketplace Partner status",
+    "Continue receiving Partner benefits",
+    "Continue enjoying the applicable seller commission benefit",
+  ]}
+  paymentUrl="https://sellonwhatsapp.com/dashboard/subscription"
+  dashboardUrl="https://sellonwhatsapp.com/dashboard"
+/>
+
+This gives you a clean lifecycle:
+
+Welcome email sending
+
+For a buyer:
+
+await sendEmail({
+  to: {
+    email: customer.email,
+    name: customer.name,
+  },
+
+  subject: "Welcome to SellOnWhatsApp! 👋",
+
+  react: (
+    <BuyerWelcome
+      customerName={customer.name}
+      exploreUrl="https://sellonwhatsapp.com"
+    />
+  ),
+
+  type: "buyer_welcome",
+
+  idempotencyKey:
+    `buyer_welcome:${customer.id}`,
+
+  metadata: {
+    customerId: customer.id,
+  },
+});
+
+For a seller:
+
+await sendEmail({
+  to: {
+    email: seller.email,
+    name: seller.name,
+  },
+
+  subject: "Welcome to SellOnWhatsApp! 🎉",
+
+  react: (
+    <SellerWelcome
+      sellerName={seller.name}
+      storeName={seller.storeName}
+      dashboardUrl="https://sellonwhatsapp.com/dashboard"
+    />
+  ),
+
+  type: "seller_welcome",
+
+  idempotencyKey:
+    `seller_welcome:${seller.id}`,
+
+  metadata: {
+    sellerId: seller.id,
+    storeId: seller.storeId,
+  },
+});

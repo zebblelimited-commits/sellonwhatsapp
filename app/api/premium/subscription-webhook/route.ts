@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin from "firebase-admin";
+import { sendSubscriptionConfirmationEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/events";
 
 // ✅ Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -113,6 +114,14 @@ async function processSubscriptionDoc(
     });
 
     console.log(`✅ Subscription Activated: ${orderRef} | Expires: ${expiryDate.toISOString()} | Duration: ${durationMonths} months`);
+    await sendSubscriptionConfirmationEmail({
+      ...data,
+      id: doc.id,
+      nombaReference: orderRef,
+      startDate: new Date().toISOString(),
+      expiryDate: expiryDate.toISOString(),
+      paidAt: new Date().toISOString(),
+    });
     return NextResponse.json({ 
       received: true, 
       status: "active",
@@ -130,6 +139,13 @@ async function processSubscriptionDoc(
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     console.log(`❌ Subscription Failed: ${orderRef} | Reason: ${transactionStatus}`);
+    await sendSubscriptionPaymentFailedEmail({
+      ...data,
+      id: doc.id,
+      nombaReference: orderRef,
+      failureReason: transactionStatus || "Payment declined",
+      attemptDate: new Date().toISOString(),
+    });
     return NextResponse.json({ received: true, status: "failed", reference: orderRef }, { status: 200 });
   }
 

@@ -4,6 +4,7 @@ import admin from "firebase-admin";
 import crypto from "crypto";
 // 🌟 Import your notification utility helper here
 import { createNotification } from "@/lib/notifications"; 
+import { sendSubscriptionConfirmationEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/events";
 
 // Ensure this runs in Node.js environment (required for crypto)
 export const runtime = 'nodejs'; 
@@ -131,6 +132,16 @@ export async function POST(request: NextRequest) {
       
       console.log(`✅ [WEBHOOK SUCCESS] ${collectionName} ${orderRef} updated to 'active'!`);
 
+      await sendSubscriptionConfirmationEmail({
+        ...localData,
+        id: docSnap.id,
+        nombaReference: orderRef,
+        isBoost: true,
+        startDate: new Date().toISOString(),
+        expiryDate: expiryDate.toISOString(),
+        finalPrice: localData.amount ?? localData.finalPrice,
+      }, "store_boost");
+
       // 2. 🌟 TRIGGER IN-APP NOTIFICATION ARCHITECTURE
       const vendorId = localData.storeId || localData.userId || localData.vendorId || "";
       
@@ -176,6 +187,15 @@ export async function POST(request: NextRequest) {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
       console.log(`✅ [WEBHOOK] ${collectionName} ${orderRef} updated to 'failed'.`);
+
+      await sendSubscriptionPaymentFailedEmail({
+        ...localData,
+        id: docSnap.id,
+        nombaReference: orderRef,
+        isBoost: true,
+        failureReason: "The Store Boost payment was declined.",
+        attemptDate: new Date().toISOString(),
+      }, "store_boost");
       
       // OPTIONAL: Send a failure notification to alert the vendor that the attempt was rejected
       const vendorId = localData.storeId || localData.userId || localData.vendorId;

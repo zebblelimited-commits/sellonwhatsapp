@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
+import { sendRenewalReminderEmail, sendSubscriptionConfirmationEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/events";
 
 export const runtime = "nodejs";
 
@@ -80,11 +81,18 @@ export async function GET(req: NextRequest) {
 
         for (const subDoc of expiringSubsSnap.docs) {
             processedSubs++;
-            const sub = subDoc.data();
-            const userId = sub.userId;
-            const userSnap = await adminDb.collection("users").doc(userId).get();
-            const userData = userSnap.data() || {};
-            const savedCardToken = userData.defaultPaymentToken;
+        const sub = subDoc.data();
+        const userId = sub.userId;
+        const userSnap = await adminDb.collection("users").doc(userId).get();
+        const userData = userSnap.data() || {};
+        const savedCardToken = userData.defaultPaymentToken;
+
+        await sendRenewalReminderEmail({
+            ...sub,
+            id: subDoc.id,
+            userId,
+            renewalDate: now.toISOString(),
+        });
 
             const planId = sub.planId || "pro_yearly_business_max";
 
@@ -129,6 +137,17 @@ export async function GET(req: NextRequest) {
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 }, { merge: true });
 
+                await sendSubscriptionConfirmationEmail({
+                    ...sub,
+                    id: `${subDoc.id}:${newRef}`,
+                    userId,
+                    nombaReference: newRef,
+                    finalPrice: price,
+                    startDate: now.toISOString(),
+                    paidAt: now.toISOString(),
+                    expiryDate: newExpiry.toISOString(),
+                });
+
                 // Push Renewal Notification
                 await adminDb.collection("notifications").add({
                     vendorId: userId,
@@ -164,6 +183,16 @@ export async function GET(req: NextRequest) {
                     actionLabel: "Update Payment Method",
                     read: false,
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+
+                await sendSubscriptionPaymentFailedEmail({
+                    ...sub,
+                    id: subDoc.id,
+                    userId,
+                    renewalAttemptId: `renewal:${subDoc.id}:${sub.expiryDate || "unknown"}`,
+                    attemptDate: now.toISOString(),
+                    gracePeriodEnds: graceExpiry.toISOString(),
+                    failureReason: "Your saved payment method could not be charged.",
                 });
 
                 gracePeriodSubs++;

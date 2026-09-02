@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { notifyUserRegistered } from "@/lib/novu-events";
-import { sendWelcomeEmail } from "@/lib/welcome-email";
+import { sendWelcomeEmailNotification } from "@/lib/email/events";
 
 type Profile = Record<string, unknown>;
 
@@ -20,13 +20,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const requestedRole = body?.role === "vendor" || body?.role === "buyer" ? body.role : undefined;
 
-    const [authUser, usersSnapshot, buyersSnapshot, vendorsSnapshot, storesSnapshot, deliverySnapshot] = await Promise.all([
+    const [authUser, usersSnapshot, buyersSnapshot, vendorsSnapshot, storesSnapshot] = await Promise.all([
       adminAuth.getUser(uid),
       adminDb.collection("users").doc(uid).get(),
       adminDb.collection("buyers").doc(uid).get(),
       adminDb.collection("vendors").doc(uid).get(),
       adminDb.collection("stores").doc(uid).get(),
-      adminDb.collection("notification_deliveries").doc(`welcome-${uid}`).get(),
     ]);
 
     const profile: Profile = {
@@ -53,16 +52,11 @@ export async function POST(request: NextRequest) {
       phoneNumber,
     };
 
-    const previouslySent = deliverySnapshot.data()?.welcomeEmailSentAt;
-    const emailTask = previouslySent
-      ? Promise.resolve(true)
-      : sendWelcomeEmail({
-          uid,
-          email,
-          firstName,
-          role,
-          storeName: firstString(profile.storeName, profile.name),
-        });
+    const emailTask = sendWelcomeEmailNotification(
+      user,
+      role,
+      firstString(profile.storeName, profile.name),
+    );
     const novuTask = notifyUserRegistered(user);
     const [emailSent] = await Promise.allSettled([emailTask, novuTask]);
 

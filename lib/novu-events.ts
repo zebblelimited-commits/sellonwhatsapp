@@ -1,5 +1,6 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { getNovuWorkflowId, sendWhatsAppNotification } from "@/lib/novu";
+import { sendOrderPaymentEmails, sendOrderStatusEmail } from "@/lib/email/events";
 
 type Data = Record<string, unknown>;
 
@@ -82,6 +83,7 @@ export async function notifyOrderPaymentConfirmed(order: Data, store?: Data): Pr
       tasks.push(dispatch("order-pickup-scheduled", firstString(order.storeId, order.vendorId), sellerPhone(storeData), { ...payload, eventType: "order-pickup-scheduled", transactionId: `pickup-scheduled-${orderId}` }));
     }
     await Promise.allSettled(tasks);
+    await sendOrderPaymentEmails(order, storeData);
   } catch (error) {
     console.error("[NOVU WHATSAPP] Payment-confirmed notification fan-out failed:", error);
   }
@@ -95,6 +97,7 @@ export async function notifyOrderStatus(order: Data, eventType: "order-shipped" 
     const tasks: Promise<boolean>[] = [];
     tasks.push(dispatch(eventType, firstString(order.buyerId), buyerPhone(order), payload));
     await Promise.allSettled(tasks);
+    await sendOrderStatusEmail(order, eventType, storeData);
   } catch (error) {
     console.error(`[NOVU WHATSAPP] ${eventType} notification failed:`, error);
   }

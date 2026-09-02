@@ -4,6 +4,7 @@ import admin from "firebase-admin";
 import { Novu } from "@novu/node";
 import { inventoryAdjustment } from "@/lib/inventory";
 import { notifyOrderPaymentConfirmed, notifyOrderStatus, notifyPayoutCompleted } from "@/lib/novu-events";
+import { sendSubscriptionConfirmationEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/events";
 
 // ✅ 1. SAFELY Initialize Novu
 const novuApiKey = process.env.NOVU_API_KEY || process.env.NOVU_SECRET_KEY;
@@ -384,6 +385,25 @@ export async function POST(request: NextRequest) {
 
           console.log(`✅ [WEBHOOK SUCCESS] ${collectionName} ${orderRef} updated to '${newStatus}'!`);
 
+          if (collectionName === "subscriptions") {
+            await sendSubscriptionConfirmationEmail({
+              ...localData,
+              id: docSnap.id,
+              nombaReference: orderRef,
+              startDate: new Date().toISOString(),
+              expiryDate: localData.expiryDate || undefined,
+            });
+          } else if (collectionName === "boosts") {
+            await sendSubscriptionConfirmationEmail({
+              ...localData,
+              id: docSnap.id,
+              nombaReference: orderRef,
+              isBoost: true,
+              startDate: new Date().toISOString(),
+              expiryDate: localData.expiryDate || undefined,
+            }, "store_boost");
+          }
+
           if (targetUserId) {
             let notifConfig = { type: "payment", priority: "medium", title: "Payment Successful! ✅", body: "Your transaction was successful.", actionUrl: "/dashboard?tab=overview", actionLabel: "View Dashboard" };
             if (collectionName === "orders") {
@@ -454,6 +474,24 @@ export async function POST(request: NextRequest) {
           await documentRef.update({ status: "failed", ...(collectionName === "orders" ? { paymentStatus: "failed" } : {}), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
           if (collectionName === "orders" && ["REFUNDED", "CANCELLED"].includes(gatewayStatus)) {
             await notifyOrderStatus({ id: docSnap.id, ...localData }, gatewayStatus === "REFUNDED" ? "order-refunded" : "order-cancelled");
+          }
+          if (collectionName === "subscriptions") {
+            await sendSubscriptionPaymentFailedEmail({
+              ...localData,
+              id: docSnap.id,
+              nombaReference: orderRef,
+              failureReason: `Provider reported ${gatewayStatus.toLowerCase()}.`,
+              attemptDate: new Date().toISOString(),
+            });
+          } else if (collectionName === "boosts") {
+            await sendSubscriptionPaymentFailedEmail({
+              ...localData,
+              id: docSnap.id,
+              nombaReference: orderRef,
+              isBoost: true,
+              failureReason: `Provider reported ${gatewayStatus.toLowerCase()}.`,
+              attemptDate: new Date().toISOString(),
+            }, "store_boost");
           }
           if (targetUserId) {
             const failConfig = { type: "payment", priority: "urgent", title: "Payment Failed ❌", body: `Your payment could not be processed.`, actionUrl: collectionName === "orders" ? "/dashboard?tab=orders" : "/dashboard?tab=overview", actionLabel: "View Details" };
