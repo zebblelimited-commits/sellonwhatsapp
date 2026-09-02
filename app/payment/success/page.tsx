@@ -17,6 +17,16 @@ type SuccessOrder = {
     [key: string]: unknown;
 };
 
+function amountOf(...values: unknown[]): number {
+    for (const value of values) {
+        const parsed = typeof value === "string"
+            ? Number(value.replace(/[^\d.-]/g, ""))
+            : Number(value);
+        if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    return 0;
+}
+
 export default function SuccessPage() {
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -47,20 +57,28 @@ export default function SuccessPage() {
             if (!querySnapshot.empty) {
                 let allPaid = true;
                 let totalAmount = 0;
-                let firstOrderData: any = null;
+                const firstOrderData = querySnapshot.docs[0].data() as Record<string, unknown>;
 
                 querySnapshot.forEach((docSnap) => {
-                    const data = docSnap.data();
-                    // ✅ FIX: Read 'total' (new) or fallback to 'totalAmount' (legacy)
-                    totalAmount += Number(data.total ?? data.totalAmount ?? 0);
+                    const data = docSnap.data() as Record<string, unknown>;
+                    // Some older payment/webhook writes leave `total` as zero
+                    // while the real amount is in totalAmount/amount. Ignore
+                    // zero placeholders so the success screen cannot show ₦0
+                    // for a successfully paid order.
+                    totalAmount += amountOf(
+                        data.total,
+                        data.totalAmount,
+                        data.amount,
+                        data.escrowAmount,
+                        data.productSubtotal,
+                    );
 
                     if (!["PAID_HELD", "PAID", "COMPLETED", "SHIPPED"].includes(String(data.status || "").toUpperCase())) {
                         allPaid = false;
                     }
-                    if (!firstOrderData) firstOrderData = data;
                 });
 
-                if (currentUser && firstOrderData && !firstOrderData.buyerId) {
+                if (currentUser && !firstOrderData.buyerId) {
                     try {
                         querySnapshot.forEach(async (d) => {
                             if (!d.data().buyerId) await updateDoc(d.ref, { buyerId: currentUser.uid });
@@ -113,16 +131,23 @@ export default function SuccessPage() {
     }, [authLoading, currentUser, orderReference]);
 
     useEffect(() => {
-        if (status === "success" && orderReference) {
+        if (status === "success" && orderData && orderReference) {
             const deepLinkUrl = `sowa://payment-success?orderRef=${orderReference}&reference=${orderReference}`;
             if (typeof window !== "undefined") window.location.href = deepLinkUrl;
             const closeTimer = setTimeout(() => { if (typeof window !== "undefined") window.close(); }, 2500);
             return () => { clearTimeout(closeTimer); };
         }
-    }, [status, orderReference]);
+    }, [status, orderData, orderReference]);
 
     const isBooking = orderData?.isBooking === true;
-    const viewStatus = !orderReference ? "error" : status;
+    // The verification request can finish before the Firestore listener has
+    // loaded the order. Keep showing verification until totals are available
+    // instead of rendering the numeric fallback as a misleading ₦0.
+    const viewStatus = !orderReference
+        ? "error"
+        : status === "success" && !orderData
+            ? "verifying"
+            : status;
     const handleViewDetails = () => router.push(isBooking ? '/buyer/dashboard/bookings' : '/buyer/dashboard');
     const deepLinkUrl = `sowa://payment-success?orderRef=${orderReference}&reference=${orderReference}`;
 
