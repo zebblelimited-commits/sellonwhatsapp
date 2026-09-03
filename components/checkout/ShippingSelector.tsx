@@ -11,13 +11,28 @@ export interface ShippingOption {
     shippingFee: number;
     dispatchEnabled?: boolean;
     integrationStatus?: string;
+    provider?: string;
+    providerQuoteId?: number | string;
 }
+
+type ShippingAddress = {
+    address?: string;
+    city?: string;
+    state?: string;
+    lga?: string;
+    postalCode?: string;
+    latitude?: number | string;
+    longitude?: number | string;
+};
 
 interface ShippingSelectorProps {
     selectedState: string;
     totalWeightKg?: number;
     onSelectOption: (option: ShippingOption | null) => void;
     selectedOptionId?: string;
+    pickupAddress?: ShippingAddress;
+    destinationAddress?: ShippingAddress;
+    estimatedOrderAmount?: number;
 }
 
 const SELF_ARRANGED_OPTION: ShippingOption = {
@@ -33,6 +48,9 @@ export default function ShippingSelector({
     totalWeightKg = 1,
     onSelectOption,
     selectedOptionId,
+    pickupAddress,
+    destinationAddress,
+    estimatedOrderAmount = 0,
 }: ShippingSelectorProps) {
     const [options, setOptions] = useState<ShippingOption[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
@@ -59,6 +77,9 @@ export default function ShippingSelector({
                     body: JSON.stringify({
                         destinationState: selectedState,
                         totalWeightKg,
+                        pickupAddress,
+                        destinationAddress,
+                        estimatedOrderAmount,
                     }),
                 });
 
@@ -88,7 +109,7 @@ export default function ShippingSelector({
         };
 
         fetchShippingRates();
-    }, [selectedState, totalWeightKg]);
+    }, [selectedState, totalWeightKg, pickupAddress, destinationAddress, estimatedOrderAmount, selectedOptionId]);
 
     if (!selectedState) {
         return (

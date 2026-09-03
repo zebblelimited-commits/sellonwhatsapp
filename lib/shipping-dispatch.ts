@@ -1,6 +1,7 @@
 import admin from "firebase-admin";
 import { adminDb } from "@/lib/firebase-admin";
 import { createFezOrders } from "@/lib/fez";
+import { createChowdeckDelivery } from "@/lib/chowdeck";
 
 type DispatchResult = {
   shipmentId: string;
@@ -9,6 +10,7 @@ type DispatchResult = {
   dispatchStatus: string;
   providerReference?: string;
   trackingId?: string;
+  trackingUrl?: string;
   reason?: string;
 };
 
@@ -44,9 +46,9 @@ function providerCode(shipment: any, courier: any) {
 }
 
 /**
- * Dispatches a paid shipment to the configured aggregator. FEZ is currently
- * the only provider with an order-creation adapter. Self-arranged delivery is
- * deliberately recorded locally and never sent to an external courier.
+ * Dispatches a paid shipment to the configured aggregator. FEZ and Chowdeck
+ * have order-creation adapters; self-arranged delivery is deliberately
+ * recorded locally and never sent to an external courier.
  */
 export async function dispatchShipmentForOrder(orderId: string): Promise<DispatchResult> {
   const orderRef = adminDb.collection("orders").doc(orderId);
@@ -129,6 +131,71 @@ export async function dispatchShipmentForOrder(orderId: string): Promise<Dispatc
       }),
     ]);
     return { shipmentId, orderId, status: "SELF_ARRANGED", dispatchStatus: "NOT_REQUIRED" };
+  }
+
+  if (code === "chowdeck") {
+    try {
+      if (shipment.providerQuoteId === undefined || shipment.providerQuoteId === null || shipment.providerQuoteId === "") {
+        throw new Error("Chowdeck fee quote is missing or expired");
+      }
+      const deliveryAddress = order.deliveryAddress || shipment.deliveryAddress;
+      const items = Array.isArray(order.items) ? order.items : [];
+      const delivery = await createChowdeckDelivery({
+        feeId: shipment.providerQuoteId,
+        reference: shipmentId,
+        itemType: asText(items[0]?.category || items[0]?.productType, "parcel"),
+        sourceContact: {
+          name: asText(order.storeName, "SellOnWhatsApp seller"),
+          phone: normalisePhone(shipment.pickupPhone || shipment.storePhone),
+        },
+        destinationContact: {
+          name: asText(order.customerName, "Customer"),
+          phone: normalisePhone(order.customerPhone || deliveryAddress?.phone),
+          email: asText(order.customerEmail) || undefined,
+        },
+        estimatedOrderAmountNaira: Number(order.productSubtotal ?? order.total ?? 0),
+        customerDeliveryNote: asText(deliveryAddress?.deliveryNote, "Handle with care"),
+        vendorNote: `SellOnWhatsApp order ${orderId}`,
+      });
+      const providerReference = asText(delivery.reference, String(delivery.id || ""));
+      if (!providerReference) throw new Error("Chowdeck did not return a delivery reference");
+
+      await Promise.all([
+        shipmentRef.update({
+          status: "PREPARING",
+          dispatchStatus: "DISPATCHED",
+          provider: "chowdeck",
+          providerReference,
+          courierOrderId: String(delivery.id || providerReference),
+          trackingId: providerReference,
+          trackingUrl: delivery.tracking_url || null,
+          dispatchedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          dispatchError: admin.firestore.FieldValue.delete(),
+        }),
+        orderRef.update({
+          deliveryStatus: "PREPARING",
+          courierStatus: "DISPATCHED",
+          providerReference,
+          trackingId: providerReference,
+          trackingUrl: delivery.tracking_url || null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }),
+      ]);
+      console.log(`[SHIPPING] Chowdeck shipment ${shipmentId} dispatched as ${providerReference}`);
+      return { shipmentId, orderId, status: "PREPARING", dispatchStatus: "DISPATCHED", providerReference, trackingId: providerReference, trackingUrl: delivery.tracking_url };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Chowdeck dispatch failed";
+      await shipmentRef.update({
+        status: "PENDING_PICKUP",
+        dispatchStatus: "FAILED",
+        dispatchError: reason.slice(0, 500),
+        lastDispatchAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.error(`[SHIPPING] Chowdeck dispatch failed for ${shipmentId}:`, reason);
+      return { shipmentId, orderId, status: "PENDING_PICKUP", dispatchStatus: "FAILED", reason };
+    }
   }
 
   if (code !== "fez") {

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { fetchFezDeliveryCost } from "@/lib/fez";
 import { fetchSendboxQuote } from "@/lib/sendbox";
+import { chowdeckConfigured, fetchChowdeckDeliveryFee, ChowdeckAddress } from "@/lib/chowdeck";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,9 @@ interface ShippingRequest {
     destinationState: string;
     totalWeightKg?: number;
     cartTotal?: number;
+    pickupAddress?: ChowdeckAddress;
+    destinationAddress?: ChowdeckAddress;
+    estimatedOrderAmount?: number;
 }
 
 interface CourierOption {
@@ -20,12 +24,14 @@ interface CourierOption {
     shippingFee: number;
     dispatchEnabled: boolean;
     integrationStatus: string;
+    provider?: string;
+    providerQuoteId?: number | string;
 }
 
 export async function POST(req: NextRequest) {
     try {
         const body: ShippingRequest = await req.json();
-        const { destinationState, totalWeightKg = 1, cartTotal = 0 } = body;
+        const { destinationState, totalWeightKg = 1, cartTotal = 0, pickupAddress, destinationAddress, estimatedOrderAmount = cartTotal } = body;
 
         if (!destinationState) {
             return NextResponse.json(
@@ -60,7 +66,8 @@ export async function POST(req: NextRequest) {
             // platform. Static quote-only records must not look dispatchable
             // at checkout. The code fallback keeps existing FEZ records
             // working until the courier seed endpoint is run again.
-            const dispatchEnabled = courierCode === "fez" && courier.dispatchEnabled !== false;
+            const dispatchEnabled = (courierCode === "fez" && courier.dispatchEnabled !== false)
+                || (courierCode === "chowdeck" && chowdeckConfigured());
             if (!dispatchEnabled) continue;
 
             // Check State Availability: 
@@ -73,6 +80,7 @@ export async function POST(req: NextRequest) {
             }
 
             let finalFee = 0;
+            let providerQuoteId: number | string | undefined;
 
             // Check FEZ Delivery
             if (courierCode === "fez" || courierName.includes("fez")) {
@@ -85,6 +93,23 @@ export async function POST(req: NextRequest) {
                 } catch (fezErr) {
                     console.error("⚠️ [FEZ API RATE ERROR], falling back to static formula:", fezErr);
                     finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
+                }
+            }
+            // Chowdeck requires a fresh fee quote before delivery creation.
+            // Never replace a failed quote with a static fee because that
+            // would leave us with a paid order but no valid fee_id.
+            else if (courierCode === "chowdeck" || courierName.includes("chowdeck")) {
+                try {
+                    const chowdeckQuote = await fetchChowdeckDeliveryFee({
+                        sourceAddress: pickupAddress || "Seller pickup address not provided",
+                        destinationAddress: destinationAddress || "Buyer delivery address not provided",
+                        estimatedOrderAmountNaira: estimatedOrderAmount,
+                    });
+                    finalFee = chowdeckQuote.totalAmountNaira;
+                    providerQuoteId = chowdeckQuote.id;
+                } catch (chowdeckErr) {
+                    console.error("⚠️ [CHOWDECK API RATE ERROR], hiding unavailable option:", chowdeckErr);
+                    continue;
                 }
             }
             // Check Sendbox
@@ -140,6 +165,8 @@ export async function POST(req: NextRequest) {
                 shippingFee: finalFee,
                 dispatchEnabled: true,
                 integrationStatus: courier.integrationStatus || "ready",
+                provider: courierCode,
+                ...(providerQuoteId !== undefined ? { providerQuoteId } : {}),
             });
         }
 

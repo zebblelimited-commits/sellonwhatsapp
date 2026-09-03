@@ -17,6 +17,7 @@ const statusConfig: Record<string, { label: string; className: string; icon: typ
   paid_held: { label: "Ready for fulfilment", className: "bg-amber-50 text-amber-700 border-amber-100", icon: Clock3 },
   pending_pickup: { label: "Awaiting courier pickup", className: "bg-blue-50 text-blue-700 border-blue-100", icon: PackageCheck },
   awaiting_pickup: { label: "Pickup scheduled", className: "bg-blue-50 text-blue-700 border-blue-100", icon: PackageCheck },
+  preparing: { label: "Courier preparing order", className: "bg-blue-50 text-blue-700 border-blue-100", icon: PackageCheck },
   shipped: { label: "In transit", className: "bg-indigo-50 text-indigo-700 border-indigo-100", icon: Truck },
   out_for_delivery: { label: "Out for delivery", className: "bg-purple-50 text-purple-700 border-purple-100", icon: Truck },
   completed: { label: "Delivered", className: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: CheckCircle2 },
@@ -86,7 +87,7 @@ export default function ShippingTab() {
     const text = [item.orderId, item.buyerName, item.buyerPhone, item.courierName, ...item.items.map((product) => product.name)].join(" ").toLowerCase();
     return (!search.trim() || text.includes(search.trim().toLowerCase())) && (filter === "all" || item.status === filter);
   }), [filter, search, shipments]);
-  const active = shipments.filter((item) => ["paid_held", "pending_pickup", "awaiting_pickup", "shipped", "out_for_delivery"].includes(item.status)).length;
+  const active = shipments.filter((item) => ["paid_held", "pending_pickup", "awaiting_pickup", "preparing", "shipped", "out_for_delivery"].includes(item.status)).length;
   const delivered = shipments.filter((item) => item.status === "completed").length;
   const fees = shipments.reduce((total, item) => total + item.shippingCost, 0);
 

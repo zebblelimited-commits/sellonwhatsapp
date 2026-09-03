@@ -38,6 +38,8 @@ type CheckoutAddress = {
   lga: string;
   postalCode: string;
   isDefault?: boolean;
+  latitude?: number;
+  longitude?: number;
 };
 
 type SellerLocation = {
@@ -48,6 +50,8 @@ type SellerLocation = {
   state: string;
   lga: string;
   phone: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export default function CheckoutPage() {
@@ -161,6 +165,8 @@ export default function CheckoutPage() {
           lga: data.lga || "",
           postalCode: data.postalCode || "",
           isDefault: true,
+          latitude: Number(data.latitude ?? data.location?.latitude ?? data.location?.lat) || undefined,
+          longitude: Number(data.longitude ?? data.location?.longitude ?? data.location?.lng) || undefined,
         };
 
         setAddresses(hasAddress ? [defaultAddress] : []);
@@ -226,14 +232,17 @@ export default function CheckoutPage() {
     Promise.all(sellerIds.map(async (storeId): Promise<SellerLocation> => {
       const storeDoc = await getDoc(doc(db, "stores", storeId));
       const data = storeDoc.exists() ? storeDoc.data() : {};
+      const location = data.location && typeof data.location === "object" ? data.location : {};
       return {
         id: storeId,
         storeName: data.storeName || groupedCartItems[storeId]?.storeName || "Seller",
-        address: data.address || data.businessAddress || data.location || "",
-        city: data.city || "",
-        state: data.state || "",
-        lga: data.lga || "",
+        address: typeof data.address === "string" ? data.address : data.businessAddress || location.address || location.formattedAddress || "",
+        city: data.city || location.city || "",
+        state: data.state || location.state || "",
+        lga: data.lga || location.lga || "",
         phone: data.phone || "",
+        latitude: Number(data.latitude ?? data.lat ?? location.latitude ?? location.lat) || undefined,
+        longitude: Number(data.longitude ?? data.lng ?? location.longitude ?? location.lng) || undefined,
       };
     })).then((locations) => {
       if (active) setSellerLocations(locations);
@@ -376,6 +385,8 @@ export default function CheckoutPage() {
           state: selectedBuyerAddress.state || selectedState,
           lga: selectedBuyerAddress.lga || "",
           postalCode: selectedBuyerAddress.postalCode || "100232",
+          latitude: selectedBuyerAddress.latitude,
+          longitude: selectedBuyerAddress.longitude,
         },
         sellerOrders: Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => {
           const courier = sellerShipping[storeId];
@@ -392,6 +403,7 @@ export default function CheckoutPage() {
             shippingCost: courier?.shippingFee || 0,
             estimatedDays: courier?.estimatedDays,
             totalWeightKg: group.totalWeightKg,
+            providerQuoteId: courier?.providerQuoteId,
             subtotal: group.subtotal
           };
         }),
@@ -624,6 +636,9 @@ export default function CheckoutPage() {
                       <ShippingSelector
                         selectedState={selectedState}
                         totalWeightKg={group.totalWeightKg}
+                        pickupAddress={sellerLocations.find((location) => location.id === storeId)}
+                        destinationAddress={selectedBuyerAddress}
+                        estimatedOrderAmount={group.subtotal}
                         selectedOptionId={sellerShipping[storeId]?.id}
                         onSelectOption={(option) =>
                           setSellerShipping((prev) => ({ ...prev, [storeId]: option }))

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { chowdeckConfigured } from "@/lib/chowdeck";
 
 interface CheckoutRequestBody {
     buyerId: string;
@@ -15,6 +16,7 @@ interface CheckoutRequestBody {
         shippingMethod: string;
         shippingCost: number;
         estimatedDays?: string;
+        providerQuoteId?: number | string;
         subtotal: number;
     }[];
     paymentMethod: string;
@@ -109,6 +111,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 shippingMethod,
                 shippingCost: rawShippingCost,
                 estimatedDays,
+                providerQuoteId,
                 subtotal: productSubtotal,
             } = sellerOrder;
 
@@ -151,10 +154,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 const courierSnap = await adminDb.collection("couriers").doc(courierId).get();
                 const courier = courierSnap.data() || {};
                 const courierCode = String(courier.code || courierId || "").toLowerCase();
-                const dispatchEnabled = courierCode === "fez" && courier.dispatchEnabled !== false;
+                const dispatchEnabled = (courierCode === "fez" && courier.dispatchEnabled !== false)
+                    || (courierCode === "chowdeck" && chowdeckConfigured());
                 if (!courierSnap.exists || !dispatchEnabled) {
                     return NextResponse.json(
                         { error: `${courierName || "This courier"} is not currently available for automated dispatch. Choose FEZ Delivery or Self-Arranged.` },
+                        { status: 400 },
+                    );
+                }
+                if (courierCode === "chowdeck" && (providerQuoteId === undefined || providerQuoteId === null || providerQuoteId === "")) {
+                    return NextResponse.json(
+                        { error: "Chowdeck delivery pricing expired. Please refresh the shipping quote and try again." },
                         { status: 400 },
                     );
                 }
@@ -213,6 +223,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 courierName,
                 deliveryMode: isSelfArranged ? "self_arranged" : "aggregator",
                 deliveryStatus: isSelfArranged ? "SELF_ARRANGED" : "PENDING_PICKUP",
+                providerQuoteId: providerQuoteId ?? null,
                 estimatedDays: estimatedDays || null,
                 shippingCost,
                 handlingFee,
@@ -253,6 +264,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     customerEmail,
                     courierId,
                     courierName,
+                    providerQuoteId: providerQuoteId ?? null,
                     deliveryMode: isSelfArranged ? "self_arranged" : "aggregator",
                     dispatchStatus: isSelfArranged ? "NOT_REQUIRED" : "PENDING",
                     status: isSelfArranged ? "SELF_ARRANGED" : "PENDING_PICKUP",

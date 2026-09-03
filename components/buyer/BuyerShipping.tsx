@@ -37,6 +37,7 @@ const statusMeta: Record<string, { label: string; tone: string; icon: typeof Clo
   paid_held: { label: "Preparing shipment", tone: "bg-amber-50 text-amber-700 border-amber-100", icon: Clock3 },
   pending_pickup: { label: "Awaiting pickup", tone: "bg-blue-50 text-blue-700 border-blue-100", icon: PackageCheck },
   awaiting_pickup: { label: "Pickup scheduled", tone: "bg-blue-50 text-blue-700 border-blue-100", icon: PackageCheck },
+  preparing: { label: "Courier preparing order", tone: "bg-blue-50 text-blue-700 border-blue-100", icon: PackageCheck },
   shipped: { label: "In transit", tone: "bg-indigo-50 text-indigo-700 border-indigo-100", icon: Truck },
   out_for_delivery: { label: "Out for delivery", tone: "bg-purple-50 text-purple-700 border-purple-100", icon: Truck },
   completed: { label: "Delivered", tone: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: CheckCircle2 },
