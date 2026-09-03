@@ -79,7 +79,9 @@ export default function CheckoutPage() {
     city: "",
     state: "",
     postalCode: "",
-    phone: ""
+    phone: "",
+    latitude: "",
+    longitude: ""
   });
 
   const [customAddressForm, setCustomAddressForm] = useState({
@@ -87,7 +89,9 @@ export default function CheckoutPage() {
     phone: "",
     address: "",
     state: "",
-    lga: ""
+    lga: "",
+    latitude: "",
+    longitude: ""
   });
 
   const [isSavingAddress, setIsSavingAddress] = useState(false);
@@ -153,6 +157,8 @@ export default function CheckoutPage() {
             ? data.shippingAddress
             : "";
         const currentState = typeof data.state === "string" ? data.state : "";
+        const profileLatitude = data.latitude ?? data.location?.latitude ?? data.location?.lat;
+        const profileLongitude = data.longitude ?? data.location?.longitude ?? data.location?.lng;
         const hasAddress = Boolean(profileAddress || data.city || currentState);
         const defaultAddress: CheckoutAddress = {
           id: "default_addr",
@@ -165,8 +171,8 @@ export default function CheckoutPage() {
           lga: data.lga || "",
           postalCode: data.postalCode || "",
           isDefault: true,
-          latitude: Number(data.latitude ?? data.location?.latitude ?? data.location?.lat) || undefined,
-          longitude: Number(data.longitude ?? data.location?.longitude ?? data.location?.lng) || undefined,
+          latitude: Number(profileLatitude) || undefined,
+          longitude: Number(profileLongitude) || undefined,
         };
 
         setAddresses(hasAddress ? [defaultAddress] : []);
@@ -177,7 +183,9 @@ export default function CheckoutPage() {
           city: data.city || "",
           state: currentState,
           postalCode: data.postalCode || "",
-          phone: data.phone || ""
+          phone: data.phone || "",
+          latitude: profileLatitude === undefined || profileLatitude === null ? "" : String(profileLatitude),
+          longitude: profileLongitude === undefined || profileLongitude === null ? "" : String(profileLongitude),
         });
       } catch (error) {
         console.error("Error fetching buyer data:", error);
@@ -291,8 +299,21 @@ export default function CheckoutPage() {
   const handleSaveDefaultAddress = async () => {
     setIsSavingAddress(true);
     try {
+      const latitude = Number(editForm.latitude);
+      const longitude = Number(editForm.longitude);
+      const hasCoordinateInput = editForm.latitude.trim() !== "" || editForm.longitude.trim() !== "";
+      if (hasCoordinateInput && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180)) {
+        alert("Please enter valid latitude and longitude coordinates.");
+        return;
+      }
+
       if (auth.currentUser) {
-        await setDoc(doc(db, "users", auth.currentUser.uid), { ...editForm, updatedAt: new Date() }, { merge: true });
+        await setDoc(doc(db, "users", auth.currentUser.uid), {
+          ...editForm,
+          latitude: hasCoordinateInput ? latitude : null,
+          longitude: hasCoordinateInput ? longitude : null,
+          updatedAt: new Date()
+        }, { merge: true });
       }
       const updatedAddress: CheckoutAddress = {
         ...addresses.find(a => a.id === "default_addr"),
@@ -306,6 +327,8 @@ export default function CheckoutPage() {
         postalCode: editForm.postalCode,
         phone: editForm.phone,
         isDefault: true,
+        latitude: hasCoordinateInput ? latitude : undefined,
+        longitude: hasCoordinateInput ? longitude : undefined,
       };
       setAddresses(prev => prev.some(a => a.id === "default_addr")
         ? prev.map(a => a.id === "default_addr" ? updatedAddress : a)
@@ -328,6 +351,13 @@ export default function CheckoutPage() {
       return;
     }
 
+    const latitude = Number(customAddressForm.latitude);
+    const longitude = Number(customAddressForm.longitude);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      alert("Please enter valid latitude and longitude coordinates for this delivery address.");
+      return;
+    }
+
     const newAddressObj: CheckoutAddress = {
       id: `custom_addr_${Date.now()}`,
       label: "Custom Shipping Address",
@@ -339,6 +369,8 @@ export default function CheckoutPage() {
       lga: customAddressForm.lga,
       postalCode: "",
       isDefault: false,
+      latitude,
+      longitude,
     };
 
     setAddresses(prev => [...prev.filter(a => a.id !== "custom_shipping_addr"), { ...newAddressObj, id: "custom_shipping_addr" }]);
@@ -347,7 +379,7 @@ export default function CheckoutPage() {
     setIsCustomAddressModalOpen(false);
 
     // Reset Form
-    setCustomAddressForm({ name: "", phone: "", address: "", state: "Plateau", lga: "" });
+    setCustomAddressForm({ name: "", phone: "", address: "", state: "", lga: "", latitude: "", longitude: "" });
   };
 
   // 5. Submit Order Payload
@@ -537,6 +569,11 @@ export default function CheckoutPage() {
                             {[location.address, location.city, location.lga, location.state].filter(Boolean).join(", ") || "Seller pickup address not provided"}
                           </p>
                           {location.phone && <p className="mt-1 text-xs text-gray-600"><span className="font-medium text-gray-800">Phone:</span> {location.phone}</p>}
+                          {(location.latitude !== undefined && location.longitude !== undefined) && (
+                            <p className="mt-1 text-[10px] text-gray-400">
+                              Coordinates: {location.latitude}, {location.longitude}
+                            </p>
+                          )}
                         </div>
                       )) : (
                         <div className="rounded-xl border border-dashed border-blue-200 bg-white p-4 text-xs text-blue-800">
@@ -583,6 +620,9 @@ export default function CheckoutPage() {
                             {addr.state && <p className="text-gray-500"><span className="font-medium text-gray-700">State:</span> {addr.state}</p>}
                             {addr.lga && <p className="text-gray-500"><span className="font-medium text-gray-700">LGA:</span> {addr.lga}</p>}
                             {addr.phone && <p className="text-gray-500"><span className="font-medium text-gray-700">Phone:</span> {addr.phone}</p>}
+                            {(addr.latitude !== undefined && addr.longitude !== undefined) && (
+                              <p className="text-[10px] text-gray-400">Coordinates: {addr.latitude}, {addr.longitude}</p>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -807,6 +847,28 @@ export default function CheckoutPage() {
                 </select>
               </div>
               <input type="text" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="Phone Number" />
+              <div>
+                <p className="text-xs font-bold text-gray-700 mb-1">Map Coordinates <span className="font-normal text-gray-400">(required for Chowdeck)</span></p>
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="number"
+                    step="any"
+                    value={editForm.latitude}
+                    onChange={(e) => setEditForm({ ...editForm, latitude: e.target.value })}
+                    className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"
+                    placeholder="Latitude e.g. 6.601838"
+                  />
+                  <input
+                    type="number"
+                    step="any"
+                    value={editForm.longitude}
+                    onChange={(e) => setEditForm({ ...editForm, longitude: e.target.value })}
+                    className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"
+                    placeholder="Longitude e.g. 3.351486"
+                  />
+                </div>
+                <p className="mt-1 text-[10px] text-gray-400">Get these from Google Maps by right-clicking the exact pickup or delivery point.</p>
+              </div>
               <button onClick={handleSaveDefaultAddress} disabled={isSavingAddress} className="w-full bg-[#00a63e] text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2">
                 {isSavingAddress ? <><Loader2 className="animate-spin" size={18} /> Saving...</> : <><Save size={18} /> Save Address</>}
               </button>
@@ -889,6 +951,31 @@ export default function CheckoutPage() {
                     placeholder="e.g. Jos North"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Map Coordinates *</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={customAddressForm.latitude}
+                    onChange={(e) => setCustomAddressForm({ ...customAddressForm, latitude: e.target.value })}
+                    className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"
+                    placeholder="Latitude e.g. 6.579"
+                  />
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={customAddressForm.longitude}
+                    onChange={(e) => setCustomAddressForm({ ...customAddressForm, longitude: e.target.value })}
+                    className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"
+                    placeholder="Longitude e.g. 3.349"
+                  />
+                </div>
+                <p className="mt-1 text-[10px] text-gray-400">Use the exact point from Google Maps for accurate delivery pricing.</p>
               </div>
 
               <button
