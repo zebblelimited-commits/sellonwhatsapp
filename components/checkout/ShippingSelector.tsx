@@ -54,6 +54,7 @@ export default function ShippingSelector({
 }: ShippingSelectorProps) {
     const [options, setOptions] = useState<ShippingOption[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
+    const [providerMessage, setProviderMessage] = useState<string | null>(null);
 
     // Keep track of the latest onSelectOption reference
     const onSelectRef = useRef(onSelectOption);
@@ -90,6 +91,13 @@ export default function ShippingSelector({
                     fetchedCouriers = data.options;
                 }
 
+                const unavailable = Array.isArray(data.unavailableProviders)
+                    ? data.unavailableProviders.map((provider: { name?: string; reason?: string }) =>
+                        `${provider.name || "Courier"}: ${provider.reason || "temporarily unavailable."}`
+                    )
+                    : [];
+                setProviderMessage(unavailable.length > 0 ? unavailable.join(" ") : null);
+
                 // Place SELF_ARRANGED_OPTION as the last option
                 const combinedOptions = [...fetchedCouriers, SELF_ARRANGED_OPTION];
                 setOptions(combinedOptions);
@@ -100,6 +108,7 @@ export default function ShippingSelector({
 
             } catch (err: any) {
                 console.error("Error fetching shipping rates:", err);
+                setProviderMessage("Courier rates are temporarily unavailable. Self-arranged delivery is still available.");
                 const fallbackOptions = [SELF_ARRANGED_OPTION];
                 setOptions(fallbackOptions);
                 onSelectRef.current(SELF_ARRANGED_OPTION);
@@ -134,6 +143,12 @@ export default function ShippingSelector({
             <label className="block text-sm font-bold text-gray-900">
                 Select Shipping Option
             </label>
+            {providerMessage && (
+                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
+                    <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+                    <span>{providerMessage}</span>
+                </div>
+            )}
             <div className="grid grid-cols-1 gap-3">
                 {options.map((option) => {
                     const isSelected = selectedOptionId === option.id;

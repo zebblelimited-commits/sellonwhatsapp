@@ -17,7 +17,9 @@ export async function POST(req: NextRequest) {
                 baseRate: 1000,
                 ratePerKg: 200,
                 estimatedDays: "Same Day Delivery",
-                availableStates: ["Lagos", "Abuja", "Oyo", "Ogun"], // Filtered states
+                // Chowdeck coverage is validated by its live fee endpoint.
+                // Keep this empty so stale state data cannot hide the option.
+                availableStates: [],
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             },
             {

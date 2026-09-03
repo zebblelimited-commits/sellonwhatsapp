@@ -28,6 +28,12 @@ interface CourierOption {
     providerQuoteId?: number | string;
 }
 
+interface UnavailableProvider {
+    id: string;
+    name: string;
+    reason: string;
+}
+
 export async function POST(req: NextRequest) {
     try {
         const body: ShippingRequest = await req.json();
@@ -46,7 +52,34 @@ export async function POST(req: NextRequest) {
             .where("isActive", "==", true)
             .get();
 
-        if (couriersSnap.empty) {
+        const shippingOptions: CourierOption[] = [];
+        const unavailableProviders: UnavailableProvider[] = [];
+
+        // Chowdeck coverage must come from its live quote API. Do not require
+        // the admin seed route to have been run before showing the provider.
+        const courierEntries: Array<{ id: string; data: () => any }> = couriersSnap.docs.map((doc) => ({
+            id: doc.id,
+            data: () => doc.data(),
+        }));
+        const hasChowdeckRecord = courierEntries.some(({ data }) => {
+            const courier = data();
+            return courier.code?.toLowerCase() === "chowdeck" || courier.name?.toLowerCase().includes("chowdeck");
+        });
+
+        if (chowdeckConfigured() && !hasChowdeckRecord) {
+            courierEntries.push({
+                id: "chowdeck",
+                data: () => ({
+                    name: "Chowdeck",
+                    code: "chowdeck",
+                    logo: "/images/couriers/chowdecklogo.jpg",
+                    estimatedDays: "Same Day Delivery",
+                    integrationStatus: "ready",
+                }),
+            });
+        }
+
+        if (courierEntries.length === 0) {
             return NextResponse.json({
                 success: true,
                 options: [],
@@ -54,25 +87,36 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        const shippingOptions: CourierOption[] = [];
-
         // 2. Loop through couriers and dynamically check availability & rates
-        for (const doc of couriersSnap.docs) {
+        for (const doc of courierEntries) {
             const courier = doc.data();
             const courierCode = courier.code?.toLowerCase() || "";
             const courierName = courier.name?.toLowerCase() || "";
+            const isFez = courierCode === "fez" || courierName.includes("fez");
+            const isChowdeck = courierCode === "chowdeck" || courierName.includes("chowdeck");
 
             // Only show providers that can receive a real order from the
             // platform. Static quote-only records must not look dispatchable
             // at checkout. The code fallback keeps existing FEZ records
             // working until the courier seed endpoint is run again.
-            const dispatchEnabled = (courierCode === "fez" && courier.dispatchEnabled !== false)
-                || (courierCode === "chowdeck" && chowdeckConfigured());
-            if (!dispatchEnabled) continue;
+            const dispatchEnabled = (isFez && courier.dispatchEnabled !== false)
+                || (isChowdeck && chowdeckConfigured());
+            if (!dispatchEnabled) {
+                if (isChowdeck) {
+                    unavailableProviders.push({
+                        id: doc.id,
+                        name: courier.name || "Chowdeck",
+                        reason: "Chowdeck is not configured on the server. Add the API key and merchant reference, then redeploy.",
+                    });
+                }
+                continue;
+            }
 
-            // Check State Availability: 
-            // If availableStates exists and is an array, ensure destinationState is included.
-            if (Array.isArray(courier.availableStates) && courier.availableStates.length > 0) {
+            // Chowdeck coverage changes by service area and must be checked by
+            // its live fee endpoint. A stale Firestore state list can hide a
+            // valid option (for example, Jos/Plateau), so skip this filter for
+            // Chowdeck. An unsuccessful quote is handled below.
+            if (!isChowdeck && Array.isArray(courier.availableStates) && courier.availableStates.length > 0) {
                 const isAvailable = courier.availableStates.some(
                     (state: string) => state.toLowerCase() === destinationState.toLowerCase()
                 );
@@ -83,7 +127,7 @@ export async function POST(req: NextRequest) {
             let providerQuoteId: number | string | undefined;
 
             // Check FEZ Delivery
-            if (courierCode === "fez" || courierName.includes("fez")) {
+            if (isFez) {
                 try {
                     const fezRate = await fetchFezDeliveryCost({
                         state: destinationState,
@@ -98,7 +142,7 @@ export async function POST(req: NextRequest) {
             // Chowdeck requires a fresh fee quote before delivery creation.
             // Never replace a failed quote with a static fee because that
             // would leave us with a paid order but no valid fee_id.
-            else if (courierCode === "chowdeck" || courierName.includes("chowdeck")) {
+            else if (isChowdeck) {
                 try {
                     const chowdeckQuote = await fetchChowdeckDeliveryFee({
                         sourceAddress: pickupAddress || "Seller pickup address not provided",
@@ -108,7 +152,15 @@ export async function POST(req: NextRequest) {
                     finalFee = chowdeckQuote.totalAmountNaira;
                     providerQuoteId = chowdeckQuote.id;
                 } catch (chowdeckErr) {
-                    console.error("⚠️ [CHOWDECK API RATE ERROR], hiding unavailable option:", chowdeckErr);
+                    console.error("⚠️ [CHOWDECK API RATE ERROR], hiding unavailable option:", {
+                        courierId: doc.id,
+                        error: chowdeckErr,
+                    });
+                    unavailableProviders.push({
+                        id: doc.id,
+                        name: courier.name || "Chowdeck",
+                        reason: "Chowdeck could not return a delivery quote for this route. Check the merchant reference/API environment and both address locations.",
+                    });
                     continue;
                 }
             }
@@ -130,7 +182,8 @@ export async function POST(req: NextRequest) {
                     finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
                 }
             }
-            // Static fallback for other couriers (Chowdeck, Dellyman, Glovo, Kwikpik, GIG, etc.)
+            // Static fallback for other quote-only couriers (Dellyman, Glovo,
+            // Kwikpik, GIG, etc.).
             else {
                 finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
             }
@@ -159,7 +212,7 @@ export async function POST(req: NextRequest) {
 
             shippingOptions.push({
                 id: doc.id,
-                name: courier.name,
+                name: courier.name || "Chowdeck",
                 logo: logoPath,
                 estimatedDays: courier.estimatedDays || "2-5 Business Days",
                 shippingFee: finalFee,
@@ -178,6 +231,7 @@ export async function POST(req: NextRequest) {
             destinationState,
             totalWeightKg,
             options: shippingOptions,
+            unavailableProviders,
         });
     } catch (error: any) {
         console.error("❌ [SHIPPING CALCULATION ERROR]:", error);
