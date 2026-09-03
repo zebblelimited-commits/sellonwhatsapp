@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { 
   Search, LayoutGrid, Smartphone, Shirt, Utensils, Sparkles, Bike, X,
-  Home, Cpu, HeartPulse, Car, SlidersHorizontal, Star
+  Home, Cpu, HeartPulse, Car, SlidersHorizontal, Star, MapPin
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, limit, where } from "firebase/firestore";
@@ -26,6 +26,29 @@ export interface ExploreStore {
   [key: string]: unknown;
 }
 
+type Coordinates = { latitude: number; longitude: number };
+
+function storeCoordinates(store: ExploreStore): Coordinates | null {
+  const record = store as Record<string, unknown>;
+  const location = record.location && typeof record.location === "object"
+    ? record.location as Record<string, unknown>
+    : {};
+  const latitude = Number(record.latitude ?? record.lat ?? location.latitude ?? location.lat);
+  const longitude = Number(record.longitude ?? record.lng ?? location.longitude ?? location.lng);
+  return Number.isFinite(latitude) && Number.isFinite(longitude) && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
+    ? { latitude, longitude }
+    : null;
+}
+
+function distanceInKm(from: Coordinates, to: Coordinates) {
+  const radians = (value: number) => value * Math.PI / 180;
+  const earthRadius = 6371;
+  const deltaLatitude = radians(to.latitude - from.latitude);
+  const deltaLongitude = radians(to.longitude - from.longitude);
+  const a = Math.sin(deltaLatitude / 2) ** 2 + Math.cos(radians(from.latitude)) * Math.cos(radians(to.latitude)) * Math.sin(deltaLongitude / 2) ** 2;
+  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
   const [stores, setStores] = useState<ExploreStore[]>([]);
   const [recommendedStores, setRecommendedStores] = useState<ExploreStore[]>([]);
@@ -35,6 +58,8 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
   const [locationSearch, setLocationSearch] = useState("");
   const [selectedState, setSelectedState] = useState("All Nigeria");
   const [onlyVerified, setOnlyVerified] = useState(false);
+  const [userLocation, setUserLocation] = useState<Coordinates | null>(null);
+  const [locationStatus, setLocationStatus] = useState<"idle" | "loading" | "ready" | "denied">("idle");
 
   const categories = [
     { name: "All", icon: <LayoutGrid size={16} /> },
@@ -52,14 +77,30 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
   const nigerianStates = ["Lagos", "Abuja", "Rivers", "Plateau", "Kano", "Oyo", "Enugu", "Delta", "Kaduna"];
   const filteredStates = nigerianStates.filter(state => state.toLowerCase().includes(locationSearch.toLowerCase()));
 
+  const requestUserLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus("denied");
+      return;
+    }
+    setLocationStatus("loading");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+        setLocationStatus("ready");
+      },
+      () => setLocationStatus("denied"),
+      { enableHighAccuracy: false, maximumAge: 300000, timeout: 10000 },
+    );
+  };
+
   useEffect(() => {
     const fetchStores = async () => {
       setLoading(true);
       setRecommendedLoading(true);
       try {
-        let q = query(collection(db, "stores"), limit(12));
+        let q = query(collection(db, "stores"), limit(100));
         if (selectedCategory !== "All") {
-          q = query(collection(db, "stores"), where("category", "==", selectedCategory), limit(12));
+          q = query(collection(db, "stores"), where("category", "==", selectedCategory), limit(100));
         }
 
         const [querySnapshot, recommendedSnapshot] = await Promise.all([
@@ -89,8 +130,32 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
     const record = store as Record<string, unknown>;
     const location = record.location && typeof record.location === "object" ? record.location as Record<string, unknown> : {};
     const state = String(record.state || location.state || "").toLowerCase();
-    return (selectedState === "All Nigeria" || state === selectedState.toLowerCase()) && (!onlyVerified || record.isVerified === true);
+    const status = String(record.status || "").toLowerCase();
+    return !["inactive", "banned"].includes(status)
+      && (selectedState === "All Nigeria" || state === selectedState.toLowerCase())
+      && (!onlyVerified || record.isVerified === true);
   });
+
+  const nearbyStores = useMemo(() => {
+    const withCoordinates = visibleStores
+      .map((store) => {
+        const coordinates = storeCoordinates(store);
+        return userLocation && coordinates
+          ? { ...store, distanceKm: distanceInKm(userLocation, coordinates) }
+          : store;
+      })
+      .filter((store) => storeCoordinates(store) !== null);
+
+    if (userLocation) {
+      return withCoordinates
+        .sort((a, b) => Number(a.distanceKm ?? Number.POSITIVE_INFINITY) - Number(b.distanceKm ?? Number.POSITIVE_INFINITY))
+        .slice(0, 4);
+    }
+
+    // Without permission, show sellers that have a saved map location. The
+    // selected state still applies through visibleStores above.
+    return withCoordinates.slice(0, 4);
+  }, [userLocation, visibleStores]);
 
   return (
     <div className={`w-full ${jakarta.className}`}>
@@ -154,19 +219,28 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-6 gap-4">
           <div>
             <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Stores Near You</h2>
-            <p className="text-gray-500 font-medium mt-1">Discover local sellers in your area. <span className="text-[#00a63e] font-bold">(Location filtering coming soon)</span></p>
+            <p className="text-gray-500 font-medium mt-1">{userLocation ? "Closest sellers based on your current location." : selectedState !== "All Nigeria" ? `Sellers in ${selectedState} with saved map locations.` : "Discover local sellers in your area."}</p>
           </div>
-          <Link href="/stores" className="flex items-center gap-1 text-sm font-bold text-[#00a63e] hover:text-[#008f35] transition-colors shrink-0">
-            View all stores <span className="text-lg">›</span>
-          </Link>
+          <div className="flex items-center gap-3">
+            <button onClick={requestUserLocation} disabled={locationStatus === "loading"} className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs font-bold text-[#00a63e] transition hover:bg-green-100 disabled:opacity-60">
+              <MapPin size={14} /> {locationStatus === "loading" ? "Locating…" : userLocation ? "Refresh location" : "Use my location"}
+            </button>
+            <Link href="/stores" className="hidden items-center gap-1 text-sm font-bold text-[#00a63e] hover:text-[#008f35] transition-colors sm:flex">
+              View all stores <span className="text-lg">›</span>
+            </Link>
+          </div>
         </div>
+        {locationStatus === "denied" && <p className="mb-4 text-xs font-semibold text-amber-700">Location access was unavailable. Showing stores with saved coordinates instead.</p>}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {loading ? (
             [1, 2, 3, 4].map(i => <StoreSkeleton key={`near-${i}`} />)
-          ) : (
-            visibleStores.slice(0, 4).map((store) => (
-              <StoreCardExplore key={`near-${store.id}`} store={store} />
-            ))
+          ) : nearbyStores.length > 0 ? nearbyStores.map((store) => (
+            <div key={`near-${store.id}`} className="relative">
+              <StoreCardExplore store={store} />
+              {typeof store.distanceKm === "number" && <span className="absolute right-4 top-4 rounded-full bg-white/90 px-2 py-1 text-[10px] font-black text-green-700 shadow-sm">{store.distanceKm.toFixed(1)} km</span>}
+            </div>
+          )) : (
+            <div className="col-span-full rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center text-sm font-semibold text-gray-500">No stores have a saved map location yet.</div>
           )}
         </div>
       </section>
