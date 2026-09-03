@@ -9,6 +9,8 @@ export interface ShippingOption {
     logo?: string;
     estimatedDays: string;
     shippingFee: number;
+    dispatchEnabled?: boolean;
+    integrationStatus?: string;
 }
 
 interface ShippingSelectorProps {

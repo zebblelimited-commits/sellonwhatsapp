@@ -18,6 +18,8 @@ interface CourierOption {
     logo: string;
     estimatedDays: string;
     shippingFee: number;
+    dispatchEnabled: boolean;
+    integrationStatus: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -53,6 +55,13 @@ export async function POST(req: NextRequest) {
             const courier = doc.data();
             const courierCode = courier.code?.toLowerCase() || "";
             const courierName = courier.name?.toLowerCase() || "";
+
+            // Only show providers that can receive a real order from the
+            // platform. Static quote-only records must not look dispatchable
+            // at checkout. The code fallback keeps existing FEZ records
+            // working until the courier seed endpoint is run again.
+            const dispatchEnabled = courierCode === "fez" && courier.dispatchEnabled !== false;
+            if (!dispatchEnabled) continue;
 
             // Check State Availability: 
             // If availableStates exists and is an array, ensure destinationState is included.
@@ -129,6 +138,8 @@ export async function POST(req: NextRequest) {
                 logo: logoPath,
                 estimatedDays: courier.estimatedDays || "2-5 Business Days",
                 shippingFee: finalFee,
+                dispatchEnabled: true,
+                integrationStatus: courier.integrationStatus || "ready",
             });
         }
 

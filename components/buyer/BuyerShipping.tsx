@@ -36,10 +36,12 @@ const statusMeta: Record<string, { label: string; tone: string; icon: typeof Clo
   pending_payment: { label: "Payment pending", tone: "bg-amber-50 text-amber-700 border-amber-100", icon: Clock3 },
   paid_held: { label: "Preparing shipment", tone: "bg-amber-50 text-amber-700 border-amber-100", icon: Clock3 },
   pending_pickup: { label: "Awaiting pickup", tone: "bg-blue-50 text-blue-700 border-blue-100", icon: PackageCheck },
+  awaiting_pickup: { label: "Pickup scheduled", tone: "bg-blue-50 text-blue-700 border-blue-100", icon: PackageCheck },
   shipped: { label: "In transit", tone: "bg-indigo-50 text-indigo-700 border-indigo-100", icon: Truck },
   out_for_delivery: { label: "Out for delivery", tone: "bg-purple-50 text-purple-700 border-purple-100", icon: Truck },
   completed: { label: "Delivered", tone: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: CheckCircle2 },
   cancelled: { label: "Cancelled", tone: "bg-gray-100 text-gray-600 border-gray-200", icon: AlertCircle },
+  self_arranged: { label: "Self-arranged delivery", tone: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: MapPin },
 };
 
 function asDate(value: any): Date {
@@ -220,4 +222,4 @@ function ShipmentDetails({ record, onClose }: { record: ShippingRecord; onClose:
 function Address({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl border border-gray-200 bg-white p-4"><div className="flex items-center gap-2 text-emerald-700"><MapPin size={15} /><p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{label}</p></div><p className="mt-2 text-sm font-bold leading-6 text-gray-800">{value}</p></div>; }
 function Info({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl border border-gray-100 bg-white p-4"><p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{label}</p><p className="mt-2 text-sm font-black text-gray-900">{value}</p></div>; }
 function LoadingRows() { return <div className="space-y-3">{[1, 2, 3].map((item) => <div key={item} className="h-20 animate-pulse rounded-2xl bg-gray-100" />)}</div>; }
-function EmptyState() { return <div className="rounded-2xl bg-gray-50 p-10 text-center"><PackageCheck className="mx-auto text-gray-300" size={34} /><p className="mt-3 text-sm font-black text-gray-700">No shipments found</p><p className="mt-1 text-xs font-medium text-gray-400">Your courier deliveries will appear here after checkout.</p></div>; }
+function EmptyState() { return <div className="rounded-2xl bg-gray-50 p-10 text-center"><PackageCheck className="mx-auto text-gray-300" size={34} /><p className="mt-3 text-sm font-black text-gray-700">No shipments found</p><p className="mt-1 text-xs font-medium text-gray-400">Your courier and self-arranged deliveries will appear here after checkout.</p></div>; }

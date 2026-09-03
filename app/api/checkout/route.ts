@@ -144,6 +144,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             const isSelfArranged = courierId === "self_arranged" || shippingMethod === "self_arranged";
             const shippingCost = isSelfArranged ? 0 : rawShippingCost;
 
+            // The quote endpoint only exposes dispatch-ready providers, but
+            // keep this server-side guard so an old or tampered client cannot
+            // create a paid order that the platform cannot dispatch.
+            if (!isSelfArranged) {
+                const courierSnap = await adminDb.collection("couriers").doc(courierId).get();
+                const courier = courierSnap.data() || {};
+                const courierCode = String(courier.code || courierId || "").toLowerCase();
+                const dispatchEnabled = courierCode === "fez" && courier.dispatchEnabled !== false;
+                if (!courierSnap.exists || !dispatchEnabled) {
+                    return NextResponse.json(
+                        { error: `${courierName || "This courier"} is not currently available for automated dispatch. Choose FEZ Delivery or Self-Arranged.` },
+                        { status: 400 },
+                    );
+                }
+            }
+
+            const hasPhysicalItems = !items.length || items.some((item: any) =>
+                !["service", "booking", "utility"].includes(String(item.productType || item.orderType || "").toLowerCase())
+                && !item.bookingDate
+                && !item.bookingSlot,
+            );
+
             const isPartner =
                 storeData.isPartner === true ||
                 storeData.subscriptionPlan === "pro_max" ||
@@ -189,6 +211,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 shippingMethod: courierId,
                 courierId,
                 courierName,
+                deliveryMode: isSelfArranged ? "self_arranged" : "aggregator",
+                deliveryStatus: isSelfArranged ? "SELF_ARRANGED" : "PENDING_PICKUP",
                 estimatedDays: estimatedDays || null,
                 shippingCost,
                 handlingFee,
@@ -212,10 +236,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             batch.set(adminDb.collection("orders").doc(orderId), orderDoc);
 
             // -----------------------------------------------------
-            // CREATE SHIPMENT (EXCLUDE SELF-ARRANGED)
+            // Create a visible shipment record for every physical order. A
+            // self-arranged shipment is local-only; an aggregator shipment is
+            // dispatched after payment is verified.
             // -----------------------------------------------------
 
-            if (!isSelfArranged && shippingCost > 0) {
+            if (hasPhysicalItems) {
                 const shipmentId = `SHP_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
                 const shipmentDoc = {
@@ -227,10 +253,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     customerEmail,
                     courierId,
                     courierName,
-                    status: "PENDING_PICKUP",
+                    deliveryMode: isSelfArranged ? "self_arranged" : "aggregator",
+                    dispatchStatus: isSelfArranged ? "NOT_REQUIRED" : "PENDING",
+                    status: isSelfArranged ? "SELF_ARRANGED" : "PENDING_PICKUP",
                     pickupAddress: storeData.address || "Store Address",
+                    pickupState: storeData.state || "",
+                    pickupPhone: storeData.phone || storeData.phoneNumber || "",
+                    storeName,
                     deliveryAddress: address,
                     shippingCost,
+                    estimatedDays: estimatedDays || null,
+                    items,
                     createdAt: FieldValue.serverTimestamp(),
                     updatedAt: FieldValue.serverTimestamp(),
                 };

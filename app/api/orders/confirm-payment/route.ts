@@ -3,6 +3,7 @@ import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 import { inventoryAdjustment } from "@/lib/inventory";
 import { notifyOrderPaymentConfirmed } from "@/lib/novu-events";
+import { dispatchShipmentForOrder } from "@/lib/shipping-dispatch";
 
 class PaymentConfirmationError extends Error {
   status: number;
@@ -39,6 +40,22 @@ const orderSummaries = (orders: Array<{ ref: FirebaseFirestore.DocumentReference
     total: amountOf(data.total ?? data.totalAmount ?? data.amount),
     totalAmount: amountOf(data.totalAmount ?? data.total ?? data.amount),
   }));
+
+const dispatchConfirmedShipments = async (orders: Array<{ ref: FirebaseFirestore.DocumentReference }>) => {
+  const dispatchResults = await Promise.allSettled(
+    orders.map(({ ref }) => dispatchShipmentForOrder(ref.id)),
+  );
+  dispatchResults.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      console.log(`[SHIPPING] Order ${orders[index]?.ref.id} dispatch: ${result.value.dispatchStatus}`);
+    } else {
+      console.error(`[SHIPPING] Order ${orders[index]?.ref.id} dispatch crashed:`, result.reason);
+    }
+  });
+  return dispatchResults.map((result) => result.status === "fulfilled"
+    ? result.value
+    : { status: "PENDING_PICKUP", dispatchStatus: "FAILED", reason: "Dispatch worker failed" });
+};
 
 type ProviderTransaction = {
   status?: unknown;
@@ -111,28 +128,37 @@ export async function POST(request: NextRequest) {
 
     const ordersToProcess = initialOrdersSnap.docs.map(doc => ({ ref: doc.ref, data: doc.data() }));
 
-    // Verify all orders belong to the buyer and check initial state
+    // Verify every order in a multi-seller checkout before taking any early
+    // return. A checkout reference can resolve to several order documents.
     for (const { data } of ordersToProcess) {
       if (data.buyerId !== decoded.uid) throw new PaymentConfirmationError("Forbidden", 403);
+    }
 
-      const initialFundsState = String(data.fundsState || "").trim().toLowerCase();
-      if (initialFundsState === "held" && data.escrowReservedAt) {
-        return NextResponse.json({
-          success: true,
-          confirmed: true,
-          status: "PAID_HELD",
-          alreadyProcessed: true,
-          orders: orderSummaries(ordersToProcess),
-        });
-      }
-      if (["released", "refunded", "refund_pending"].includes(initialFundsState)) {
-        return NextResponse.json({
-          success: true,
-          confirmed: true,
-          status: String(data.status || ""),
-          orders: orderSummaries(ordersToProcess),
-        });
-      }
+    const allOrdersHeld = ordersToProcess.every(({ data }) => {
+      const fundsState = String(data.fundsState || "").trim().toLowerCase();
+      return fundsState === "held" && data.escrowReservedAt;
+    });
+    if (allOrdersHeld) {
+      const dispatch = await dispatchConfirmedShipments(ordersToProcess);
+      return NextResponse.json({
+        success: true,
+        confirmed: true,
+        status: "PAID_HELD",
+        alreadyProcessed: true,
+        dispatch,
+        orders: orderSummaries(ordersToProcess),
+      });
+    }
+    const allOrdersSettled = ordersToProcess.every(({ data }) =>
+      ["released", "refunded", "refund_pending"].includes(String(data.fundsState || "").trim().toLowerCase()),
+    );
+    if (allOrdersSettled) {
+      return NextResponse.json({
+        success: true,
+        confirmed: true,
+        status: String(ordersToProcess[0]?.data.status || ""),
+        orders: orderSummaries(ordersToProcess),
+      });
     }
 
     const nombaOrigin = process.env.NOMBA_SANDBOX_URL || "https://sandbox.nomba.com";
@@ -318,10 +344,13 @@ export async function POST(request: NextRequest) {
       console.error("[NOVU WHATSAPP] Payment confirmation fan-out failed:", notificationError);
     }
 
+    const dispatch = await dispatchConfirmedShipments(ordersToProcess);
+
     return NextResponse.json({
       success: true,
       confirmed: true,
       results,
+      dispatch,
       orders: orderSummaries(ordersToProcess),
     });
   } catch (error: unknown) {

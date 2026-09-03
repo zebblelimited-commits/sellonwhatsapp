@@ -38,17 +38,17 @@ export async function POST(request: NextRequest) {
       if (vendorId !== decoded.uid) throw new ShipOrderError("You cannot update this order", 403);
 
       // Detect if order is non-physical / service
+      const isSelfArranged = order.shippingMethod === "self_arranged" || order.deliveryMode === "self_arranged";
       const isServiceOrBooking =
         order.productType === 'service' ||
         order.productType === 'booking' ||
         order.productType === 'utility' ||
-        order.shippingMethod === 'self_arranged' ||
         (Array.isArray(order.items) && order.items.some((i: any) => i.bookingDate || i.bookingSlot));
 
       // Validation: Tracking ID is required ONLY for physical items
       if (!isServiceOrBooking) {
-        if (!trackingId) throw new ShipOrderError("Tracking ID is required for physical shipments");
-        if (!carrier) throw new ShipOrderError("Carrier is required for physical shipments");
+        if (!isSelfArranged && !trackingId) throw new ShipOrderError("Tracking ID is required for physical shipments");
+        if (!isSelfArranged && !carrier) throw new ShipOrderError("Carrier is required for physical shipments");
       }
 
       const rawStatus = String(order.status || "").toUpperCase();
@@ -72,8 +72,8 @@ export async function POST(request: NextRequest) {
       };
 
       if (!isServiceOrBooking) {
-        updatePayload.trackingId = trackingId;
-        updatePayload.carrier = carrier;
+        if (trackingId) updatePayload.trackingId = trackingId;
+        updatePayload.carrier = carrier || "Self-arranged";
       }
 
       transaction.update(orderRef, updatePayload);
@@ -94,6 +94,21 @@ export async function POST(request: NextRequest) {
 
       return { alreadyUpdated: false, status: nextStatus, notificationOrder: { id: orderSnap.id, ...order } };
     });
+
+    // Keep the shipment timeline aligned with the seller's manual handoff
+    // action. This is especially important for self-arranged orders, where
+    // there is no external courier webhook to advance the shipment.
+    if (!result.alreadyUpdated && result.status === "SHIPPED") {
+      const shipmentSnap = await adminDb.collection("shipments").where("orderId", "==", orderId).limit(1).get();
+      if (!shipmentSnap.empty) {
+        await shipmentSnap.docs[0].ref.update({
+          status: "SHIPPED",
+          dispatchStatus: "NOT_REQUIRED",
+          updatedAt: FieldValue.serverTimestamp(),
+          ...(trackingId ? { trackingId } : {}),
+        });
+      }
+    }
 
     if (!result.alreadyUpdated && result.notificationOrder) {
       try {

@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
             if (orderId) orderIds.add(orderId);
             await shipment.ref.update({
                 status: nextStatus.toUpperCase(),
+                dispatchStatus: nextStatus === "delivered" ? "COMPLETED" : nextStatus === "cancelled" ? "FAILED" : "IN_PROGRESS",
                 providerStatus: status,
                 ...(nextStatus === "delivered" ? { deliveredAt: FieldValue.serverTimestamp() } : {}),
                 updatedAt: FieldValue.serverTimestamp(),
