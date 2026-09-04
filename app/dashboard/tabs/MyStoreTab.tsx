@@ -162,6 +162,7 @@ export const calculateExpiryDate = (docData: any): string => {
 };
 
 export default function MyStoreTab({ initialData }: MyStoreTabProps) {
+  const initialLocation = initialData?.location && typeof initialData.location === "object" ? initialData.location : {};
   // ✅ Store Form State
   const [formData, setFormData] = useState({
     storeName: initialData?.storeName || "",
@@ -172,9 +173,9 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
     state: initialData?.state || "",
     lga: initialData?.lga || "",
     phone: initialData?.phone || "",
-    address: initialData?.address || "",
-    latitude: initialData?.latitude != null ? String(initialData.latitude) : "",
-    longitude: initialData?.longitude != null ? String(initialData.longitude) : "",
+    address: initialData?.address || initialLocation.address || "",
+    latitude: initialData?.latitude != null ? String(initialData.latitude) : initialLocation.latitude != null ? String(initialLocation.latitude) : "",
+    longitude: initialData?.longitude != null ? String(initialData.longitude) : initialLocation.longitude != null ? String(initialLocation.longitude) : "",
     email: initialData?.email || "",
     socials: {
       instagram: initialData?.socials?.instagram || "",
@@ -554,6 +555,15 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
       return;
     }
 
+    const hasLatitude = formData.latitude.trim() !== "";
+    const hasLongitude = formData.longitude.trim() !== "";
+    const latitude = Number(formData.latitude);
+    const longitude = Number(formData.longitude);
+    if (hasLatitude !== hasLongitude || (hasLatitude && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180))) {
+      showNotification("error", "Invalid Coordinates", "Enter both a valid latitude and longitude to enable Chowdeck delivery.");
+      return;
+    }
+
     setSaving(true);
     try {
       const oldUsername = (initialData?.username || "").toLowerCase().trim();
@@ -587,10 +597,19 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
       if (newBannerUrl) currentBannerUrl = newBannerUrl;
       if (newLogoUrl) currentLogoUrl = newLogoUrl;
 
+      const existingLocation = initialData?.location && typeof initialData.location === "object" ? initialData.location : {};
       await updateDoc(doc(db, "stores", auth.currentUser.uid), {
         ...formData,
-        latitude: Number(formData.latitude) || null,
-        longitude: Number(formData.longitude) || null,
+        latitude: hasLatitude ? latitude : null,
+        longitude: hasLongitude ? longitude : null,
+        location: {
+          ...existingLocation,
+          latitude: hasLatitude ? latitude : null,
+          longitude: hasLongitude ? longitude : null,
+          address: formData.address,
+          state: formData.state,
+          lga: formData.lga,
+        },
         bannerUrl: currentBannerUrl,
         logoUrl: currentLogoUrl,
         updatedAt: new Date()
@@ -1135,17 +1154,18 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
                 <span>{formData.state && formData.lga ? `${formData.lga}, ${formData.state} State` : "Not set"}</span>
               </div>
             )}
+            {!isEditing && (formData.latitude || formData.longitude) && <p className="mt-2 text-[10px] font-medium text-gray-400">Coordinates: {formData.latitude || "—"}, {formData.longitude || "—"}</p>}
             {isEditing && <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-xs font-black text-blue-900">Map coordinates</p>
-                  <p className="mt-1 text-[10px] font-medium text-blue-700">Used to show your store to nearby buyers.</p>
+                  <p className="mt-1 text-[10px] font-medium text-blue-700">Used for nearby stores, delivery pricing, and Chowdeck pickup.</p>
                 </div>
                 <button type="button" onClick={handleUseCurrentLocation} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-[10px] font-black text-white transition hover:bg-blue-700"><MapPin size={13} /> Use current location</button>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <input aria-label="Store latitude" value={formData.latitude} onChange={(event) => handleInputChange("latitude", event.target.value)} placeholder="Latitude" inputMode="decimal" className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500" />
-                <input aria-label="Store longitude" value={formData.longitude} onChange={(event) => handleInputChange("longitude", event.target.value)} placeholder="Longitude" inputMode="decimal" className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500" />
+                <input type="number" step="any" aria-label="Store latitude" value={formData.latitude} onChange={(event) => handleInputChange("latitude", event.target.value)} placeholder="Latitude e.g. 6.601838" inputMode="decimal" className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500" />
+                <input type="number" step="any" aria-label="Store longitude" value={formData.longitude} onChange={(event) => handleInputChange("longitude", event.target.value)} placeholder="Longitude e.g. 3.351486" inputMode="decimal" className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500" />
               </div>
             </div>}
           </div>

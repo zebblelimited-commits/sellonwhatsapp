@@ -523,3 +523,17 @@ await sendEmail({
     storeId: seller.storeId,
   },
 });
+
+
+Hi,
+
+Here is the link to our API documentation: https://topship-staging.africa/shipping/docs#/
+
+Here is also your staging API KEY: 
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6InN1cHBvcnRAc2VsbG9ud2hhdHNhcHAuY29tIiwic3ViIjoiNzQ0YzU3OWQtZTI4Ny00MmE4LTg3YWQtZGRjYjFjY2JhYjNjIiwiZnVsbE5hbWUiOiJaZWJibGUgUXVhbnR1bSBTb2x1dGlvbnMgTFREIiwiaWF0IjoxNzg4NTEzNzc2LCJleHAiOjQ5NDIxMTM3NzZ9.o3z3qZjO8w7F62D0GfwKgD7PFSLcc4cYzwaERv1Feyw
+
+Please use this as an Authorization Header, pass as a Bearer Token
+
+If you have any questions, please do not hesitate to contact us.
+
+Thanks and Regards.

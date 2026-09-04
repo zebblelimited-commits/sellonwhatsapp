@@ -2,12 +2,12 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
-import { collection, doc, getDocs, onSnapshot, query, updateDoc, where, serverTimestamp } from "firebase/firestore";
+import { collection, doc, getDocs, onSnapshot, query, setDoc, updateDoc, where, serverTimestamp } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { 
   Bell, Shield, Phone, LogOut, User, Download, Trash2, 
   ChevronRight, Loader2, CheckCircle2, Globe,
-  Mail, MessageCircle, AlertTriangle
+  Mail, MessageCircle, AlertTriangle, MapPin
 } from "lucide-react";
 
 export function BuyerSettings() {
@@ -19,6 +19,16 @@ export function BuyerSettings() {
     whatsappNotifs: true,
     pushNotifs: true
   });
+  const [locationForm, setLocationForm] = useState({
+    address: "",
+    city: "",
+    state: "",
+    lga: "",
+    postalCode: "",
+    latitude: "",
+    longitude: "",
+  });
+  const [savingLocation, setSavingLocation] = useState(false);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -33,12 +43,25 @@ useEffect(() => {
     return;
   }
 
-  const unsub = onSnapshot(
+  const applyProfileData = (data: any) => {
+    setBuyer((previous: any) => ({ ...(previous || {}), ...data }));
+    setLocationForm((previous) => ({
+      address: typeof data.address === "string" ? data.address : typeof data.shippingAddress === "string" ? data.shippingAddress : previous.address,
+      city: data.city ?? previous.city,
+      state: data.state ?? previous.state,
+      lga: data.lga ?? previous.lga,
+      postalCode: data.postalCode ?? previous.postalCode,
+      latitude: data.latitude ?? data.location?.latitude ?? data.location?.lat ?? previous.latitude,
+      longitude: data.longitude ?? data.location?.longitude ?? data.location?.lng ?? previous.longitude,
+    }));
+  };
+
+  const unsubBuyer = onSnapshot(
     doc(db, "buyers", user.uid), 
     (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setBuyer(data);
+        applyProfileData(data);
         setPrefs(prev => ({
           ...prev,
           emailNotifs: data.preferences?.emailNotifs ?? true,
@@ -65,7 +88,20 @@ useEffect(() => {
     }
   );
 
-  return () => unsub();
+  // Checkout reads the users document after merging it with buyers. Listen to
+  // it here as well so settings and checkout always use the same location.
+  const unsubUser = onSnapshot(
+    doc(db, "users", user.uid),
+    (docSnap) => {
+      if (docSnap.exists()) applyProfileData(docSnap.data());
+    },
+    (error) => console.error("Failed to load buyer location:", error),
+  );
+
+  return () => {
+    unsubBuyer();
+    unsubUser();
+  };
 }, [router]);
 
   // Clear auto-dismiss messages
@@ -76,7 +112,7 @@ useEffect(() => {
     }
   }, [message]);
 
-  const handlePrefToggle = async (key: string, value: boolean) => {
+const handlePrefToggle = async (key: string, value: boolean) => {
   if (key === "pushNotifs" && value && typeof window !== "undefined" && "Notification" in window) {
     const permission = Notification.permission === "granted"
       ? "granted"
@@ -123,6 +159,71 @@ useEffect(() => {
     setSaving(false);
   }
 };
+
+  const handleSaveLocation = async () => {
+    const user = auth.currentUser;
+    if (!user || savingLocation) return;
+
+    const latitude = Number(locationForm.latitude);
+    const longitude = Number(locationForm.longitude);
+    if (!locationForm.address.trim() || !locationForm.state.trim()) {
+      setMessage({ type: "error", text: "Enter your delivery address and state before saving." });
+      return;
+    }
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      setMessage({ type: "error", text: "Enter valid latitude and longitude coordinates." });
+      return;
+    }
+
+    setSavingLocation(true);
+    try {
+      await setDoc(doc(db, "users", user.uid), {
+        address: locationForm.address.trim(),
+        shippingAddress: locationForm.address.trim(),
+        city: locationForm.city.trim(),
+        state: locationForm.state.trim(),
+        lga: locationForm.lga.trim(),
+        postalCode: locationForm.postalCode.trim(),
+        latitude,
+        longitude,
+        location: {
+          latitude,
+          longitude,
+          address: locationForm.address.trim(),
+          city: locationForm.city.trim(),
+          state: locationForm.state.trim(),
+          lga: locationForm.lga.trim(),
+          postalCode: locationForm.postalCode.trim(),
+        },
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      setMessage({ type: "success", text: "Delivery location saved successfully." });
+    } catch (error) {
+      console.error("Failed to save buyer delivery location:", error);
+      setMessage({ type: "error", text: "We could not save your delivery location. Please try again." });
+    } finally {
+      setSavingLocation(false);
+    }
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setMessage({ type: "error", text: "Your browser does not support location access." });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocationForm((previous) => ({
+          ...previous,
+          latitude: position.coords.latitude.toFixed(6),
+          longitude: position.coords.longitude.toFixed(6),
+        }));
+        setMessage({ type: "success", text: "Current location captured. Save the delivery location to keep it." });
+      },
+      () => setMessage({ type: "error", text: "Location permission was not granted. Enter the coordinates manually instead." }),
+      { enableHighAccuracy: false, maximumAge: 300000, timeout: 10000 },
+    );
+  };
 
   const handleSignOut = async () => {
     if (!window.confirm("Are you sure you want to sign out?")) return;
@@ -250,6 +351,49 @@ useEffect(() => {
             checked={prefs.pushNotifs} 
             onChange={(v) => handlePrefToggle("pushNotifs", v)} 
           />
+        </div>
+      </div>
+
+      {/* Delivery Location */}
+      <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-gray-50 flex items-center gap-2">
+          <Globe size={18} className="text-gray-400" />
+          <div>
+            <h3 className="font-bold text-gray-900 text-sm">Delivery Location</h3>
+            <p className="text-[10px] text-gray-400 font-medium">Used for nearby stores and Chowdeck delivery pricing</p>
+          </div>
+        </div>
+        <div className="p-5 space-y-3">
+          <input
+            value={locationForm.address}
+            onChange={(event) => setLocationForm({ ...locationForm, address: event.target.value })}
+            placeholder="Street address"
+            className="w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm outline-none focus:border-green-500"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <input value={locationForm.city} onChange={(event) => setLocationForm({ ...locationForm, city: event.target.value })} placeholder="City" className="w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm outline-none focus:border-green-500" />
+            <input value={locationForm.lga} onChange={(event) => setLocationForm({ ...locationForm, lga: event.target.value })} placeholder="LGA" className="w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm outline-none focus:border-green-500" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <input value={locationForm.state} onChange={(event) => setLocationForm({ ...locationForm, state: event.target.value })} placeholder="State" className="w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm outline-none focus:border-green-500" />
+            <input value={locationForm.postalCode} onChange={(event) => setLocationForm({ ...locationForm, postalCode: event.target.value })} placeholder="Postal code" className="w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm outline-none focus:border-green-500" />
+          </div>
+          <div>
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-bold text-gray-700">Map Coordinates *</p>
+              <button type="button" onClick={handleUseCurrentLocation} className="inline-flex items-center gap-1 rounded-lg bg-green-50 px-2 py-1 text-[10px] font-bold text-green-700 hover:bg-green-100">
+                <MapPin size={12} /> Use current location
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <input type="number" step="any" value={locationForm.latitude} onChange={(event) => setLocationForm({ ...locationForm, latitude: event.target.value })} placeholder="Latitude e.g. 6.579" className="w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm outline-none focus:border-green-500" />
+              <input type="number" step="any" value={locationForm.longitude} onChange={(event) => setLocationForm({ ...locationForm, longitude: event.target.value })} placeholder="Longitude e.g. 3.349" className="w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm outline-none focus:border-green-500" />
+            </div>
+            <p className="mt-1 text-[10px] text-gray-400">In Google Maps, right-click the exact delivery point and copy the coordinates.</p>
+          </div>
+          <button onClick={handleSaveLocation} disabled={savingLocation} className="w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60">
+            {savingLocation ? "Saving location…" : "Save delivery location"}
+          </button>
         </div>
       </div>
 
