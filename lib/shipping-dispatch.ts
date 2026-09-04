@@ -2,6 +2,7 @@ import admin from "firebase-admin";
 import { adminDb } from "@/lib/firebase-admin";
 import { createFezOrders } from "@/lib/fez";
 import { createChowdeckDelivery } from "@/lib/chowdeck";
+import { createTopshipShipment, payTopshipShipment, type TopshipAddress, type TopshipQuote } from "@/lib/topship";
 
 type DispatchResult = {
   shipmentId: string;
@@ -46,8 +47,8 @@ function providerCode(shipment: any, courier: any) {
 }
 
 /**
- * Dispatches a paid shipment to the configured aggregator. FEZ and Chowdeck
- * have order-creation adapters; self-arranged delivery is deliberately
+ * Dispatches a paid shipment to the configured aggregator. FEZ, Chowdeck, and
+ * Topship have order-creation adapters; self-arranged delivery is deliberately
  * recorded locally and never sent to an external courier.
  */
 export async function dispatchShipmentForOrder(orderId: string): Promise<DispatchResult> {
@@ -198,8 +199,104 @@ export async function dispatchShipmentForOrder(orderId: string): Promise<Dispatc
     }
   }
 
+  if (code === "topship") {
+    try {
+      const quote = shipment.providerQuote as TopshipQuote | undefined;
+      if (!quote || !Number.isFinite(Number(quote.cost)) || !quote.pricingTier) {
+        throw new Error("Topship delivery quote is missing or expired");
+      }
+
+      const deliveryAddress = order.deliveryAddress || shipment.deliveryAddress;
+      const pickupAddress = shipment.pickupAddress;
+      const sender: TopshipAddress = typeof pickupAddress === "string"
+        ? {
+            name: asText(order.storeName, "SellOnWhatsApp seller"),
+            phone: normalisePhone(shipment.pickupPhone || shipment.storePhone),
+            address: pickupAddress,
+            state: asText(shipment.pickupState),
+          }
+        : {
+            name: asText(pickupAddress?.name, order.storeName || "SellOnWhatsApp seller"),
+            phone: normalisePhone(pickupAddress?.phone || shipment.pickupPhone || shipment.storePhone),
+            address: addressText(pickupAddress),
+            city: asText(pickupAddress?.city),
+            state: asText(pickupAddress?.state || shipment.pickupState),
+            lga: asText(pickupAddress?.lga),
+          };
+      const receiver: TopshipAddress = {
+        name: asText(order.customerName, "Customer"),
+        phone: normalisePhone(order.customerPhone || deliveryAddress?.phone),
+        email: asText(order.customerEmail) || undefined,
+        address: addressText(deliveryAddress),
+        city: asText(deliveryAddress?.city),
+        state: stateText(deliveryAddress),
+        lga: asText(deliveryAddress?.lga),
+        postalCode: asText(deliveryAddress?.postalCode),
+      };
+      const items = Array.isArray(order.items) ? order.items : [];
+
+      // Persist the draft ID before paying from the Topship wallet. If wallet
+      // payment fails, a retry pays the same draft instead of creating a
+      // duplicate shipment.
+      let topShipShipmentId = asText(shipment.topshipShipmentId);
+      if (!topShipShipmentId) {
+        const draft = await createTopshipShipment({ quote, sender, receiver, items });
+        topShipShipmentId = asText(draft.id);
+        if (!topShipShipmentId) throw new Error("Topship did not return a shipment ID");
+        await shipmentRef.update({
+          topshipShipmentId: topShipShipmentId,
+          provider: "topship",
+          dispatchStatus: "PROVIDER_PAYMENT_PENDING",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+
+      const paidShipment = await payTopshipShipment(topShipShipmentId);
+      const providerReference = asText(paidShipment.trackingId || paidShipment.id, topShipShipmentId);
+      if (!providerReference) throw new Error("Topship did not return a tracking reference");
+
+      await Promise.all([
+        shipmentRef.update({
+          status: "AWAITING_PICKUP",
+          dispatchStatus: "DISPATCHED",
+          provider: "topship",
+          topshipShipmentId: topShipShipmentId,
+          providerReference,
+          courierOrderId: topShipShipmentId,
+          trackingId: providerReference,
+          trackingUrl: paidShipment.trackingUrl || null,
+          providerStatus: paidShipment.shipmentStatus || paidShipment.status || "Confirmed",
+          dispatchedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          dispatchError: admin.firestore.FieldValue.delete(),
+        }),
+        orderRef.update({
+          deliveryStatus: "AWAITING_PICKUP",
+          courierStatus: paidShipment.shipmentStatus || paidShipment.status || "Confirmed",
+          providerReference,
+          trackingId: providerReference,
+          trackingUrl: paidShipment.trackingUrl || null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }),
+      ]);
+      console.log(`[SHIPPING] Topship shipment ${shipmentId} booked as ${providerReference}`);
+      return { shipmentId, orderId, status: "AWAITING_PICKUP", dispatchStatus: "DISPATCHED", providerReference, trackingId: providerReference, trackingUrl: paidShipment.trackingUrl };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Topship dispatch failed";
+      await shipmentRef.update({
+        status: "PENDING_PICKUP",
+        dispatchStatus: "FAILED",
+        dispatchError: reason.slice(0, 500),
+        lastDispatchAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.error(`[SHIPPING] Topship dispatch failed for ${shipmentId}:`, reason);
+      return { shipmentId, orderId, status: "PENDING_PICKUP", dispatchStatus: "FAILED", reason };
+    }
+  }
+
   if (code !== "fez") {
-    const reason = `Automated dispatch is not configured for ${asText(shipment.courierName, code || "this courier")}. Choose FEZ Delivery or Self-Arranged.`;
+    const reason = `Automated dispatch is not configured for ${asText(shipment.courierName, code || "this courier")}. Choose FEZ, Topship, or Self-Arranged.`;
     await shipmentRef.update({
       status: "PENDING_PICKUP",
       dispatchStatus: "PROVIDER_INTEGRATION_REQUIRED",

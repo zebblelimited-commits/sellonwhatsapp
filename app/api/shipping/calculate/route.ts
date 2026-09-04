@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { fetchFezDeliveryCost } from "@/lib/fez";
 import { fetchSendboxQuote } from "@/lib/sendbox";
-import { chowdeckConfigured, fetchChowdeckDeliveryFee, ChowdeckAddress } from "@/lib/chowdeck";
+import { chowdeckConfigured, fetchChowdeckDeliveryFee, type ChowdeckAddress } from "@/lib/chowdeck";
+import { fetchTopshipQuote, type TopshipAddress, type TopshipQuote, topshipConfigured } from "@/lib/topship";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,7 @@ interface CourierOption {
     integrationStatus: string;
     provider?: string;
     providerQuoteId?: number | string;
+    providerQuote?: TopshipQuote;
 }
 
 interface UnavailableProvider {
@@ -65,6 +67,10 @@ export async function POST(req: NextRequest) {
             const courier = data();
             return courier.code?.toLowerCase() === "chowdeck" || courier.name?.toLowerCase().includes("chowdeck");
         });
+        const hasTopshipRecord = courierEntries.some(({ data }) => {
+            const courier = data();
+            return courier.code?.toLowerCase() === "topship" || courier.name?.toLowerCase().includes("topship");
+        });
 
         if (chowdeckConfigured() && !hasChowdeckRecord) {
             courierEntries.push({
@@ -74,6 +80,18 @@ export async function POST(req: NextRequest) {
                     code: "chowdeck",
                     logo: "/images/couriers/chowdecklogo.jpg",
                     estimatedDays: "Same Day Delivery",
+                    integrationStatus: "ready",
+                }),
+            });
+        }
+        if (topshipConfigured() && !hasTopshipRecord) {
+            courierEntries.push({
+                id: "topship",
+                data: () => ({
+                    name: "Topship",
+                    code: "topship",
+                    logo: "/images/couriers/topshiplogo.jpeg",
+                    estimatedDays: "Topship delivery",
                     integrationStatus: "ready",
                 }),
             });
@@ -94,19 +112,28 @@ export async function POST(req: NextRequest) {
             const courierName = courier.name?.toLowerCase() || "";
             const isFez = courierCode === "fez" || courierName.includes("fez");
             const isChowdeck = courierCode === "chowdeck" || courierName.includes("chowdeck");
+            const isTopship = courierCode === "topship" || courierName.includes("topship");
 
             // Only show providers that can receive a real order from the
             // platform. Static quote-only records must not look dispatchable
             // at checkout. The code fallback keeps existing FEZ records
             // working until the courier seed endpoint is run again.
             const dispatchEnabled = (isFez && courier.dispatchEnabled !== false)
-                || (isChowdeck && chowdeckConfigured());
+                || (isChowdeck && chowdeckConfigured())
+                || (isTopship && topshipConfigured());
             if (!dispatchEnabled) {
                 if (isChowdeck) {
                     unavailableProviders.push({
                         id: doc.id,
                         name: courier.name || "Chowdeck",
                         reason: "Chowdeck is not configured on the server. Add the API key and merchant reference, then redeploy.",
+                    });
+                }
+                if (isTopship) {
+                    unavailableProviders.push({
+                        id: doc.id,
+                        name: courier.name || "Topship",
+                        reason: "Topship is not configured on the server. Add TOPSHIP_API_KEY, then redeploy.",
                     });
                 }
                 continue;
@@ -116,7 +143,7 @@ export async function POST(req: NextRequest) {
             // its live fee endpoint. A stale Firestore state list can hide a
             // valid option (for example, Jos/Plateau), so skip this filter for
             // Chowdeck. An unsuccessful quote is handled below.
-            if (!isChowdeck && Array.isArray(courier.availableStates) && courier.availableStates.length > 0) {
+            if (!isChowdeck && !isTopship && Array.isArray(courier.availableStates) && courier.availableStates.length > 0) {
                 const isAvailable = courier.availableStates.some(
                     (state: string) => state.toLowerCase() === destinationState.toLowerCase()
                 );
@@ -125,6 +152,7 @@ export async function POST(req: NextRequest) {
 
             let finalFee = 0;
             let providerQuoteId: number | string | undefined;
+            let providerQuote: TopshipQuote | undefined;
 
             // Check FEZ Delivery
             if (isFez) {
@@ -160,6 +188,31 @@ export async function POST(req: NextRequest) {
                         id: doc.id,
                         name: courier.name || "Chowdeck",
                         reason: "Chowdeck could not return a delivery quote for this route. Check the merchant reference/API environment and both address locations.",
+                    });
+                    continue;
+                }
+            }
+            // Topship returns a quote object rather than a quote ID. Keep the
+            // selected quote with the checkout so it can be used to book the
+            // draft shipment after Nomba payment is confirmed.
+            else if (isTopship) {
+                try {
+                    const topShipQuote = await fetchTopshipQuote({
+                        sender: pickupAddress as TopshipAddress || {},
+                        receiver: destinationAddress as TopshipAddress || {},
+                        totalWeightKg: Math.max(1, totalWeightKg),
+                    });
+                    finalFee = topShipQuote.totalCost / 100;
+                    providerQuote = topShipQuote;
+                } catch (topshipErr) {
+                    console.error("⚠️ [TOPSHIP API RATE ERROR], hiding unavailable option:", {
+                        courierId: doc.id,
+                        error: topshipErr,
+                    });
+                    unavailableProviders.push({
+                        id: doc.id,
+                        name: courier.name || "Topship",
+                        reason: "Topship could not return a delivery quote for this route. Check the staging API key and both address locations.",
                     });
                     continue;
                 }
@@ -205,6 +258,8 @@ export async function POST(req: NextRequest) {
                     logoPath = "/images/couriers/gigilogo.jpg";
                 } else if (courierCode === "fez" || courierName.includes("fez")) {
                     logoPath = "/images/couriers/fezlogo.png";
+                } else if (courierCode === "topship" || courierName.includes("topship")) {
+                    logoPath = "/images/couriers/topshiplogo.jpeg";
                 } else {
                     logoPath = "/images/couriers/default.png";
                 }
@@ -220,6 +275,7 @@ export async function POST(req: NextRequest) {
                 integrationStatus: courier.integrationStatus || "ready",
                 provider: courierCode,
                 ...(providerQuoteId !== undefined ? { providerQuoteId } : {}),
+                ...(providerQuote ? { providerQuote } : {}),
             });
         }
 

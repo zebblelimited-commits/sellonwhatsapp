@@ -44,15 +44,17 @@ useEffect(() => {
   }
 
   const applyProfileData = (data: any) => {
+    const savedLocation = data.location && typeof data.location === "object" ? data.location : {};
+    const shippingAddress = data.shippingAddress && typeof data.shippingAddress === "object" ? data.shippingAddress : {};
     setBuyer((previous: any) => ({ ...(previous || {}), ...data }));
     setLocationForm((previous) => ({
-      address: typeof data.address === "string" ? data.address : typeof data.shippingAddress === "string" ? data.shippingAddress : previous.address,
-      city: data.city ?? previous.city,
-      state: data.state ?? previous.state,
-      lga: data.lga ?? previous.lga,
-      postalCode: data.postalCode ?? previous.postalCode,
-      latitude: data.latitude ?? data.location?.latitude ?? data.location?.lat ?? previous.latitude,
-      longitude: data.longitude ?? data.location?.longitude ?? data.location?.lng ?? previous.longitude,
+      address: typeof data.address === "string" ? data.address : typeof data.shippingAddress === "string" ? data.shippingAddress : shippingAddress.address ?? savedLocation.address ?? previous.address,
+      city: data.city ?? shippingAddress.city ?? savedLocation.city ?? previous.city,
+      state: data.state ?? shippingAddress.state ?? savedLocation.state ?? previous.state,
+      lga: data.lga ?? shippingAddress.lga ?? savedLocation.lga ?? previous.lga,
+      postalCode: data.postalCode ?? shippingAddress.postalCode ?? savedLocation.postalCode ?? previous.postalCode,
+      latitude: data.latitude ?? savedLocation.latitude ?? savedLocation.lat ?? shippingAddress.latitude ?? shippingAddress.lat ?? previous.latitude,
+      longitude: data.longitude ?? savedLocation.longitude ?? savedLocation.lng ?? shippingAddress.longitude ?? shippingAddress.lng ?? previous.longitude,
     }));
   };
 

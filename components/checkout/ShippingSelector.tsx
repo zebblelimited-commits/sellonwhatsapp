@@ -13,6 +13,7 @@ export interface ShippingOption {
     integrationStatus?: string;
     provider?: string;
     providerQuoteId?: number | string;
+    providerQuote?: Record<string, unknown>;
 }
 
 type ShippingAddress = {

@@ -93,6 +93,18 @@ export async function POST(req: NextRequest) {
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             },
             {
+                id: "topship",
+                name: "Topship",
+                code: "topship",
+                logo: "/images/couriers/topshiplogo.jpeg",
+                isActive: true,
+                dispatchEnabled: true,
+                integrationStatus: "ready",
+                estimatedDays: "Topship delivery",
+                availableStates: [], // Coverage is resolved by Topship's live quote API
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            {
                 id: "sendbox_shipping",
                 name: "Sendbox",
                 code: "sendbox",

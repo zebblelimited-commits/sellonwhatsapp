@@ -151,25 +151,28 @@ export default function CheckoutPage() {
 
         setBuyerData({ ...data, email: data.email || user.email || "" });
 
+        const shippingAddress = data.shippingAddress && typeof data.shippingAddress === "object" ? data.shippingAddress : {};
+        const savedLocation = data.location && typeof data.location === "object" ? data.location : {};
         const profileAddress = typeof data.address === "string"
           ? data.address
           : typeof data.shippingAddress === "string"
             ? data.shippingAddress
-            : "";
-        const currentState = typeof data.state === "string" ? data.state : "";
-        const profileLatitude = data.latitude ?? data.location?.latitude ?? data.location?.lat;
-        const profileLongitude = data.longitude ?? data.location?.longitude ?? data.location?.lng;
-        const hasAddress = Boolean(profileAddress || data.city || currentState);
+            : shippingAddress.address || savedLocation.address || "";
+        const currentCity = data.city || shippingAddress.city || savedLocation.city || "";
+        const currentState = typeof data.state === "string" ? data.state : shippingAddress.state || savedLocation.state || "";
+        const profileLatitude = data.latitude ?? data.location?.latitude ?? data.location?.lat ?? shippingAddress.latitude ?? shippingAddress.lat;
+        const profileLongitude = data.longitude ?? data.location?.longitude ?? data.location?.lng ?? shippingAddress.longitude ?? shippingAddress.lng;
+        const hasAddress = Boolean(profileAddress || currentCity || currentState);
         const defaultAddress: CheckoutAddress = {
           id: "default_addr",
           label: "Default Address",
           name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || data.displayName || user.displayName || "",
-          phone: data.phone || "",
-          address: [profileAddress, data.city, currentState, data.postalCode, data.country].filter(Boolean).join(", "),
-          city: data.city || "",
+          phone: data.phone || shippingAddress.phone || savedLocation.phone || "",
+          address: [profileAddress, currentCity, currentState, data.postalCode || shippingAddress.postalCode || savedLocation.postalCode, data.country].filter(Boolean).join(", "),
+          city: currentCity,
           state: currentState,
-          lga: data.lga || "",
-          postalCode: data.postalCode || "",
+          lga: data.lga || shippingAddress.lga || savedLocation.lga || "",
+          postalCode: data.postalCode || shippingAddress.postalCode || savedLocation.postalCode || "",
           isDefault: true,
           latitude: Number(profileLatitude) || undefined,
           longitude: Number(profileLongitude) || undefined,
@@ -180,7 +183,7 @@ export default function CheckoutPage() {
         setSelectedState(currentState);
         setEditForm({
           address: profileAddress,
-          city: data.city || "",
+          city: currentCity,
           state: currentState,
           postalCode: data.postalCode || "",
           phone: data.phone || "",
@@ -436,6 +439,7 @@ export default function CheckoutPage() {
             estimatedDays: courier?.estimatedDays,
             totalWeightKg: group.totalWeightKg,
             providerQuoteId: courier?.providerQuoteId,
+            providerQuote: courier?.providerQuote,
             subtotal: group.subtotal
           };
         }),

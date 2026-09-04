@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { chowdeckConfigured } from "@/lib/chowdeck";
+import { topshipConfigured, type TopshipQuote } from "@/lib/topship";
 
 interface CheckoutRequestBody {
     buyerId: string;
@@ -17,6 +18,7 @@ interface CheckoutRequestBody {
         shippingCost: number;
         estimatedDays?: string;
         providerQuoteId?: number | string;
+        providerQuote?: TopshipQuote;
         subtotal: number;
     }[];
     paymentMethod: string;
@@ -112,6 +114,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 shippingCost: rawShippingCost,
                 estimatedDays,
                 providerQuoteId,
+                providerQuote,
                 subtotal: productSubtotal,
             } = sellerOrder;
 
@@ -154,17 +157,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 const courierSnap = await adminDb.collection("couriers").doc(courierId).get();
                 const courier = courierSnap.data() || {};
                 const courierCode = String(courier.code || courierId || "").toLowerCase();
+                const isTopship = courierCode === "topship" || courierId === "topship";
                 const dispatchEnabled = (courierCode === "fez" && courier.dispatchEnabled !== false)
-                    || (courierCode === "chowdeck" && chowdeckConfigured());
-                if (!courierSnap.exists || !dispatchEnabled) {
+                    || (courierCode === "chowdeck" && chowdeckConfigured())
+                    || (isTopship && topshipConfigured());
+                const usesFallbackTopship = isTopship && courierId === "topship";
+                if ((!courierSnap.exists && !usesFallbackTopship) || !dispatchEnabled) {
                     return NextResponse.json(
-                        { error: `${courierName || "This courier"} is not currently available for automated dispatch. Choose FEZ Delivery or Self-Arranged.` },
+                        { error: `${courierName || "This courier"} is not currently available for automated dispatch. Choose FEZ, Topship, or Self-Arranged.` },
                         { status: 400 },
                     );
                 }
                 if (courierCode === "chowdeck" && (providerQuoteId === undefined || providerQuoteId === null || providerQuoteId === "")) {
                     return NextResponse.json(
                         { error: "Chowdeck delivery pricing expired. Please refresh the shipping quote and try again." },
+                        { status: 400 },
+                    );
+                }
+                if (isTopship && !providerQuote) {
+                    return NextResponse.json(
+                        { error: "Topship delivery pricing expired. Please refresh the shipping quote and try again." },
                         { status: 400 },
                     );
                 }
@@ -224,6 +236,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 deliveryMode: isSelfArranged ? "self_arranged" : "aggregator",
                 deliveryStatus: isSelfArranged ? "SELF_ARRANGED" : "PENDING_PICKUP",
                 providerQuoteId: providerQuoteId ?? null,
+                providerQuote: providerQuote ?? null,
                 estimatedDays: estimatedDays || null,
                 shippingCost,
                 handlingFee,
@@ -265,10 +278,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     courierId,
                     courierName,
                     providerQuoteId: providerQuoteId ?? null,
+                    providerQuote: providerQuote ?? null,
                     deliveryMode: isSelfArranged ? "self_arranged" : "aggregator",
                     dispatchStatus: isSelfArranged ? "NOT_REQUIRED" : "PENDING",
                     status: isSelfArranged ? "SELF_ARRANGED" : "PENDING_PICKUP",
-                    pickupAddress: storeData.address || "Store Address",
+                    pickupAddress: {
+                        name: storeName,
+                        address: storeData.address || "Store Address",
+                        city: storeData.city || storeData.location?.city || "",
+                        state: storeData.state || storeData.location?.state || "",
+                        lga: storeData.lga || storeData.location?.lga || "",
+                        phone: storeData.phone || storeData.phoneNumber || "",
+                        latitude: storeData.latitude ?? storeData.location?.latitude ?? storeData.location?.lat ?? null,
+                        longitude: storeData.longitude ?? storeData.location?.longitude ?? storeData.location?.lng ?? null,
+                    },
                     pickupState: storeData.state || "",
                     pickupPhone: storeData.phone || storeData.phoneNumber || "",
                     storeName,
