@@ -15,6 +15,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import ShippingSelector, { ShippingOption } from "@/components/checkout/ShippingSelector";
+import { hasSavedCoordinates } from "@/components/location/CoordinatesRequiredModal";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
@@ -304,17 +305,16 @@ export default function CheckoutPage() {
     try {
       const latitude = Number(editForm.latitude);
       const longitude = Number(editForm.longitude);
-      const hasCoordinateInput = editForm.latitude.trim() !== "" || editForm.longitude.trim() !== "";
-      if (hasCoordinateInput && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180)) {
-        alert("Please enter valid latitude and longitude coordinates.");
+      if (!hasSavedCoordinates({ latitude: editForm.latitude, longitude: editForm.longitude })) {
+        alert("Please enter both valid latitude and longitude coordinates. Coordinates are required for delivery.");
         return;
       }
 
       if (auth.currentUser) {
         await setDoc(doc(db, "users", auth.currentUser.uid), {
           ...editForm,
-          latitude: hasCoordinateInput ? latitude : null,
-          longitude: hasCoordinateInput ? longitude : null,
+          latitude,
+          longitude,
           updatedAt: new Date()
         }, { merge: true });
       }
@@ -330,8 +330,8 @@ export default function CheckoutPage() {
         postalCode: editForm.postalCode,
         phone: editForm.phone,
         isDefault: true,
-        latitude: hasCoordinateInput ? latitude : undefined,
-        longitude: hasCoordinateInput ? longitude : undefined,
+        latitude,
+        longitude,
       };
       setAddresses(prev => prev.some(a => a.id === "default_addr")
         ? prev.map(a => a.id === "default_addr" ? updatedAddress : a)
@@ -389,6 +389,18 @@ export default function CheckoutPage() {
   const handleCheckout = async () => {
     if (!selectedBuyerAddress) {
       alert("Please select a valid delivery address.");
+      return;
+    }
+    if (!hasSavedCoordinates(selectedBuyerAddress)) {
+      alert("Please save your delivery latitude and longitude before checking out.");
+      return;
+    }
+    const sellerWithoutCoordinates = sellerIds.some((storeId) => {
+      const location = sellerLocations.find((sellerLocation) => sellerLocation.id === storeId);
+      return !hasSavedCoordinates(location);
+    });
+    if (sellerWithoutCoordinates) {
+      alert("This seller has not saved store coordinates yet. Please ask the seller to update their store location before checking out.");
       return;
     }
     const user = auth.currentUser;
@@ -852,11 +864,12 @@ export default function CheckoutPage() {
               </div>
               <input type="text" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="Phone Number" />
               <div>
-                <p className="text-xs font-bold text-gray-700 mb-1">Map Coordinates <span className="font-normal text-gray-400">(required for Chowdeck)</span></p>
+                <p className="text-xs font-bold text-gray-700 mb-1">Map Coordinates <span className="font-normal text-gray-400">(required for delivery)</span></p>
                 <div className="grid grid-cols-2 gap-3">
                   <input
                     type="number"
                     step="any"
+                    required
                     value={editForm.latitude}
                     onChange={(e) => setEditForm({ ...editForm, latitude: e.target.value })}
                     className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"
@@ -865,6 +878,7 @@ export default function CheckoutPage() {
                   <input
                     type="number"
                     step="any"
+                    required
                     value={editForm.longitude}
                     onChange={(e) => setEditForm({ ...editForm, longitude: e.target.value })}
                     className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"

@@ -8,6 +8,7 @@ import {
   User, Mail, MapPin, Phone, Shield, Save, CheckCircle,
   Loader2, AlertTriangle, Edit2, X
 } from "lucide-react";
+import { getSavedCoordinates, hasSavedCoordinates } from "@/components/location/CoordinatesRequiredModal";
 
 // ✅ NAMED EXPORT: BuyerAccount
 export function BuyerAccount({ onEditProfile }: { onEditProfile?: () => void }) {
@@ -25,34 +26,63 @@ export function BuyerAccount({ onEditProfile }: { onEditProfile?: () => void }) 
       return;
     }
 
-    // ✅ FIX: Reads from 'users' collection to match AuthProvider and Profile tab
-    const unsub = onSnapshot(
+    // Read both account collections because older buyer records may keep
+    // their saved delivery coordinates in `buyers`, while newer profiles use
+    // `users`.
+    let userProfile: Record<string, any> = {};
+    let buyerProfile: Record<string, any> = {};
+    let usersLoaded = false;
+    let buyersLoaded = false;
+    const applyMergedProfile = () => {
+      if (!usersLoaded || !buyersLoaded) return;
+      const mergedProfile = { ...buyerProfile, ...userProfile };
+      setProfile(Object.keys(mergedProfile).length > 0 ? mergedProfile : {
+        displayName: user.displayName || "",
+        email: user.email || "",
+        phone: "",
+        address: "",
+      });
+      setOriginalProfile(Object.keys(mergedProfile).length > 0 ? mergedProfile : {
+        displayName: user.displayName || "",
+        email: user.email || "",
+        phone: "",
+        address: "",
+      });
+      setLoading(false);
+    };
+
+    const unsubUser = onSnapshot(
       doc(db, "users", user.uid),
       (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setProfile(data);
-          setOriginalProfile(data);
-        } else {
-          // Fallback if document doesn't exist yet
-          const defaultData = {
-            displayName: user.displayName || "",
-            email: user.email || "",
-            phone: "",
-            address: "",
-          };
-          setProfile(defaultData);
-          setOriginalProfile(defaultData);
-        }
-        setLoading(false);
+        userProfile = docSnap.exists() ? docSnap.data() : {};
+        usersLoaded = true;
+        applyMergedProfile();
       },
       (error) => {
         console.error("Failed to load account:", error);
-        setLoading(false);
+        usersLoaded = true;
+        applyMergedProfile();
       }
     );
 
-    return () => unsub();
+    const unsubBuyer = onSnapshot(
+      doc(db, "buyers", user.uid),
+      (docSnap) => {
+        buyerProfile = docSnap.exists() ? docSnap.data() : {};
+        buyersLoaded = true;
+        applyMergedProfile();
+      },
+      (error) => {
+        console.error("Failed to load buyer profile:", error);
+        buyersLoaded = true;
+        applyMergedProfile();
+      },
+    );
+
+    return () => {
+      unsubUser();
+      unsubBuyer();
+    };
   }, [router]);
 
   useEffect(() => {
@@ -73,6 +103,10 @@ export function BuyerAccount({ onEditProfile }: { onEditProfile?: () => void }) 
     e.preventDefault();
     const user = auth.currentUser;
     if (!user || !profile) return;
+    if (!hasSavedCoordinates(profile)) {
+      setMessage({ type: "error", text: "Save your delivery coordinates in Settings before updating your account." });
+      return;
+    }
 
     setSaving(true);
     setMessage(null);
@@ -124,6 +158,7 @@ export function BuyerAccount({ onEditProfile }: { onEditProfile?: () => void }) 
   }
 
   const userEmail = auth.currentUser?.email || profile.email || "user@example.com";
+  const savedCoordinates = getSavedCoordinates(profile);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20 max-w-2xl mx-auto">
@@ -195,6 +230,21 @@ export function BuyerAccount({ onEditProfile }: { onEditProfile?: () => void }) 
               {/* ✅ FIX: Maps to 'address' (matches Profile tab and DB schema) */}
               <textarea value={profile?.address || ""} onChange={(e) => setProfile({ ...profile, address: e.target.value })} rows={3} className="w-full pl-12 pr-4 py-3 md:py-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all resize-none" placeholder="Enter your delivery address..." />
             </div>
+          </div>
+
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+            <div className="flex items-center gap-2">
+              <MapPin size={16} className="text-emerald-600" />
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Saved delivery coordinates</p>
+            </div>
+            {savedCoordinates ? (
+              <p className="mt-2 text-sm font-black text-gray-900">
+                {savedCoordinates.latitude.toFixed(6)}, {savedCoordinates.longitude.toFixed(6)}
+              </p>
+            ) : (
+              <p className="mt-2 text-xs font-bold text-amber-700">Not saved yet. Open Settings to add your exact latitude and longitude.</p>
+            )}
+            <p className="mt-1 text-[10px] font-medium text-gray-500">Used for nearby stores and accurate courier delivery pricing.</p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 pt-2">

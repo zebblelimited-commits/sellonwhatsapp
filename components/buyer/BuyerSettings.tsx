@@ -388,8 +388,8 @@ const handlePrefToggle = async (key: string, value: boolean) => {
               </button>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <input type="number" step="any" value={locationForm.latitude} onChange={(event) => setLocationForm({ ...locationForm, latitude: event.target.value })} placeholder="Latitude e.g. 6.579" className="w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm outline-none focus:border-green-500" />
-              <input type="number" step="any" value={locationForm.longitude} onChange={(event) => setLocationForm({ ...locationForm, longitude: event.target.value })} placeholder="Longitude e.g. 3.349" className="w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm outline-none focus:border-green-500" />
+              <input type="number" step="any" required value={locationForm.latitude} onChange={(event) => setLocationForm({ ...locationForm, latitude: event.target.value })} placeholder="Latitude e.g. 6.579" className="w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm outline-none focus:border-green-500" />
+              <input type="number" step="any" required value={locationForm.longitude} onChange={(event) => setLocationForm({ ...locationForm, longitude: event.target.value })} placeholder="Longitude e.g. 3.349" className="w-full rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm outline-none focus:border-green-500" />
             </div>
             <p className="mt-1 text-[10px] text-gray-400">In Google Maps, right-click the exact delivery point and copy the coordinates.</p>
           </div>

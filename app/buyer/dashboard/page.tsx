@@ -35,6 +35,7 @@ import BuyerSupportChat from "@/components/buyer/BuyerSupportChat";
 import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 import { BuyerProfile as ProfileTab } from "@/components/buyer/BuyerProfile";
 import BuyerShipping from "@/components/buyer/BuyerShipping";
+import CoordinatesRequiredModal, { hasSavedCoordinates } from "@/components/location/CoordinatesRequiredModal";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -67,6 +68,7 @@ export default function BuyerDashboard() {
   const [disputeResponse, setDisputeResponse] = useState("");
   const [disputeResponseLoading, setDisputeResponseLoading] = useState(false);
   const [disputeResponseError, setDisputeResponseError] = useState("");
+  const [showCoordinatesNotice, setShowCoordinatesNotice] = useState(false);
   const [dashboardStats, setDashboardStats] = useState({
     totalOrders: 0,
     pendingDeliveries: 0,
@@ -118,10 +120,12 @@ export default function BuyerDashboard() {
             return;
           }
 
-          const docSnap = buyerSnap;
-          if (docSnap.exists()) {
-            setUserData(docSnap.data());
-          }
+          const mergedUserData = {
+            ...(userSnap?.exists() ? userSnap.data() : {}),
+            ...(buyerSnap.exists() ? buyerSnap.data() : {}),
+          };
+          setUserData(mergedUserData);
+          setShowCoordinatesNotice(!hasSavedCoordinates(mergedUserData));
 
           unsubscribeDisputes = onSnapshot(
             query(
@@ -504,6 +508,16 @@ export default function BuyerDashboard() {
           <Footer />
         </div>
       </main>
+      {showCoordinatesNotice && (
+        <CoordinatesRequiredModal
+          role="buyer"
+          onClose={() => setShowCoordinatesNotice(false)}
+          onContinue={() => {
+            setShowCoordinatesNotice(false);
+            selectTab("settings");
+          }}
+        />
+      )}
     </div>
   );
 }

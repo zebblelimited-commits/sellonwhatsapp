@@ -16,6 +16,7 @@ import {
 import { STORE_CATEGORIES } from "../nigeriaData";
 import LocationSelector from "../LocationSelector";
 import { showToast } from "@/lib/toast";
+import { hasSavedCoordinates } from "@/components/location/CoordinatesRequiredModal";
 
 // ✅ TypeScript Interfaces
 interface StoreData {
@@ -200,7 +201,7 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
   // ✅ PROFILE COMPLETION LOGIC
   const calculateProfileCompletion = () => {
     let score = 0;
-    const total = 8; 
+    const total = 9;
     const missingItems: string[] = [];
 
     if (formData.storeName) score++; else missingItems.push("Store Name");
@@ -210,6 +211,7 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
     if (formData.state && formData.lga) score++; else missingItems.push("Location");
     if (formData.phone) score++; else missingItems.push("WhatsApp Phone");
     if (formData.mainCategory && formData.subCategory) score++; else missingItems.push("Category");
+    if (hasSavedCoordinates({ latitude: formData.latitude, longitude: formData.longitude })) score++; else missingItems.push("Store Coordinates");
     
     const hasSocial = Object.values(formData.socials).some(s => s && s.trim().length > 0);
     if (hasSocial) score++; else missingItems.push("Social Media");
@@ -559,8 +561,8 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
     const hasLongitude = formData.longitude.trim() !== "";
     const latitude = Number(formData.latitude);
     const longitude = Number(formData.longitude);
-    if (hasLatitude !== hasLongitude || (hasLatitude && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180))) {
-      showNotification("error", "Invalid Coordinates", "Enter both a valid latitude and longitude to enable Chowdeck delivery.");
+    if (!hasLatitude || !hasLongitude || !Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      showNotification("error", "Coordinates Required", "Enter both a valid latitude and longitude before saving your store profile.");
       return;
     }
 
@@ -1154,7 +1156,7 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
                 <span>{formData.state && formData.lga ? `${formData.lga}, ${formData.state} State` : "Not set"}</span>
               </div>
             )}
-            {!isEditing && (formData.latitude || formData.longitude) && <p className="mt-2 text-[10px] font-medium text-gray-400">Coordinates: {formData.latitude || "—"}, {formData.longitude || "—"}</p>}
+            {!isEditing && <p className={`mt-2 text-[10px] font-medium ${hasSavedCoordinates({ latitude: formData.latitude, longitude: formData.longitude }) ? "text-gray-400" : "text-amber-600"}`}>Coordinates: {hasSavedCoordinates({ latitude: formData.latitude, longitude: formData.longitude }) ? `${formData.latitude}, ${formData.longitude}` : "Not saved"}</p>}
             {isEditing && <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -1164,8 +1166,8 @@ export default function MyStoreTab({ initialData }: MyStoreTabProps) {
                 <button type="button" onClick={handleUseCurrentLocation} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-[10px] font-black text-white transition hover:bg-blue-700"><MapPin size={13} /> Use current location</button>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <input type="number" step="any" aria-label="Store latitude" value={formData.latitude} onChange={(event) => handleInputChange("latitude", event.target.value)} placeholder="Latitude e.g. 6.601838" inputMode="decimal" className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500" />
-                <input type="number" step="any" aria-label="Store longitude" value={formData.longitude} onChange={(event) => handleInputChange("longitude", event.target.value)} placeholder="Longitude e.g. 3.351486" inputMode="decimal" className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500" />
+                <input type="number" step="any" required aria-label="Store latitude" value={formData.latitude} onChange={(event) => handleInputChange("latitude", event.target.value)} placeholder="Latitude e.g. 6.601838" inputMode="decimal" className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500" />
+                <input type="number" step="any" required aria-label="Store longitude" value={formData.longitude} onChange={(event) => handleInputChange("longitude", event.target.value)} placeholder="Longitude e.g. 3.351486" inputMode="decimal" className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs outline-none focus:border-blue-500" />
               </div>
             </div>}
           </div>

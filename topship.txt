@@ -1,0 +1,929 @@
+Topship Open Server Docs
+Description
+Topship Open Server enables merchants and consumers have access to shipping endpoints, quotes endpoints, labels and waybills, payments and transactions, and so on.
+
+Note
+
+For your API keys, on both STAGING & PROD, please email the following to tech@topship.africa;
+Full Name, Work Email Address, Company Phone Number, And Company Name.
+
+This is an application solely built to manage merchant shipping inventory, history, and functions solely with topship. All endpoints have the below as base / parent url:
+
+LIVE
+
+https://api-topship.com/api
+Copy to clipboardErrorCopied
+SANDBOX
+
+https://topship-staging.africa/api
+Copy to clipboardErrorCopied
+Note
+
+All other endpoints should be appended to the end of this base url. Also all payloads should be formatted in JSON.
+
+Note
+
+Please request for an API key, and add this key, as Bearer Token to the request header.
+
+Get Quotes And Prices
+This resource returns prices, mode, currency, tier and so on. The duration key on the response object, specifies the approximate duration it will take for the shipment to arrive. While the pricing tier key, represents the category of shipping that the quote represents.
+
+GET
+
+/get-shipment-rate
+
+Parameters
+
+{
+  "shipmentDetail": {
+    "senderDetails": {
+      "cityName": "string",
+      "countryCode": "string"
+    },
+    "receiverDetails": {
+      "cityName": "string",
+      "countryCode": "string"
+    },
+    "totalWeight": "number"
+  } 
+}
+Copy to clipboardErrorCopied
+Example
+
+https://topship-staging.africa/api/get-shipment-rate?shipmentDetail={
+  "senderDetails": {
+    "cityName": "Yaba",
+    "countryCode": "NG"
+  },
+  "receiverDetails": {
+    "cityName": "Washington",
+    "countryCode": "US"
+  },
+  "totalWeight": 4
+}
+Copy to clipboardErrorCopied
+Response
+
+[
+  {
+      "mode": "string",
+      "cost": "number",
+      "duration": "string",
+      "currency": "string",
+      "pricingTier": "Budget || Express || FedEx || Premium || LastMileBudget"
+  }
+]
+Copy to clipboardErrorCopied
+Get Shop & Ship Quotes And Prices
+This resource returns Shop & Ship prices, mode, currency, tier and so on. The duration key on the response object, specifies the approximate duration it will take for the shipment to arrive. While the pricing tier key, represents the category of shipping that the quote represents.
+
+GET
+
+/get-shopnship-rates
+
+Parameters
+
+{
+  "shippingFrom": "string",
+  "isChinaImport": "boolean",
+  "items": [
+    {
+      "weight": "number"
+      "category": "Appliance || BeautyProducts || Jewelry || ComputerSupplies || HomeDecor || BabySupplies || TelevisionAndEntertainment || KitchenAccessories || Furniture || Gadgets || SolarPanelsAndInverter || VehicleParts || ClothingAndTextile || SportAccessories || GymEquipment || Fashion || Furniture || Education || Drones || Document || OriginalArtwork || ArtPrints || FoodItems || Medication || Fish || Herbs || BatteryLiquidElectrical || Crayfish || Driedfish || Prawns || Otherfish || GoatMeat || CowSkin || Beef || Snail || OtherMeats || PaintingsAndDrawings || ArtifactsAndHistoricalMonuments || LaptopsAndTablets || Phones || HeadphonesOrEarphonesOrAirPods || Wristwatches || VideoGames || OtherElectronicsOrGadgets || GoldSilverAndFineJewelry || PreciousStonesAndJewels || CostumeJewelry || HerbsAndPlants || FoodstuffAndFoodProducts || Drinks || Others",
+    }
+  ]
+}
+Copy to clipboardErrorCopied
+Example
+
+https://topship-staging.africa/api/get-shopnship-rates?input={
+  "shippingFrom": "UK",
+  "isChinaImport": false,
+  "items": [{ "category": "Appliance", "weight": 1 }]
+}
+Copy to clipboardErrorCopied
+Response
+
+[
+  {
+      "mode": "string",
+      "cost": "number",
+      "currency": "KOBO",
+      "duration": "string",
+      "foreignExchangeCost": "number",
+      "foreignExchangeRate": "number",
+      "foreignExchangeCurrency": "USD",
+      "pricingTier": "Budget || Express || Standard || Premium || Regular"
+  }
+]
+Copy to clipboardErrorCopied
+Get Pickup Rates
+This resource returns the rates at which we pickup a shipment fron the sender location to the nearest dropoff hub.
+
+GET
+
+/get-pickup-rates
+
+Parameters
+
+{
+  "input": {
+    "senderDetail": {
+      "addressLine1": "string",
+      "addressLine2": "string",
+      "country": "string",
+      "countryCode": "string",
+      "state": "string",
+      "city": "string"
+    },
+    "pickupDate": "DateTime"
+  }
+}
+Copy to clipboardErrorCopied
+Example
+
+https://topship-staging.africa/api/get-pickup-rates?input={
+    "senderDetail": {
+      "addressLine1": "268, Herbert Macauly way",
+      "addressLine2": "",
+      "country": "Nigeria",
+      "countryCode": "NG",
+      "state": "Lagos",
+      "city": "Yaba"
+    },
+    "pickupDate": "2024-02-15T09:14:29.000Z"
+}
+Copy to clipboardErrorCopied
+Response
+
+[
+  {
+        "pickupCharge": "number",
+        "deliveryLocation": "string",
+        "partnerLogoUrl": "string",
+        "pickupId": "string",
+        "partner": "Fez || Standard || Dellyman || Sendstack || Messenger"
+  }
+]
+Copy to clipboardErrorCopied
+Get Booked Shipments
+This resource returns all the shipments that have been booked by the consumer / merchant. It has additional features that allows for filtering, to aid better understanding and visibility. Filters include dateRange, keyword, isPaid, take and page.
+
+Please note that the valueAddedTaxCharge (KOBO) is always 7.5% of the totalCharge. The value should always be ceiled (and not rounded up), to avoid decimals and loss of value.
+
+GET
+
+/get-shipments
+
+Parameters
+
+{
+  "filter": {
+    "take": number,
+    "page": number,
+    "dateRange": {
+      "from": "DateTime",
+      "to": "DateTime"
+    },
+    "keyword": "string",
+    "itemCollectionMode": "DropOff || PickUp",
+    "shipmentStatus": "Draft || Confirmed || Cancelled || Delivered || AwaitingPickUp || PickupCancelled || PickupDispatched || SuccessfullyPicked || PickupCancelledByCourier || PickupCancelledByMerchant || PickupCancelledInternally || PickupRescheduledByCourier || DeliveryFailed || AwaitingDropOff || DeliveryInProgress || AssignedForDelivery || PendingConfirmation || ClarificationNeeded ||  ReceivedAtHub || ArrivedNigeria || InTransit || PickupInProgress || ShipmentProcessing || CancellationPending || PaymentPending || PickupFailed || RiderAssigned",
+    "pricingTier": "Budget || Express || FedEx || Premium || LastMileBudget",
+    "insuranceType": "None || Premium || Extended",
+    "shipmentRoute": "Import || Export || Domestic",
+    "isPaid": boolean,
+    "isSLAExpired": boolean,
+    "estimatedDeliveryDate": "DateTime"
+  } 
+}
+Copy to clipboardErrorCopied
+Example
+
+https://topship-staging.africa/api/get-shipments?filter={
+  "take": 10,
+  "page": 2,
+}
+Copy to clipboardErrorCopied
+Response
+
+{
+  "totalPages": number,
+  "currentPage": number,
+  "totalCount": number,
+  "list": [
+    {
+      "id": "string",
+      "createdDate": "DateTime",
+      "updatedDate": "DateTime",
+      "trackingId": "string",
+      "label": "string",
+      "invoice": "string",
+      "trackingUrl": "string",
+      "thirdPartyTrackingId": "string",
+      "itemCollectionMode": "DropOff || PickUp",
+      "isPaid": "boolean",
+      "shipmentRoute": "Import || Export || Domestic",
+      "shipmentStatus": "Draft || Confirmed || Cancelled || Delivered || AwaitingPickUp || PickupCancelled || PickupDispatched || SuccessfullyPicked || PickupCancelledByCourier || PickupCancelledByMerchant || PickupCancelledInternally || PickupRescheduledByCourier || DeliveryFailed || AwaitingDropOff || DeliveryInProgress || AssignedForDelivery || PendingConfirmation || ClarificationNeeded ||  ReceivedAtHub || ArrivedNigeria || InTransit || PickupInProgress || ShipmentProcessing || CancellationPending || PaymentPending || PickupFailed || RiderAssigned",
+      "pricingTier": "Budget || Express || FedEx || Premium || LastMileBudget",
+      "insuranceType": "None || Premium || Extended",
+      "insuranceCharge": "number",
+      "pickupCharge": "number",
+      "shipmentCharge": "number",
+      "commissionOnShipmentCharge": "number",
+      "totalCharge": "number",
+      "discount": "number",
+      "currency": "string",
+      "items": [
+        {
+          "category": "Appliance || BeautyProducts || Jewelry || ComputerSupplies || HomeDecor || BabySupplies || TelevisionAndEntertainment || KitchenAccessories || Furniture || Gadgets || SolarPanelsAndInverter || VehicleParts || ClothingAndTextile || SportAccessories || GymEquipment || Fashion || Furniture || Education || Drones || Document || OriginalArtwork || ArtPrints || FoodItems || Medication || Fish || Herbs || BatteryLiquidElectrical || Crayfish || Driedfish || Prawns || Otherfish || GoatMeat || CowSkin || Beef || Snail || OtherMeats || PaintingsAndDrawings || ArtifactsAndHistoricalMonuments || LaptopsAndTablets || Phones || HeadphonesOrEarphonesOrAirPods || Wristwatches || VideoGames || OtherElectronicsOrGadgets || GoldSilverAndFineJewelry || PreciousStonesAndJewels || CostumeJewelry || HerbsAndPlants || FoodstuffAndFoodProducts || Drinks || Others",
+          "description": "string",
+          "weight": "number,
+          "quantity": "number",
+          "value": "number",
+          "dimension": {
+            "length": "number",
+            "width": "number",
+            "height": "number"
+          }
+        }
+      ],
+      "dimension": {
+        "length": 0,
+        "width": 0,
+        "height": 0
+      },
+      "senderDetail": {
+        "name": "string",
+        "email": "string",
+        "phoneNumber": "string",
+        "addressLine1": "string",
+        "addressLine2": "string",
+        "addressLine3": "string",
+        "country": "string",
+        "state": "string",
+        "city": "string",
+        "countryCode": "string",
+        "postalCode": "string"
+      },
+      "receiverDetail": {
+        "name": "string",
+        "email": "string",
+        "phoneNumber": "string",
+        "addressLine1": "string",
+        "addressLine2": "string",
+        "addressLine3": "string",
+        "country": "string",
+        "state": "string",
+        "city": "string",
+        "countryCode": "string",
+        "postalCode": "string"
+      },
+      "estimatedDeliveryDate": "DateTime",
+      "valueAddedTaxCharge": "number"
+    }
+  ]
+}
+Copy to clipboardErrorCopied
+Get Shipment By Id
+This resource returns specific shipments that have been booked by the consumer / merchant. It has additional features that allows for filtering, to aid better understanding and visibility. Filters include dateRange, keyword, isPaid, take and page.
+
+GET
+
+/get-shipment/{id}
+
+Example
+
+https://topship-staging.africa/api/get-shipment/5e9f8f9f8d8f8d8f8d8f8f8f
+Copy to clipboardErrorCopied
+Response
+
+{
+  "id": "string",
+  "createdDate": "DateTime",
+  "updatedDate": "DateTime",
+  "trackingId": "string",
+  "label": "string",
+  "invoice": "string",
+  "trackingUrl": "string",
+  "thirdPartyTrackingId": "string",
+  "itemCollectionMode": "DropOff || PickUp",
+  "isPaid": "boolean",
+  "shipmentRoute": "Import || Export || Domestic",
+  "shipmentStatus": "Draft || Confirmed || Cancelled || Delivered || AwaitingPickUp || PickupCancelled || PickupDispatched || SuccessfullyPicked || PickupCancelledByCourier || PickupCancelledByMerchant || PickupCancelledInternally || PickupRescheduledByCourier || DeliveryFailed || AwaitingDropOff || DeliveryInProgress || AssignedForDelivery || PendingConfirmation || ClarificationNeeded",
+  "pricingTier": "Budget || Express || Standard || Premium",
+  "insuranceType": "None || Premium",
+  "insuranceCharge": "number",
+  "pickupCharge": "number",
+  "shipmentCharge": "number",
+  "commissionOnShipmentCharge": "number",
+  "totalCharge": "number",
+  "discount": "number",
+  "currency": "string",
+  "items": [
+    {
+      "category": "Appliance || BeautyProducts || Jewelry || ComputerSupplies || HomeDecor || BabySupplies || TelevisionAndEntertainment || KitchenAccessories || Furniture || Gadgets || SolarPanelsAndInverter || VehicleParts || ClothingAndTextile || SportAccessories || GymEquipment || Fashion || Furniture || Education || Drones || Document || Others",
+      "description": "string",
+      "weight": "number,
+      "quantity": "number",
+      "value": "number",
+      "dimension": {
+        "length": "number",
+        "width": "number",
+        "height": "number"
+      }
+    }
+  ],
+  "dimension": {
+    "length": 0,
+    "width": 0,
+    "height": 0
+  },
+  "senderDetail": {
+    "name": "string",
+    "email": "string",
+    "phoneNumber": "string",
+    "addressLine1": "string",
+    "addressLine2": "string",
+    "addressLine3": "string",
+    "country": "string",
+    "state": "string",
+    "city": "string",
+    "countryCode": "string",
+    "postalCode": "string"
+  },
+  "receiverDetail": {
+    "name": "string",
+    "email": "string",
+    "phoneNumber": "string",
+    "addressLine1": "string",
+    "addressLine2": "string",
+    "addressLine3": "string",
+    "country": "string",
+    "state": "string",
+    "city": "string",
+    "countryCode": "string",
+    "postalCode": "string"
+  },
+  "estimatedDeliveryDate": "DateTime",
+  "valueAddedTaxCharge": "number"
+}
+Copy to clipboardErrorCopied
+Cancel Shipment By Id
+This resource allows for consumers to cancel a non-attended shipment. Shipments with status of DRAFT or CONFIRMED, are eligible for cancellation. But once the shipment status transitions from any of these, which means the shipment is being processed, reaching out to customer service for cancellation suffices.
+
+Note
+
+Please note that shipments outside of DRAFT or CONFIRMED, cannot be cancelled by this resource.
+
+POST
+
+/cancel-shipment
+
+Request Body
+
+{
+  "id": "string"
+}
+Copy to clipboardErrorCopied
+Response
+
+{
+  "id": "string",
+  "createdDate": "DateTime",
+  "updatedDate": "DateTime",
+  "trackingId": "string",
+  "label": "string",
+  "invoice": "string",
+  "trackingUrl": "string",
+  "thirdPartyTrackingId": "string",
+  "itemCollectionMode": "DropOff || PickUp",
+  "isPaid": "boolean",
+  "shipmentRoute": "Import || Export || Domestic",
+  "shipmentStatus": "Draft || Confirmed || Cancelled || Delivered || AwaitingPickUp || PickupCancelled || PickupDispatched || SuccessfullyPicked || PickupCancelledByCourier || PickupCancelledByMerchant || PickupCancelledInternally || PickupRescheduledByCourier || DeliveryFailed || AwaitingDropOff || DeliveryInProgress || AssignedForDelivery || PendingConfirmation || ClarificationNeeded ||  ReceivedAtHub || ArrivedNigeria || InTransit || PickupInProgress || ShipmentProcessing || CancellationPending || PaymentPending || PickupFailed || RiderAssigned",
+  "pricingTier": "Budget || Express || FedEx || Premium || LastMileBudget",
+  "insuranceType": "None || Premium || Extended",
+  "insuranceCharge": "number",
+  "pickupCharge": "number",
+  "shipmentCharge": "number",
+  "commissionOnShipmentCharge": "number",
+  "totalCharge": "number",
+  "discount": "number",
+  "currency": "string",
+  "items": [
+    {
+      "category": "Appliance || BeautyProducts || Jewelry || ComputerSupplies || HomeDecor || BabySupplies || TelevisionAndEntertainment || KitchenAccessories || Furniture || Gadgets || SolarPanelsAndInverter || VehicleParts || ClothingAndTextile || SportAccessories || GymEquipment || Fashion || Furniture || Education || Drones || Document || OriginalArtwork || ArtPrints || FoodItems || Medication || Fish || Herbs || BatteryLiquidElectrical || Crayfish || Driedfish || Prawns || Otherfish || GoatMeat || CowSkin || Beef || Snail || OtherMeats || PaintingsAndDrawings || ArtifactsAndHistoricalMonuments || LaptopsAndTablets || Phones || HeadphonesOrEarphonesOrAirPods || Wristwatches || VideoGames || OtherElectronicsOrGadgets || GoldSilverAndFineJewelry || PreciousStonesAndJewels || CostumeJewelry || HerbsAndPlants || FoodstuffAndFoodProducts || Drinks || Others",
+      "description": "string",
+      "weight": "number,
+      "quantity": "number",
+      "value": "number",
+      "dimension": {
+        "length": "number",
+        "width": "number",
+        "height": "number"
+      }
+    }
+  ],
+  "dimension": {
+    "length": 0,
+    "width": 0,
+    "height": 0
+  },
+  "senderDetail": {
+    "name": "string",
+    "email": "string",
+    "phoneNumber": "string",
+    "addressLine1": "string",
+    "addressLine2": "string",
+    "addressLine3": "string",
+    "country": "string",
+    "state": "string",
+    "city": "string",
+    "countryCode": "string",
+    "postalCode": "string"
+  },
+  "receiverDetail": {
+    "name": "string",
+    "email": "string",
+    "phoneNumber": "string",
+    "addressLine1": "string",
+    "addressLine2": "string",
+    "addressLine3": "string",
+    "country": "string",
+    "state": "string",
+    "city": "string",
+    "countryCode": "string",
+    "postalCode": "string"
+  },
+  "estimatedDeliveryDate": "DateTime",
+}
+Copy to clipboardErrorCopied
+Track Shipments
+This resource returns specific shipments tracking information. This helps to know the current status of the booked shipment.
+
+GET
+
+/track-shipment
+
+Parameters
+
+"trackingId": "string"
+Copy to clipboardErrorCopied
+Example
+
+https://topship-staging.africa/api/track-shipment?trackingId=T619979552
+Copy to clipboardErrorCopied
+Response
+
+{
+  "id": "string",
+  "createdDate": "DateTime",
+  "updatedDate": "DateTime",
+  "trackingId": "string",
+  "status": "string",
+  "message": "string",
+  "itemLocation": "string",
+  "transshipmentPoint": "string",
+  "shipments": [
+    {
+      "items": [
+        {
+          "category": "Appliance || BeautyProducts || Jewelry || ComputerSupplies || HomeDecor || BabySupplies || TelevisionAndEntertainment || KitchenAccessories || Furniture || Gadgets || SolarPanelsAndInverter || VehicleParts || ClothingAndTextile || SportAccessories || GymEquipment || Fashion || Furniture || Education || Drones || Document || OriginalArtwork || ArtPrints || FoodItems || Medication || Fish || Herbs || BatteryLiquidElectrical || Crayfish || Driedfish || Prawns || Otherfish || GoatMeat || CowSkin || Beef || Snail || OtherMeats || PaintingsAndDrawings || ArtifactsAndHistoricalMonuments || LaptopsAndTablets || Phones || HeadphonesOrEarphonesOrAirPods || Wristwatches || VideoGames || OtherElectronicsOrGadgets || GoldSilverAndFineJewelry || PreciousStonesAndJewels || CostumeJewelry || HerbsAndPlants || FoodstuffAndFoodProducts || Drinks || Others",
+          "description": "string",
+          "weight": "number,
+          "quantity": "number",
+          "value": "number",
+          "dimension": {
+            "length": "number",
+            "width": "number",
+            "height": "number"
+          }
+        }
+      ],
+      "senderDetail": {
+        "name": "string",
+        "email": "string",
+        "phoneNumber": "string",
+        "addressLine1": "string",
+        "addressLine2": "string",
+        "addressLine3": "string",
+        "country": "string",
+        "state": "string",
+        "city": "string",
+        "countryCode": "string",
+        "postalCode": "string"
+      },
+      "receiverDetail": {
+        "name": "string",
+        "email": "string",
+        "phoneNumber": "string",
+        "addressLine1": "string",
+        "addressLine2": "string",
+        "addressLine3": "string",
+        "country": "string",
+        "state": "string",
+        "city": "string",
+        "countryCode": "string",
+        "postalCode": "string"
+      },
+      "estimatedDeliveryDate": "DateTime",
+      "valueAddedTaxCharge": "number",
+    }
+  ]
+}
+Copy to clipboardErrorCopied
+Get Countries
+This resource returns the list of countries supported by the API.
+
+GET
+
+/get-countries
+
+Response
+
+[
+  {
+    "code": "string",
+    "name": "string"
+  }
+]
+Copy to clipboardErrorCopied
+Get States
+This resource returns the list of countries supported by the API.
+
+GET
+
+/get-states
+
+Parameters
+
+"countryCode": "string"
+Copy to clipboardErrorCopied
+Example
+
+https://topship-staging.africa/api/get-states?countryCode=NG
+Copy to clipboardErrorCopied
+Response
+
+[
+  {
+    "slug": "string",
+    "pk": "string",
+    "countryCode": "string",
+    "name": "string",
+    "code": "string"
+  }
+]
+Copy to clipboardErrorCopied
+Get Cities
+This resource returns the list of countries supported by the API.
+
+GET
+
+/get-cities
+
+Parameters
+
+"countryCode": "string"
+Copy to clipboardErrorCopied
+Example
+
+https://topship-staging.africa/api/get-cities?countryCode=NG
+Copy to clipboardErrorCopied
+Response
+
+[
+  {
+    "cityName": "string",
+    "suburbName": "string",
+    "postcode": "string"
+  }
+]
+Copy to clipboardErrorCopied
+Book A Shipment As Draft
+This resource gives the consumer the ability to book a shipment as draft. This means that the shipment will be saved on our database, but not yet paid for. The consumer can then make the payment using the /pay-from-wallet endpoint.
+
+Note
+
+Please note that the addressLine1, addressLine2 and addressLine3 fields have a maximum length of 45 characters.
+
+Note
+
+Please note that all charges are in KOBO and not Naira, so all values passed as charges should be multiplied by 100.
+
+Note
+
+Please note that the value passed to shipmentCharge is strictly gotten from getting quotes from /get-shipment-rate.
+
+Note
+
+Please note that the valueAddedTaxCharge (KOBO) is always 7.5% of the totalCharge. The value should always be ceiled (and not rounded up), to avoid decimals and loss of value.
+
+POST
+
+/save-shipment
+
+{
+  "shipment": [
+    {
+      "items": [
+        {
+          "category": "Appliance || BeautyProducts || Jewelry || ComputerSupplies || HomeDecor || BabySupplies || TelevisionAndEntertainment || KitchenAccessories || Furniture || Gadgets || SolarPanelsAndInverter || VehicleParts || ClothingAndTextile || SportAccessories || GymEquipment || Fashion || Furniture || Education || Drones || Document || OriginalArtwork || ArtPrints || FoodItems || Medication || Fish || Herbs || BatteryLiquidElectrical || Crayfish || Driedfish || Prawns || Otherfish || GoatMeat || CowSkin || Beef || Snail || OtherMeats || PaintingsAndDrawings || ArtifactsAndHistoricalMonuments || LaptopsAndTablets || Phones || HeadphonesOrEarphonesOrAirPods || Wristwatches || VideoGames || OtherElectronicsOrGadgets || GoldSilverAndFineJewelry || PreciousStonesAndJewels || CostumeJewelry || HerbsAndPlants || FoodstuffAndFoodProducts || Drinks || Others",
+          "description": "string",
+          "weight": "number,
+          "quantity": "number",
+          "value": "number",
+        }
+      ],
+      "itemCollectionMode": "DropOff || PickUp",
+      "pricingTier": "Budget || Express || FedEx || Premium || LastMileBudget",
+      "insuranceType": "None || Premium || Extended",
+      "insuranceCharge": "number",
+      "discount": "number",
+      "shipmentRoute": "Import || Export || Domestic",
+      "shipmentCharge": "number",
+      "pickupCharge": "nunber",
+      "deliveryLocation": "string",
+      "pickupId": "string",
+      "pickupPartner": "Fez || Standard || Dellyman || Sendstack || Messenger",      
+      "valueAddedTaxCharge": "number",
+      "senderDetail": {
+        "name": "string",
+        "email": "string",
+        "phoneNumber": "string",
+        "addressLine1": "string",
+        "addressLine2": "string",
+        "addressLine3": "string",
+        "country": "string",
+        "state": "string",
+        "city": "string",
+        "countryCode": "string",
+        "postalCode": "string"
+      },
+      "receiverDetail": {
+        "name": "string",
+        "email": "string",
+        "phoneNumber": "string",
+        "addressLine1": "string",
+        "addressLine2": "string",
+        "addressLine3": "string",
+        "country": "string",
+        "state": "string",
+        "city": "string",
+        "countryCode": "string",
+        "postalCode": "string"
+      }
+    }
+  ]
+}
+Copy to clipboardErrorCopied
+Response
+
+{
+  "id": "string",
+  "createdDate": "DateTime",
+  "updatedDate": "DateTime",
+  "trackingId": "string",
+  "label": "string",
+  "invoice": "string",
+  "trackingUrl": "string",
+  "thirdPartyTrackingId": "string",
+  "itemCollectionMode": "DropOff || PickUp",
+  "isPaid": "boolean",
+  "shipmentRoute": "Import || Export || Domestic",
+  "shipmentStatus": "Draft || Confirmed || Cancelled || Delivered || AwaitingPickUp || PickupCancelled || PickupDispatched || SuccessfullyPicked || PickupCancelledByCourier || PickupCancelledByMerchant || PickupCancelledInternally || PickupRescheduledByCourier || DeliveryFailed || AwaitingDropOff || DeliveryInProgress || AssignedForDelivery || PendingConfirmation || ClarificationNeeded ||  ReceivedAtHub || ArrivedNigeria || InTransit || PickupInProgress || ShipmentProcessing || CancellationPending || PaymentPending || PickupFailed || RiderAssigned",
+  "pricingTier": "Budget || Express || FedEx || Premium || LastMileBudget",
+  "insuranceType": "None || Premium || Extended",
+  "insuranceCharge": "number",
+  "pickupCharge": "number",
+  "shipmentCharge": "number",
+  "commissionOnShipmentCharge": "number",
+  "totalCharge": "number",
+  "discount": "number",
+  "currency": "string",
+  "items": [
+    {
+      "category": "Appliance || BeautyProducts || Jewelry || ComputerSupplies || HomeDecor || BabySupplies || TelevisionAndEntertainment || KitchenAccessories || Furniture || Gadgets || SolarPanelsAndInverter || VehicleParts || ClothingAndTextile || SportAccessories || GymEquipment || Fashion || Furniture || Education || Drones || Document || OriginalArtwork || ArtPrints || FoodItems || Medication || Fish || Herbs || BatteryLiquidElectrical || Crayfish || Driedfish || Prawns || Otherfish || GoatMeat || CowSkin || Beef || Snail || OtherMeats || PaintingsAndDrawings || ArtifactsAndHistoricalMonuments || LaptopsAndTablets || Phones || HeadphonesOrEarphonesOrAirPods || Wristwatches || VideoGames || OtherElectronicsOrGadgets || GoldSilverAndFineJewelry || PreciousStonesAndJewels || CostumeJewelry || HerbsAndPlants || FoodstuffAndFoodProducts || Drinks || Others",
+      "description": "string",
+      "weight": "number,
+      "quantity": "number",
+      "value": "number",
+      "dimension": {
+        "length": "number",
+        "width": "number",
+        "height": "number"
+      }
+    }
+  ],
+  "dimension": {
+    "length": 0,
+    "width": 0,
+    "height": 0
+  },
+  "senderDetail": {
+    "name": "string",
+    "email": "string",
+    "phoneNumber": "string",
+    "addressLine1": "string",
+    "addressLine2": "string",
+    "addressLine3": "string",
+    "country": "string",
+    "state": "string",
+    "city": "string",
+    "countryCode": "string",
+    "postalCode": "string"
+  },
+  "receiverDetail": {
+    "name": "string",
+    "email": "string",
+    "phoneNumber": "string",
+    "addressLine1": "string",
+    "addressLine2": "string",
+    "addressLine3": "string",
+    "country": "string",
+    "state": "string",
+    "city": "string",
+    "countryCode": "string",
+    "postalCode": "string"
+  },
+  "estimatedDeliveryDate": "DateTime",
+  "valueAddedTaxCharge": "number",
+}
+Copy to clipboardErrorCopied
+Book A Shop & Ship Order As Draft
+This resource gives the consumer the ability to book a shop & ship order as draft. This means that the shop & ship order will be saved on our database, but not yet paid for. The consumer can then make the payment using the /pay-from-wallet endpoint.
+
+Note
+
+Please note that all charges (except the amountDue field passed in the stringified array of itemDescription) are in KOBO and not Naira, so all values passed as charges should be multiplied by 100.
+
+Note
+
+Please note that the value passed to initialCharge is strictly gotten from getting quotes from /get-shopnship-rates.
+
+POST
+
+/save-shopnship
+
+{
+  "coupon": "string",
+  "shopnship": {
+      "itemDescription": "[{ 
+        "quantity": "string", 
+        "proofOfId": "string", 
+        "amountDue": "number", 
+        "trackingNumber": "string", 
+        "estimatedWeight": "number", 
+        "evidenceOfPurchase": "string", 
+        "additionalInformation": "string", 
+        "category": "Appliance || BeautyProducts || Jewelry || ComputerSupplies || HomeDecor || BabySupplies || TelevisionAndEntertainment || KitchenAccessories || Furniture || Gadgets || SolarPanelsAndInverter || VehicleParts || ClothingAndTextile || SportAccessories || GymEquipment || Fashion || Furniture || Education || Drones || Document || OriginalArtwork || ArtPrints || FoodItems || Medication || Fish || Herbs || BatteryLiquidElectrical || Crayfish || Driedfish || Prawns || Otherfish || GoatMeat || CowSkin || Beef || Snail || OtherMeats || PaintingsAndDrawings || ArtifactsAndHistoricalMonuments || LaptopsAndTablets || Phones || HeadphonesOrEarphonesOrAirPods || Wristwatches || VideoGames || OtherElectronicsOrGadgets || GoldSilverAndFineJewelry || PreciousStonesAndJewels || CostumeJewelry || HerbsAndPlants || FoodstuffAndFoodProducts || Drinks || Others"  
+      }]"
+      "email": "string",
+      "phoneNumber": "string",
+      "packageName": "string",
+      "shippingFrom": "string",
+      "deliveryName": "string",
+      "deliveryCity": "string",
+      "deliveryState": "string",
+      "initialCharge": "number",
+      "deliveryAddress": "string",
+      "insuranceCharge": "number",
+      "uploadingMyDocuments": "boolean",
+      "receiverPaymentDetails": "boolean",
+      "insuranceType": "None || Premium || Extended",
+      "pricingTier": "Budget || Express || Standard || Premium || Regular",
+    }
+}
+Copy to clipboardErrorCopied
+Response
+
+{
+  "id": "string",
+  "createdDate": "Date",
+  "updatedDate": "Date",
+  "email": "string",
+  "phoneNumber": "string",
+  "shippingFrom": "string",
+  "packageName": "string",
+  "trackingNumber": "string",
+  "deliveryName": "string",
+  "deliveryAddress": "string",
+  "deliveryState": "string",
+  "deliveryCity": "string",
+  "lastMileTrackingUrl": "string",
+  "estimatedWeight": "number",
+  "actualWeight": "number",
+  "itemDescription": "[
+    {
+      "amountDue":"number",
+      "category":"Appliance || BeautyProducts || Jewelry || ComputerSupplies || HomeDecor || BabySupplies || TelevisionAndEntertainment || KitchenAccessories || Furniture || Gadgets || SolarPanelsAndInverter || VehicleParts || ClothingAndTextile || SportAccessories || GymEquipment || Fashion || Furniture || Education || Drones || Document || OriginalArtwork || ArtPrints || FoodItems || Medication || Fish || Herbs || BatteryLiquidElectrical || Crayfish || Driedfish || Prawns || Otherfish || GoatMeat || CowSkin || Beef || Snail || OtherMeats || PaintingsAndDrawings || ArtifactsAndHistoricalMonuments || LaptopsAndTablets || Phones || HeadphonesOrEarphonesOrAirPods || Wristwatches || VideoGames || OtherElectronicsOrGadgets || GoldSilverAndFineJewelry || PreciousStonesAndJewels || CostumeJewelry || HerbsAndPlants || FoodstuffAndFoodProducts || Drinks || Others",
+      "estimatedWeight":"number",
+      "additionalInformation":"string",
+      "quantity":"number",
+      "trackingNumber":"string",
+      "proofOfId":"string",
+      "evidenceOfPurchase":"string"
+      }
+    ]",
+  "amountDue": "number",
+  "receiverPaymentDetails": "boolean",
+  "uploadingMyDocuments": "boolean",
+  "trackingId": "string",
+  "status": "Draft",
+  "initialCharge": "number",
+  "isInitialChargePaid": "boolean",
+  "finalCharge": "number",
+  "isFinalChargePaid": "boolean",
+  "insuranceType": "None || Premium || Extended",
+  "pricingTier": "Budget || Express || Standard || Premium || Regular",
+  "insuranceCharge": "number",
+  "discount": "number",
+  "totalCharge": "number",
+  "couponApplied": "string",
+  "couponAppliedAmount": "number"
+}
+Copy to clipboardErrorCopied
+Pay For Shipment
+This resource gives the consumer the ability to pay for a shipment by providing the shipment id. This means that a shipment previously saved as draft will be paid for. But a previously paid shipment will not be paid again and should throw a notification.
+
+POST
+
+/pay-from-wallet
+
+{
+  "detail": {
+    "shipmentId": "string"
+  }
+}
+Copy to clipboardErrorCopied
+Response
+
+{
+  "id": "string",
+  "createdDate": "DateTime",
+  "updatedDate": "DateTime",
+  "trackingId": "string",
+  "label": "string",
+  "invoice": "string",
+  "trackingUrl": "string",
+  "thirdPartyTrackingId": "string",
+  "itemCollectionMode": "DropOff || PickUp",
+  "isPaid": "boolean",
+  "shipmentRoute": "Import || Export || Domestic",
+  "shipmentStatus": "Draft || Confirmed || Cancelled || Delivered || AwaitingPickUp || PickupCancelled || PickupDispatched || SuccessfullyPicked || PickupCancelledByCourier || PickupCancelledByMerchant || PickupCancelledInternally || PickupRescheduledByCourier || DeliveryFailed || AwaitingDropOff || DeliveryInProgress || AssignedForDelivery || PendingConfirmation || ClarificationNeeded ||  ReceivedAtHub || ArrivedNigeria || InTransit || PickupInProgress || ShipmentProcessing || CancellationPending || PaymentPending || PickupFailed || RiderAssigned",
+  "pricingTier": "Budget || Express || FedEx || Premium || LastMileBudget",
+  "insuranceType": "None || Premium || Extended",
+  "insuranceCharge": "number",
+  "pickupCharge": "number",
+  "shipmentCharge": "number",
+  "commissionOnShipmentCharge": "number",
+  "totalCharge": "number",
+  "discount": "number",
+  "currency": "string",
+  "items": [
+    {
+      "category": "Appliance || BeautyProducts || Jewelry || ComputerSupplies || HomeDecor || BabySupplies || TelevisionAndEntertainment || KitchenAccessories || Furniture || Gadgets || SolarPanelsAndInverter || VehicleParts || ClothingAndTextile || SportAccessories || GymEquipment || Fashion || Furniture || Education || Drones || Document || OriginalArtwork || ArtPrints || FoodItems || Medication || Fish || Herbs || BatteryLiquidElectrical || Crayfish || Driedfish || Prawns || Otherfish || GoatMeat || CowSkin || Beef || Snail || OtherMeats || PaintingsAndDrawings || ArtifactsAndHistoricalMonuments || LaptopsAndTablets || Phones || HeadphonesOrEarphonesOrAirPods || Wristwatches || VideoGames || OtherElectronicsOrGadgets || GoldSilverAndFineJewelry || PreciousStonesAndJewels || CostumeJewelry || HerbsAndPlants || FoodstuffAndFoodProducts || Drinks || Others",
+      "description": "string",
+      "weight": "number,
+      "quantity": "number",
+      "value": "number",
+      "dimension": {
+        "length": "number",
+        "width": "number",
+        "height": "number"
+      }
+    }
+  ],
+  "dimension": {
+    "length": 0,
+    "width": 0,
+    "height": 0
+  },
+  "senderDetail": {
+    "name": "string",
+    "email": "string",
+    "phoneNumber": "string",
+    "addressLine1": "string",
+    "addressLine2": "string",
+    "addressLine3": "string",
+    "country": "string",
+    "state": "string",
+    "city": "string",
+    "countryCode": "string",
+    "postalCode": "string"
+  },
+  "receiverDetail": {
+    "name": "string",
+    "email": "string",
+    "phoneNumber": "string",
+    "addressLine1": "string",
+    "addressLine2": "string",
+    "addressLine3": "string",
+    "country": "string",
+    "state": "string",
+    "city": "string",
+    "countryCode": "string",
+    "postalCode": "string"
+  },
+  "estimatedDeliveryDate": "DateTime",
+  "valueAddedTaxCharge": "number",
+}

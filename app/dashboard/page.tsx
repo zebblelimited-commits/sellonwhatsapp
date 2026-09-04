@@ -46,6 +46,7 @@ import SocialShareModal from "./modals/SocialShareModal";
 import { ZebbleNotificationCenter } from "./ZebbleNotificationCenter";
 import PremiumFeatureModal from "./modals/PremiumFeatureModal";
 import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
+import CoordinatesRequiredModal, { hasSavedCoordinates } from "@/components/location/CoordinatesRequiredModal";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -126,6 +127,7 @@ function Dashboard() {
   const [disputeResponse, setDisputeResponse] = useState("");
   const [disputeResponseLoading, setDisputeResponseLoading] = useState(false);
   const [disputeResponseError, setDisputeResponseError] = useState("");
+  const [showCoordinatesNotice, setShowCoordinatesNotice] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -233,6 +235,7 @@ function Dashboard() {
           if (docSnap.exists()) {
             const data = docSnap.data();
             setStoreData(data);
+            setShowCoordinatesNotice(!hasSavedCoordinates(data));
             setStats(prev => ({
               ...prev,
               followers: data.followerCount || 0,
@@ -802,6 +805,16 @@ function Dashboard() {
       />
       <AddProductModal isOpen={isProductModalOpen} onClose={() => setIsProductModalOpen(false)} initialData={editingProduct} />
       <SocialShareModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} title={shareConfig.title} url={shareConfig.url} />
+      {showCoordinatesNotice && (
+        <CoordinatesRequiredModal
+          role="seller"
+          onClose={() => setShowCoordinatesNotice(false)}
+          onContinue={() => {
+            setShowCoordinatesNotice(false);
+            setActiveTab("store");
+          }}
+        />
+      )}
     </div>
   );
 }

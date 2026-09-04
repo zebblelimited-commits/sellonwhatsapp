@@ -25,6 +25,18 @@ interface CheckoutRequestBody {
     total: number;
 }
 
+function hasValidCoordinates(value: unknown): boolean {
+    if (!value || typeof value !== "object") return false;
+    const record = value as Record<string, any>;
+    const location = record.location && typeof record.location === "object" ? record.location : {};
+    const shippingAddress = record.shippingAddress && typeof record.shippingAddress === "object" ? record.shippingAddress : {};
+    const firstValue = (...values: unknown[]) => values.find((candidate) => candidate !== undefined && candidate !== null && !(typeof candidate === "string" && candidate.trim() === ""));
+    const latitude = Number(firstValue(record.latitude, record.lat, location.latitude, location.lat, shippingAddress.latitude, shippingAddress.lat));
+    const longitude = Number(firstValue(record.longitude, record.lng, location.longitude, location.lng, shippingAddress.longitude, shippingAddress.lng));
+    return Number.isFinite(latitude) && latitude >= -90 && latitude <= 90
+        && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
+}
+
 async function fetchWithRetry(
     url: string,
     options: RequestInit,
@@ -92,6 +104,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             );
         }
 
+        if (!hasValidCoordinates(address)) {
+            return NextResponse.json(
+                { error: "A valid buyer delivery latitude and longitude are required before checkout." },
+                { status: 400 },
+            );
+        }
+
         console.log("🔵 [CHECKOUT API] Customer email:", customerEmail);
 
         const batch = adminDb.batch();
@@ -138,6 +157,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             }
 
             const storeData = storeSnap.data() || {};
+
+            if (!hasValidCoordinates(storeData)) {
+                return NextResponse.json(
+                    { error: `${storeName || "This seller"} must save valid store coordinates before accepting delivery orders.` },
+                    { status: 400 },
+                );
+            }
 
             // -----------------------------------------------------
             // CHECK SELF-ARRANGED SHIPPING & COMMISSIONS
