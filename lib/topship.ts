@@ -74,7 +74,14 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 function cityOf(address?: TopshipAddress) {
-  return String(address?.city || address?.lga || address?.state || "Lagos").trim();
+  const rawCity = String(address?.city || address?.lga || address?.state || "Lagos").trim();
+
+  // Store and buyer profiles commonly save an LGA (for example, "Jos South")
+  // instead of a city. Topship's rate API expects the parent city ("Jos"),
+  // so remove common directional/district suffixes before sending the route.
+  return rawCity
+    .replace(/\s+(north|south|east|west|central|mainland|island)$/i, "")
+    .trim() || "Lagos";
 }
 
 function addressDetail(address?: TopshipAddress) {
@@ -161,7 +168,11 @@ export async function fetchTopshipQuote(params: {
     .sort((a, b) => a.cost - b.cost);
 
   const routeRate = rates[0];
-  if (!routeRate) throw new Error("Topship returned no delivery rates for this route");
+  if (!routeRate) {
+    throw new Error(
+      `Topship returned no delivery rates for ${cityOf(params.sender)} to ${cityOf(params.receiver)}`
+    );
+  }
 
   let pickup: TopshipPickupRate | undefined;
   try {

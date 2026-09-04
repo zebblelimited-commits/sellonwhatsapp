@@ -70,6 +70,8 @@ export default function ShippingSelector({
             return;
         }
 
+        const controller = new AbortController();
+
         const fetchShippingRates = async () => {
             setLoading(true);
             try {
@@ -83,6 +85,7 @@ export default function ShippingSelector({
                         destinationAddress,
                         estimatedOrderAmount,
                     }),
+                    signal: controller.signal,
                 });
 
                 const data = await response.json();
@@ -108,17 +111,21 @@ export default function ShippingSelector({
                 onSelectRef.current(currentValid || combinedOptions[0]);
 
             } catch (err: any) {
+                // Address changes intentionally cancel the previous quote
+                // request. That is expected and should not show as an error.
+                if (err?.name === "AbortError") return;
                 console.error("Error fetching shipping rates:", err);
                 setProviderMessage("Courier rates are temporarily unavailable. Self-arranged delivery is still available.");
                 const fallbackOptions = [SELF_ARRANGED_OPTION];
                 setOptions(fallbackOptions);
                 onSelectRef.current(SELF_ARRANGED_OPTION);
             } finally {
-                setLoading(false);
+                if (!controller.signal.aborted) setLoading(false);
             }
         };
 
         fetchShippingRates();
+        return () => controller.abort();
     }, [selectedState, totalWeightKg, pickupAddress, destinationAddress, estimatedOrderAmount, selectedOptionId]);
 
     if (!selectedState) {
