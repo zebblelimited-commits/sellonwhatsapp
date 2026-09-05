@@ -44,6 +44,11 @@ const SELF_ARRANGED_OPTION: ShippingOption = {
     shippingFee: 0,
 };
 
+function isAbortError(error: unknown) {
+    return (error instanceof DOMException && error.name === "AbortError")
+        || (error instanceof Error && (error.name === "AbortError" || /aborted/i.test(error.message)));
+}
+
 export default function ShippingSelector({
     selectedState,
     totalWeightKg = 1,
@@ -110,10 +115,10 @@ export default function ShippingSelector({
                 const currentValid = combinedOptions.find((opt) => opt.id === selectedOptionId);
                 onSelectRef.current(currentValid || combinedOptions[0]);
 
-            } catch (err: any) {
+            } catch (err: unknown) {
                 // Address changes intentionally cancel the previous quote
                 // request. That is expected and should not show as an error.
-                if (err?.name === "AbortError") return;
+                if (isAbortError(err)) return;
                 console.error("Error fetching shipping rates:", err);
                 setProviderMessage("Courier rates are temporarily unavailable. Self-arranged delivery is still available.");
                 const fallbackOptions = [SELF_ARRANGED_OPTION];
@@ -124,9 +129,15 @@ export default function ShippingSelector({
             }
         };
 
-        fetchShippingRates();
+        // Keep a final rejection guard around the async effect. This protects
+        // against browser/React aborts that happen while the component is
+        // being unmounted or remounted in development mode.
+        void fetchShippingRates().catch((error: unknown) => {
+            if (isAbortError(error)) return;
+            console.error("Error fetching shipping rates:", error);
+        });
         return () => controller.abort();
-    }, [selectedState, totalWeightKg, pickupAddress, destinationAddress, estimatedOrderAmount, selectedOptionId]);
+    }, [selectedState, totalWeightKg, pickupAddress, destinationAddress, estimatedOrderAmount]);
 
     if (!selectedState) {
         return (

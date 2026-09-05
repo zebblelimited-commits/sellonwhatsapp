@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { chowdeckConfigured } from "@/lib/chowdeck";
+import { sendboxConfigured } from "@/lib/sendbox";
 import { topshipConfigured, type TopshipQuote } from "@/lib/topship";
 
 interface CheckoutRequestBody {
@@ -18,7 +19,7 @@ interface CheckoutRequestBody {
         shippingCost: number;
         estimatedDays?: string;
         providerQuoteId?: number | string;
-        providerQuote?: TopshipQuote;
+        providerQuote?: TopshipQuote | Record<string, unknown>;
         subtotal: number;
     }[];
     paymentMethod: string;
@@ -184,13 +185,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 const courier = courierSnap.data() || {};
                 const courierCode = String(courier.code || courierId || "").toLowerCase();
                 const isTopship = courierCode === "topship" || courierId === "topship";
+                const isSendbox = courierCode === "sendbox" || courierId === "sendbox_shipping";
                 const dispatchEnabled = (courierCode === "fez" && courier.dispatchEnabled !== false)
                     || (courierCode === "chowdeck" && chowdeckConfigured())
-                    || (isTopship && topshipConfigured());
+                    || (isTopship && topshipConfigured())
+                    || (isSendbox && sendboxConfigured());
+                const usesFallbackChowdeck = courierCode === "chowdeck" && courierId === "chowdeck";
                 const usesFallbackTopship = isTopship && courierId === "topship";
-                if ((!courierSnap.exists && !usesFallbackTopship) || !dispatchEnabled) {
+                const usesFallbackSendbox = isSendbox && courierId === "sendbox_shipping";
+                if ((!courierSnap.exists && !usesFallbackChowdeck && !usesFallbackTopship && !usesFallbackSendbox) || !dispatchEnabled) {
                     return NextResponse.json(
-                        { error: `${courierName || "This courier"} is not currently available for automated dispatch. Choose FEZ, Topship, or Self-Arranged.` },
+                        { error: `${courierName || "This courier"} is not currently available for automated dispatch. Choose Chowdeck Relay, FEZ, Topship, or Self-Arranged.` },
                         { status: 400 },
                     );
                 }
@@ -203,6 +208,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 if (isTopship && !providerQuote) {
                     return NextResponse.json(
                         { error: "Topship delivery pricing expired. Please refresh the shipping quote and try again." },
+                        { status: 400 },
+                    );
+                }
+                if (isSendbox && (providerQuoteId === undefined || providerQuoteId === null || providerQuoteId === "")) {
+                    return NextResponse.json(
+                        { error: "Sendbox delivery pricing expired. Please refresh the shipping quote and try again." },
                         { status: 400 },
                     );
                 }

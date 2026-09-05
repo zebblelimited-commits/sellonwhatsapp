@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { fetchFezDeliveryCost } from "@/lib/fez";
-import { fetchSendboxQuote } from "@/lib/sendbox";
+import { fetchSendboxQuote, sendboxConfigured } from "@/lib/sendbox";
 import { chowdeckConfigured, fetchChowdeckDeliveryFee, type ChowdeckAddress } from "@/lib/chowdeck";
 import { fetchTopshipQuote, type TopshipAddress, type TopshipQuote, topshipConfigured } from "@/lib/topship";
 
@@ -27,7 +27,7 @@ interface CourierOption {
     integrationStatus: string;
     provider?: string;
     providerQuoteId?: number | string;
-    providerQuote?: TopshipQuote;
+    providerQuote?: TopshipQuote | Record<string, unknown>;
 }
 
 interface UnavailableProvider {
@@ -36,9 +36,35 @@ interface UnavailableProvider {
     reason: string;
 }
 
+function isCancelledOrMalformedRequest(error: unknown) {
+    if (error instanceof SyntaxError) return true;
+    if (!(error instanceof Error)) return false;
+    const code = (error as Error & { code?: string }).code;
+    return error.name === "AbortError" || code === "ABORT_ERR" || code === "UND_ERR_ABORTED" || /aborted|terminated|request body/i.test(error.message);
+}
+
 export async function POST(req: NextRequest) {
     try {
-        const body: ShippingRequest = await req.json();
+        const rawBody = await req.text();
+        if (!rawBody.trim()) {
+            return NextResponse.json(
+                { success: false, options: [], unavailableProviders: [], cancelled: true },
+                { status: 400 },
+            );
+        }
+
+        let body: ShippingRequest;
+        try {
+            body = JSON.parse(rawBody) as ShippingRequest;
+        } catch (error) {
+            if (isCancelledOrMalformedRequest(error)) {
+                return NextResponse.json(
+                    { success: false, options: [], unavailableProviders: [], cancelled: true },
+                    { status: 400 },
+                );
+            }
+            throw error;
+        }
         const { destinationState, totalWeightKg = 1, cartTotal = 0, pickupAddress, destinationAddress, estimatedOrderAmount = cartTotal } = body;
 
         if (!destinationState) {
@@ -71,6 +97,10 @@ export async function POST(req: NextRequest) {
             const courier = data();
             return courier.code?.toLowerCase() === "topship" || courier.name?.toLowerCase().includes("topship");
         });
+        const hasSendboxRecord = courierEntries.some(({ data }) => {
+            const courier = data();
+            return courier.code?.toLowerCase() === "sendbox" || courier.name?.toLowerCase().includes("sendbox");
+        });
 
         if (chowdeckConfigured() && !hasChowdeckRecord) {
             courierEntries.push({
@@ -91,7 +121,19 @@ export async function POST(req: NextRequest) {
                     name: "Topship",
                     code: "topship",
                     logo: "/images/couriers/topshiplogo.jpeg",
-                    estimatedDays: "Topship delivery",
+                    estimatedDays: "2-4 Business Days",
+                    integrationStatus: "ready",
+                }),
+            });
+        }
+        if (sendboxConfigured() && !hasSendboxRecord) {
+            courierEntries.push({
+                id: "sendbox_shipping",
+                data: () => ({
+                    name: "Sendbox",
+                    code: "sendbox",
+                    logo: "/images/couriers/sendboxlogo.jpeg",
+                    estimatedDays: "2-4 Business Days",
                     integrationStatus: "ready",
                 }),
             });
@@ -113,6 +155,7 @@ export async function POST(req: NextRequest) {
             const isFez = courierCode === "fez" || courierName.includes("fez");
             const isChowdeck = courierCode === "chowdeck" || courierName.includes("chowdeck");
             const isTopship = courierCode === "topship" || courierName.includes("topship");
+            const isSendbox = courierCode === "sendbox" || courierName.includes("sendbox");
 
             // Only show providers that can receive a real order from the
             // platform. Static quote-only records must not look dispatchable
@@ -120,7 +163,8 @@ export async function POST(req: NextRequest) {
             // working until the courier seed endpoint is run again.
             const dispatchEnabled = (isFez && courier.dispatchEnabled !== false)
                 || (isChowdeck && chowdeckConfigured())
-                || (isTopship && topshipConfigured());
+                || (isTopship && topshipConfigured())
+                || (isSendbox && sendboxConfigured());
             if (!dispatchEnabled) {
                 if (isChowdeck) {
                     unavailableProviders.push({
@@ -136,6 +180,13 @@ export async function POST(req: NextRequest) {
                         reason: "Topship is not configured on the server. Add TOPSHIP_API_KEY, then redeploy.",
                     });
                 }
+                if (isSendbox) {
+                    unavailableProviders.push({
+                        id: doc.id,
+                        name: courier.name || "Sendbox",
+                        reason: "Sendbox is not configured on the server. Add SENDBOX_ACCESS_TOKEN and redeploy.",
+                    });
+                }
                 continue;
             }
 
@@ -143,7 +194,7 @@ export async function POST(req: NextRequest) {
             // its live fee endpoint. A stale Firestore state list can hide a
             // valid option (for example, Jos/Plateau), so skip this filter for
             // Chowdeck. An unsuccessful quote is handled below.
-            if (!isChowdeck && !isTopship && Array.isArray(courier.availableStates) && courier.availableStates.length > 0) {
+            if (!isChowdeck && !isTopship && !isSendbox && Array.isArray(courier.availableStates) && courier.availableStates.length > 0) {
                 const isAvailable = courier.availableStates.some(
                     (state: string) => state.toLowerCase() === destinationState.toLowerCase()
                 );
@@ -152,7 +203,7 @@ export async function POST(req: NextRequest) {
 
             let finalFee = 0;
             let providerQuoteId: number | string | undefined;
-            let providerQuote: TopshipQuote | undefined;
+            let providerQuote: TopshipQuote | Record<string, unknown> | undefined;
 
             // Check FEZ Delivery
             if (isFez) {
@@ -180,14 +231,17 @@ export async function POST(req: NextRequest) {
                     finalFee = chowdeckQuote.totalAmountNaira;
                     providerQuoteId = chowdeckQuote.id;
                 } catch (chowdeckErr) {
+                    const reason = chowdeckErr instanceof Error
+                        ? chowdeckErr.message
+                        : "Chowdeck could not return a delivery quote.";
                     console.error("⚠️ [CHOWDECK API RATE ERROR], hiding unavailable option:", {
                         courierId: doc.id,
-                        error: chowdeckErr,
+                        error: reason,
                     });
                     unavailableProviders.push({
                         id: doc.id,
                         name: courier.name || "Chowdeck",
-                        reason: "Chowdeck could not return a delivery quote for this route. Check the merchant reference/API environment and both address locations.",
+                        reason,
                     });
                     continue;
                 }
@@ -218,21 +272,38 @@ export async function POST(req: NextRequest) {
                 }
             }
             // Check Sendbox
-            else if (courierCode === "sendbox" || courierName.includes("sendbox")) {
+            else if (isSendbox) {
                 try {
                     const quotes = await fetchSendboxQuote({
+                        origin_name: pickupAddress?.name,
+                        origin_phone: pickupAddress?.phone,
+                        origin_state: pickupAddress?.state,
+                        origin_city: pickupAddress?.city || pickupAddress?.lga,
+                        origin_street: pickupAddress?.address,
                         destination_state: destinationState,
+                        destination_name: destinationAddress?.name,
+                        destination_phone: destinationAddress?.phone,
+                        destination_city: destinationAddress?.city || destinationAddress?.lga,
+                        destination_street: destinationAddress?.address,
                         weight: Math.max(1, totalWeightKg),
                     });
 
                     if (quotes && quotes.length > 0) {
-                        finalFee = quotes[0].fee || quotes[0].amount || 0;
+                        const quote = quotes[0] as Record<string, unknown>;
+                        finalFee = Number(quote.fee || quote.amount || 0);
+                        providerQuoteId = String(quote.key || quote.id || "");
+                        providerQuote = quote;
                     } else {
-                        finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
+                        throw new Error("Sendbox returned no delivery quotes for this route");
                     }
                 } catch (sendboxErr) {
-                    console.error("⚠️ [SENDBOX API ERROR], falling back to static formula:", sendboxErr);
-                    finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
+                    console.error("⚠️ [SENDBOX API ERROR], hiding unavailable option:", sendboxErr);
+                    unavailableProviders.push({
+                        id: doc.id,
+                        name: courier.name || "Sendbox",
+                        reason: sendboxErr instanceof Error ? sendboxErr.message : "Sendbox could not return a delivery quote.",
+                    });
+                    continue;
                 }
             }
             // Static fallback for other quote-only couriers (Dellyman, Glovo,
@@ -289,9 +360,16 @@ export async function POST(req: NextRequest) {
             options: shippingOptions,
             unavailableProviders,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
+        if (isCancelledOrMalformedRequest(error)) {
+            return NextResponse.json(
+                { success: false, options: [], unavailableProviders: [], cancelled: true },
+                { status: 400 },
+            );
+        }
+        const message = error instanceof Error ? error.message : "Unable to calculate shipping rates.";
         console.error("❌ [SHIPPING CALCULATION ERROR]:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 

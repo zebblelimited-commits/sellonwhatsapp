@@ -1,9 +1,19 @@
-const CHOWDECK_BASE_URL = (process.env.CHOWDECK_API_BASE_URL || "https://api.chowdeck.com").replace(/\/$/, "");
+// Chowdeck's Merchant API is the reachable integration for this account.
+// Accept both a root API URL and the documented `/merchant` base URL.
+const CHOWDECK_MERCHANT_BASE_URL = (
+  process.env.CHOWDECK_MERCHANT_API_BASE_URL ||
+  process.env.CHOWDECK_API_BASE_URL ||
+  "https://api.chowdeck.com"
+).replace(/\/$/, "").replace(/\/merchant$/, "");
 
 export type ChowdeckCoordinates = { latitude: number; longitude: number };
 
 export type ChowdeckAddress = {
+  name?: string;
+  email?: string;
+  phone?: string;
   address?: string;
+  street?: string;
   city?: string;
   state?: string;
   lga?: string;
@@ -36,22 +46,35 @@ export type ChowdeckDeliveryResponse = {
 };
 
 export function chowdeckConfigured() {
-  return Boolean(process.env.CHOWDECK_API_KEY && process.env.CHOWDECK_MERCHANT_REFERENCE);
+  return Boolean(process.env.CHOWDECK_API_KEY?.trim() && process.env.CHOWDECK_MERCHANT_REFERENCE?.trim());
 }
 
-function apiUrl(path: string) {
-  const merchantReference = process.env.CHOWDECK_MERCHANT_REFERENCE;
+function merchantUrl(path: string) {
+  const merchantReference = process.env.CHOWDECK_MERCHANT_REFERENCE?.trim();
   if (!merchantReference) throw new Error("CHOWDECK_MERCHANT_REFERENCE is missing");
-  return `${CHOWDECK_BASE_URL}/merchant/${encodeURIComponent(merchantReference)}${path}`;
+  return `${CHOWDECK_MERCHANT_BASE_URL}/merchant/${encodeURIComponent(merchantReference)}${path}`;
 }
 
 function headers() {
-  const apiKey = process.env.CHOWDECK_API_KEY;
+  const apiKey = process.env.CHOWDECK_API_KEY?.trim();
   if (!apiKey) throw new Error("CHOWDECK_API_KEY is missing");
   return {
     Authorization: `Bearer ${apiKey}`,
     "Content-Type": "application/json",
   };
+}
+
+async function chowdeckFetch(path: string, init: RequestInit) {
+  const url = merchantUrl(path);
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    const cause = error instanceof Error && error.cause instanceof Error
+      ? ` (${error.cause.message})`
+      : "";
+    const message = error instanceof Error ? error.message : "request failed";
+    throw new Error(`Chowdeck network request failed for ${url}: ${message}${cause}`);
+  }
 }
 
 function validCoordinates(address?: ChowdeckAddress): ChowdeckCoordinates | null {
@@ -78,8 +101,14 @@ function addressPayload(key: "source" | "destination", address?: ChowdeckAddress
 
 async function parseResponse<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => ({}));
+  const message = String((payload as { message?: unknown }).message || `Chowdeck request failed (${response.status})`);
   if (!response.ok || String((payload as { status?: unknown }).status || "").toLowerCase() === "failed") {
-    throw new Error(String((payload as { message?: unknown }).message || `Chowdeck request failed (${response.status})`));
+    if (/vendor\s+not\s+found/i.test(message)) {
+      throw new Error(
+        "Chowdeck vendor not found. Verify CHOWDECK_API_KEY and CHOWDECK_MERCHANT_REFERENCE belong to the same Merchant API environment."
+      );
+    }
+    throw new Error(message);
   }
   return payload as T;
 }
@@ -90,7 +119,7 @@ export async function fetchChowdeckDeliveryFee(params: {
   destinationAddress: ChowdeckAddress | string;
   estimatedOrderAmountNaira?: number;
 }): Promise<{ id: number | string; totalAmountNaira: number }> {
-  const response = await fetch(apiUrl("/delivery/fee"), {
+  const response = await chowdeckFetch("/delivery/fee", {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({
@@ -120,7 +149,7 @@ export async function createChowdeckDelivery(params: {
   vendorNote?: string;
   deliveryPin?: number;
 }): Promise<NonNullable<ChowdeckDeliveryResponse["data"]>> {
-  const response = await fetch(apiUrl("/delivery"), {
+  const response = await chowdeckFetch("/delivery", {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({

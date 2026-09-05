@@ -168,7 +168,7 @@ export default function CheckoutPage() {
           id: "default_addr",
           label: "Default Address",
           name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || data.displayName || user.displayName || "",
-          phone: data.phone || shippingAddress.phone || savedLocation.phone || "",
+          phone: data.phone || data.phoneNumber || shippingAddress.phone || savedLocation.phone || "",
           address: [profileAddress, currentCity, currentState, data.postalCode || shippingAddress.postalCode || savedLocation.postalCode, data.country].filter(Boolean).join(", "),
           city: currentCity,
           state: currentState,
@@ -252,7 +252,7 @@ export default function CheckoutPage() {
         city: data.city || location.city || "",
         state: data.state || location.state || "",
         lga: data.lga || location.lga || "",
-        phone: data.phone || "",
+        phone: data.phone || data.phoneNumber || data.contactPhone || "",
         latitude: Number(data.latitude ?? data.lat ?? location.latitude ?? location.lat) || undefined,
         longitude: Number(data.longitude ?? data.lng ?? location.longitude ?? location.lng) || undefined,
       };

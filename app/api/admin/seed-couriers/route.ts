@@ -1,6 +1,7 @@
 // app/api/admin/seed-couriers/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { sendboxConfigured } from "@/lib/sendbox";
 import admin from "firebase-admin";
 
 export async function POST(req: NextRequest) {
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
                 isActive: true,
                 dispatchEnabled: true,
                 integrationStatus: "ready",
-                estimatedDays: "Topship delivery",
+                estimatedDays: "2-4 Business Days",
                 availableStates: [], // Coverage is resolved by Topship's live quote API
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             },
@@ -110,8 +111,8 @@ export async function POST(req: NextRequest) {
                 code: "sendbox",
                 logo: "/images/couriers/sendboxlogo.jpeg",
                 isActive: true,
-                dispatchEnabled: false,
-                integrationStatus: "quote_only",
+                dispatchEnabled: sendboxConfigured(),
+                integrationStatus: sendboxConfigured() ? "ready" : "not_configured",
                 baseRate: 1800,
                 ratePerKg: 350,
                 estimatedDays: "2-4 Business Days",
