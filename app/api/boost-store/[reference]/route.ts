@@ -50,9 +50,11 @@ export async function GET(
 
     const boostRecord = docSnap.data() || {};
 
-    // ✅ SECURITY: Ensure the logged-in user actually owns this boost
-    // (Only check if the userId field actually exists on the document)
-    if (boostRecord.userId && boostRecord.userId !== uid) {
+    // ✅ SECURITY: Every boost must belong to the authenticated user.
+    // Store ID is retained as a fallback for records created before userId
+    // was added, but neither field may be absent or belong to another user.
+    const ownerId = String(boostRecord.userId || boostRecord.storeId || "").trim();
+    if (!ownerId || ownerId !== uid) {
        return NextResponse.json({ error: "Forbidden: You do not own this transaction" }, { status: 403 });
     }
 

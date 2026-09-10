@@ -1,360 +1,133 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import admin from "firebase-admin";
-import { inventoryAdjustment } from "@/lib/inventory";
 import { notifyOrderPaymentConfirmed } from "@/lib/novu-events";
 import { dispatchShipmentForOrder } from "@/lib/shipping-dispatch";
+import { verifyNombaTransaction } from "@/lib/payments/nomba/client";
+import { createEscrowRecord, fundEscrowAndOrders, getEscrowByReference } from "@/src/infrastructure/db/escrowService";
 
 class PaymentConfirmationError extends Error {
-  status: number;
-  constructor(message: string, status = 400) {
-    super(message);
-    this.name = "PaymentConfirmationError";
-    this.status = status;
-  }
+    constructor(message: string, public status = 400) { super(message); this.name = "PaymentConfirmationError"; }
 }
 
-const jsonError = (error: unknown, status = 500) => NextResponse.json(
-  { error: error instanceof Error ? error.message : "Payment confirmation failed" },
-  { status },
-);
-
 const amountOf = (value: unknown) => {
-  const amount = Number(value ?? 0);
-  return Number.isFinite(amount) ? amount : 0;
+    const amount = Number(value ?? 0);
+    return Number.isFinite(amount) ? amount : 0;
 };
 
-const statusOf = (value: unknown) => {
-  const status = String(value || " ").trim().toUpperCase();
-  if (["PAID", "HELD"].includes(status)) return "PAID_HELD";
-  if (["IN_TRANSIT", "OUT_FOR_DELIVERY"].includes(status)) return "SHIPPED";
-  return status;
-};
-
-const orderSummaries = (orders: Array<{ ref: FirebaseFirestore.DocumentReference; data: FirebaseFirestore.DocumentData }>) =>
-  orders.map(({ ref, data }) => ({
-    id: ref.id,
-    isBooking: data.isBooking === true,
-    buyerId: typeof data.buyerId === "string" ? data.buyerId : "",
-    status: String(data.status || ""),
-    total: amountOf(data.total ?? data.totalAmount ?? data.amount),
-    totalAmount: amountOf(data.totalAmount ?? data.total ?? data.amount),
-  }));
-
-const dispatchConfirmedShipments = async (orders: Array<{ ref: FirebaseFirestore.DocumentReference }>) => {
-  const dispatchResults = await Promise.allSettled(
-    orders.map(({ ref }) => dispatchShipmentForOrder(ref.id)),
-  );
-  dispatchResults.forEach((result, index) => {
-    if (result.status === "fulfilled") {
-      console.log(`[SHIPPING] Order ${orders[index]?.ref.id} dispatch: ${result.value.dispatchStatus}`);
-    } else {
-      console.error(`[SHIPPING] Order ${orders[index]?.ref.id} dispatch crashed:`, result.reason);
-    }
-  });
-  return dispatchResults.map((result) => result.status === "fulfilled"
-    ? result.value
-    : { status: "PENDING_PICKUP", dispatchStatus: "FAILED", reason: "Dispatch worker failed" });
-};
-
-type ProviderTransaction = {
-  status?: unknown;
-  responseCode?: unknown;
-  transactionId?: unknown;
-  transactionReference?: unknown;
-  reference?: unknown;
-};
-
-type VerificationPayload = {
-  code?: unknown;
-  status?: unknown;
-  data?: {
-    success?: unknown;
-    status?: unknown;
-    responseCode?: unknown;
-    reference?: unknown;
-    transaction?: ProviderTransaction;
-    transactionDetails?: {
-      paymentReference?: unknown;
-      statusCode?: unknown;
+function summary(id: string, data: FirebaseFirestore.DocumentData) {
+    return {
+        id,
+        isBooking: data.isBooking === true,
+        buyerId: typeof data.buyerId === "string" ? data.buyerId : "",
+        status: String(data.status || ""),
+        total: amountOf(data.total ?? data.totalAmount ?? data.amount),
+        totalAmount: amountOf(data.totalAmount ?? data.total ?? data.amount),
     };
-  };
-};
-
-const getNombaToken = async (authBaseUrl: string) => {
-  const response = await fetch(`${authBaseUrl}/auth/token/issue`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      accountId: process.env.NOMBA_ACCOUNT_ID || "",
-    },
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      client_id: process.env.NOMBA_CLIENT_ID,
-      client_secret: process.env.NOMBA_CLIENT_SECRET,
-    }),
-    cache: "no-store",
-  });
-  if (!response.ok) throw new PaymentConfirmationError("Payment provider authentication failed", 502);
-  const data = await response.json() as { data?: { access_token?: string } };
-  if (!data.data?.access_token) throw new PaymentConfirmationError("Payment provider returned no verification token", 502);
-  return data.data.access_token;
-};
+}
 
 export async function POST(request: NextRequest) {
-  try {
-    const authorization = request.headers.get("authorization");
-    if (!authorization?.startsWith("Bearer ")) throw new PaymentConfirmationError("Unauthorized", 401);
-    const decoded = await adminAuth.verifyIdToken(authorization.slice("Bearer ".length).trim());
-
-    const body = await request.json() as { orderReference?: string };
-    const orderReference = typeof body.orderReference === "string" ? body.orderReference.trim() : "";
-    if (!orderReference) throw new PaymentConfirmationError("Order reference is required", 400);
-
-    // ✅ MULTI-SELLER SUPPORT: Query by checkoutReference field
-    let initialOrdersSnap = await adminDb.collection("orders").where("checkoutReference", "==", orderReference).get();
-
-    // Fallback for legacy single-seller orders where doc ID was the reference
-    if (initialOrdersSnap.empty) {
-      const fallbackSnap = await adminDb.collection("orders").doc(orderReference).get();
-      if (!fallbackSnap.exists) throw new PaymentConfirmationError("Order not found", 404);
-
-      // Create a mock structure for uniform processing
-      initialOrdersSnap = {
-        empty: false,
-        docs: [fallbackSnap]
-      } as any;
-    }
-
-    const ordersToProcess = initialOrdersSnap.docs.map(doc => ({ ref: doc.ref, data: doc.data() }));
-
-    // Verify every order in a multi-seller checkout before taking any early
-    // return. A checkout reference can resolve to several order documents.
-    for (const { data } of ordersToProcess) {
-      if (data.buyerId !== decoded.uid) throw new PaymentConfirmationError("Forbidden", 403);
-    }
-
-    const allOrdersHeld = ordersToProcess.every(({ data }) => {
-      const fundsState = String(data.fundsState || "").trim().toLowerCase();
-      return fundsState === "held" && data.escrowReservedAt;
-    });
-    if (allOrdersHeld) {
-      const dispatch = await dispatchConfirmedShipments(ordersToProcess);
-      return NextResponse.json({
-        success: true,
-        confirmed: true,
-        status: "PAID_HELD",
-        alreadyProcessed: true,
-        dispatch,
-        orders: orderSummaries(ordersToProcess),
-      });
-    }
-    const allOrdersSettled = ordersToProcess.every(({ data }) =>
-      ["released", "refunded", "refund_pending"].includes(String(data.fundsState || "").trim().toLowerCase()),
-    );
-    if (allOrdersSettled) {
-      return NextResponse.json({
-        success: true,
-        confirmed: true,
-        status: String(ordersToProcess[0]?.data.status || ""),
-        orders: orderSummaries(ordersToProcess),
-      });
-    }
-
-    const nombaOrigin = process.env.NOMBA_SANDBOX_URL || "https://sandbox.nomba.com";
-    const isSandbox = Boolean(process.env.NOMBA_SANDBOX_URL) || process.env.NEXT_PUBLIC_ENVIRONMENT === "sandbox";
-    const authBaseUrl = `${nombaOrigin}/v1`;
-    const token = await getNombaToken(authBaseUrl);
-
-    const verificationUrl = isSandbox
-      ? `${nombaOrigin}/sandbox/checkout/transaction?idType=orderReference&id=${encodeURIComponent(orderReference)}`
-      : `${nombaOrigin}/v1/checkout/confirm-transaction-receipt`;
-
-    const verificationResponse = await fetch(verificationUrl, {
-      method: isSandbox ? "GET" : "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        accountId: process.env.NOMBA_ACCOUNT_ID || "",
-        "Content-Type": "application/json",
-      },
-      ...(isSandbox ? {} : { body: JSON.stringify({ orderReference }) }),
-      cache: "no-store",
-    });
-
-    const verificationPayload = await verificationResponse.json().catch(() => ({})) as VerificationPayload;
-    const providerStatus = String(
-      verificationPayload.data?.status || verificationPayload.status || verificationPayload.data?.transaction?.status || verificationPayload.data?.transactionDetails?.statusCode || "",
-    ).toUpperCase();
-    const providerCode = String(
-      verificationPayload.code || verificationPayload.data?.responseCode || verificationPayload.data?.transaction?.responseCode || "",
-    ).toUpperCase();
-
-    const confirmed = verificationResponse.ok && (
-      verificationPayload.data?.success === true ||
-      ["SUCCESS", "SUCCESSFUL", "COMPLETED", "APPROVED", "PAYMENT_SUCCESS", "PAYMENT SUCCESSFUL"].includes(providerStatus) ||
-      providerStatus.includes("SUCCESS") ||
-      providerCode === "00"
-    );
-
-    if (!confirmed) {
-      return NextResponse.json({ success: true, confirmed: false, status: "PENDING_PAYMENT", message: "Payment is still awaiting provider confirmation." }, { status: 202 });
-    }
-
-    const providerReference = String(
-      verificationPayload.data?.transaction?.transactionId ||
-      verificationPayload.data?.transaction?.transactionReference ||
-      verificationPayload.data?.transaction?.reference ||
-      verificationPayload.data?.transactionDetails?.paymentReference ||
-      verificationPayload.data?.reference ||
-      orderReference,
-    );
-
-    const results = await adminDb.runTransaction(async (transaction) => {
-      const processedOrders = [];
-
-      for (const { ref, data: order } of ordersToProcess) {
-        const orderSnap = await transaction.get(ref);
-        if (!orderSnap.exists) continue;
-
-        const currentOrder = orderSnap.data() || {};
-        if (currentOrder.buyerId !== decoded.uid) throw new PaymentConfirmationError("Forbidden", 403);
-
-        const fundsState = String(currentOrder.fundsState || "").trim().toLowerCase();
-        const reservedAmount = amountOf(currentOrder.escrowReservedAmount ?? currentOrder.escrowReservationAmount);
-
-        if (fundsState === "held" && reservedAmount > 0 && currentOrder.escrowReservedAt) {
-          processedOrders.push({ alreadyProcessed: true, status: statusOf(currentOrder.status), amount: reservedAmount });
-          continue;
-        }
-
-        if (["released", "refunded", "refund_pending"].includes(fundsState)) {
-          throw new PaymentConfirmationError("This order is already settled", 409);
-        }
-
-        const orderAmount = amountOf(
-          currentOrder.escrowReservedAmount ??
-          currentOrder.escrowReservationAmount ??
-          currentOrder.escrowAmount ??
-          currentOrder.totalAmount ??
-          currentOrder.total,
-        );
-
-        // ✅ Support both vendorId (legacy) and storeId (new multi-seller)
-        const vendorId = typeof currentOrder.vendorId === "string" ? currentOrder.vendorId.trim() : (typeof currentOrder.storeId === "string" ? currentOrder.storeId.trim() : "");
-
-        if (!vendorId || orderAmount <= 0) throw new PaymentConfirmationError("Order escrow data is invalid", 409);
-
-        const storeRef = adminDb.collection("stores").doc(vendorId);
-        const storeSnap = await transaction.get(storeRef);
-        if (!storeSnap.exists) throw new PaymentConfirmationError("Seller wallet not found", 404);
-
-        const productId = typeof currentOrder.productId === "string" ? currentOrder.productId.trim() : "";
-        const productRef = productId ? adminDb.collection("products").doc(productId) : null;
-        const productSnap = productRef ? await transaction.get(productRef) : null;
-
-        const store = storeSnap.data() || {};
-        const rawEscrowBalance = Number(store.escrowBalance ?? 0);
-        if (!Number.isFinite(rawEscrowBalance)) throw new PaymentConfirmationError("Seller escrow ledger is invalid", 409);
-
-        let escrowBalance = rawEscrowBalance;
-        let ledgerWasRebuilt = false;
-
-        if (escrowBalance < 0) {
-          const idField = typeof currentOrder.vendorId === "string" ? "vendorId" : "storeId";
-          const vendorOrders = await transaction.get(adminDb.collection("orders").where(idField, "==", vendorId));
-          escrowBalance = vendorOrders.docs.reduce((total, vendorOrderSnap) => {
-            const vendorOrder = vendorOrderSnap.data() || {};
-            if (String(vendorOrder.fundsState || "").trim().toLowerCase() !== "held") return total;
-            const amount = amountOf(vendorOrder.escrowReservedAmount ?? vendorOrder.escrowReservationAmount);
-            return vendorOrder.escrowReservedAt && amount > 0 ? total + amount : total;
-          }, 0);
-          ledgerWasRebuilt = true;
-        }
-
-        const now = admin.firestore.FieldValue.serverTimestamp();
-        const currentStatus = statusOf(currentOrder.status);
-        const nextStatus = ["SHIPPED", "DISPUTED"].includes(currentStatus) ? currentOrder.status : "PAID_HELD";
-
-        let inventoryError = null;
-        let orderUpdate = {};
-
-        if (productRef && productSnap?.exists) {
-          const inv = inventoryAdjustment(productSnap.data() || {}, currentOrder, now, orderReference);
-          if (inv.error) inventoryError = inv.error;
-          else {
-            if (inv.tracked) transaction.update(productRef, inv.productUpdate);
-            orderUpdate = inv.orderUpdate || {};
-          }
-        }
-
-        if (inventoryError) throw new PaymentConfirmationError(inventoryError, 409);
-
-        transaction.update(storeRef, { escrowBalance: escrowBalance + orderAmount, updatedAt: now });
-
-        const finalUpdate = {
-          ...orderUpdate,
-          status: nextStatus,
-          paymentStatus: "paid",
-          paymentReference: providerReference,
-          fundsState: "held",
-          escrowReservedAmount: orderAmount,
-          escrowReservedAt: now,
-          updatedAt: now,
-        };
-
-        transaction.update(ref, finalUpdate);
-
-        transaction.set(adminDb.collection("auditLogs").doc(), {
-          action: "payment_receipt_verified_and_escrow_reserved",
-          targetType: "order",
-          targetId: orderReference,
-          performedBy: `buyer:${decoded.uid}`,
-          performedByEmail: decoded.email || "",
-          details: {
-            orderId: currentOrder.orderId,
-            amount: orderAmount,
-            providerReference,
-            providerStatus,
-            providerCode,
-            ledgerWasRebuilt,
-            previousEscrowBalance: rawEscrowBalance,
-            rebuiltEscrowBalance: ledgerWasRebuilt ? escrowBalance : null
-          },
-          timestamp: now,
-        });
-
-        processedOrders.push({ alreadyProcessed: false, status: nextStatus, amount: orderAmount });
-      }
-
-      return processedOrders;
-    });
-
-    // Notify only after the escrow transaction has committed. The Novu fan-out
-    // is isolated from payment confirmation and is idempotent across retries.
     try {
-      await Promise.allSettled(
-        results.map((result, index) => result.alreadyProcessed
-          ? Promise.resolve()
-          : notifyOrderPaymentConfirmed({
-            id: ordersToProcess[index]?.ref.id,
-            ...ordersToProcess[index]?.data,
-          })),
-      );
-    } catch (notificationError) {
-      console.error("[NOVU WHATSAPP] Payment confirmation fan-out failed:", notificationError);
+        const authorization = request.headers.get("authorization");
+        if (!authorization?.startsWith("Bearer ")) throw new PaymentConfirmationError("Unauthorized", 401);
+        const decoded = await adminAuth.verifyIdToken(authorization.slice("Bearer ".length).trim());
+        const body = await request.json() as { orderReference?: unknown };
+        const orderReference = typeof body.orderReference === "string" ? body.orderReference.trim() : "";
+        if (!orderReference) throw new PaymentConfirmationError("Order reference is required", 400);
+
+        let ordersSnapshot = await adminDb.collection("orders").where("checkoutReference", "==", orderReference).get();
+        if (ordersSnapshot.empty) {
+            const legacy = await adminDb.collection("orders").doc(orderReference).get();
+            if (!legacy.exists) throw new PaymentConfirmationError("Order not found", 404);
+            ordersSnapshot = { empty: false, docs: [legacy] } as unknown as typeof ordersSnapshot;
+        }
+        const orderDocs = ordersSnapshot.docs;
+        const mismatchedOrder = orderDocs.find((doc) => doc.data().buyerId !== decoded.uid);
+        if (mismatchedOrder) {
+            const buyerId = String(mismatchedOrder.data().buyerId || "");
+            console.error("Payment confirmation identity mismatch", {
+                tokenUid: decoded.uid.slice(0, 4) + "…" + decoded.uid.slice(-4),
+                orderBuyerId: buyerId ? buyerId.slice(0, 4) + "…" + buyerId.slice(-4) : "<missing>",
+                orderId: mismatchedOrder.id,
+                orderReference,
+            });
+            throw new PaymentConfirmationError("Forbidden", 403);
+        }
+
+        const alreadyHeld = orderDocs.every((doc) => String(doc.data().fundsState || "").toLowerCase() === "held" && doc.data().escrowReservedAt);
+        if (!alreadyHeld) {
+            let escrow = await getEscrowByReference(orderReference);
+            if (!escrow) {
+                // Recover checkouts created by the earlier Nomba route before
+                // the escrow record was added. The amount comes only from the
+                // server-created order documents, never from the browser.
+                const recoveredAmount = orderDocs.reduce((total, doc) => total + amountOf(doc.data().total ?? doc.data().totalAmount), 0);
+                if (!Number.isFinite(recoveredAmount) || recoveredAmount <= 0) throw new PaymentConfirmationError("Nomba escrow record not found", 409);
+                await createEscrowRecord({
+                    externalReference: orderReference,
+                    amount: recoveredAmount,
+                    orderIds: orderDocs.map((doc) => doc.id),
+                    buyerId: decoded.uid,
+                    buyerPhone: typeof orderDocs[0].data().customerPhone === "string" ? orderDocs[0].data().customerPhone : undefined,
+                    description: "Recovered Nomba checkout escrow",
+                    paymentProvider: "nomba",
+                });
+                escrow = await getEscrowByReference(orderReference);
+            }
+            if (!escrow) throw new PaymentConfirmationError("Nomba escrow record not found", 409);
+
+            // The webhook is authoritative. This fallback is useful when the
+            // provider has completed a transfer but its callback is delayed.
+            if (escrow.status !== "FUNDED") {
+                // Checkout.js uses the checkout reference as its verification
+                // identifier. A webhook may populate providerReference later,
+                // so use it when available and otherwise verify the checkout
+                // reference returned to the browser.
+                const references = [
+                    String(escrow.providerReference || ""),
+                    String(escrow.providerOrderReference || ""),
+                    orderReference,
+                ].filter(Boolean);
+                let verification: Awaited<ReturnType<typeof verifyNombaTransaction>> | null = null;
+                for (const reference of references) {
+                    verification = await verifyNombaTransaction(reference);
+                    if (verification.confirmed) break;
+                }
+                if (verification?.confirmed) {
+                    await fundEscrowAndOrders({
+                        eventId: `confirmation:${orderReference}:${verification.transactionId || orderReference}`,
+                        externalReference: orderReference,
+                        amount: amountOf(escrow.amount),
+                        providerReference: verification.transactionId || orderReference,
+                        sessionId: typeof escrow.providerSessionId === "string" ? escrow.providerSessionId : undefined,
+                    });
+                }
+            }
+        }
+
+        const refreshed = await Promise.all(orderDocs.map((doc) => doc.ref.get()));
+        const paid = refreshed.length > 0 && refreshed.every((doc) => String(doc.data()?.fundsState || "").toLowerCase() === "held");
+        if (!paid) {
+            return NextResponse.json({ success: true, confirmed: false, status: "PENDING_PAYMENT", orders: refreshed.map((doc) => summary(doc.id, doc.data() || {})) }, { status: 202 });
+        }
+
+        await Promise.allSettled(refreshed.map(async (doc) => {
+            const data = doc.data() || {};
+            if (data.paymentConfirmationNotifiedAt) return;
+            await notifyOrderPaymentConfirmed({ id: doc.id, ...data });
+            await dispatchShipmentForOrder(doc.id);
+            await doc.ref.update({ paymentConfirmationNotifiedAt: new Date(), updatedAt: new Date() });
+        }));
+
+        return NextResponse.json({
+            success: true,
+            confirmed: true,
+            status: "PAID_HELD",
+            orders: refreshed.map((doc) => summary(doc.id, doc.data() || {})),
+        });
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Payment confirmation failed";
+        const status = error instanceof PaymentConfirmationError ? error.status : 502;
+        console.error("Order payment confirmation error:", error);
+        return NextResponse.json({ error: message }, { status });
     }
-
-    const dispatch = await dispatchConfirmedShipments(ordersToProcess);
-
-    return NextResponse.json({
-      success: true,
-      confirmed: true,
-      results,
-      dispatch,
-      orders: orderSummaries(ordersToProcess),
-    });
-  } catch (error: unknown) {
-    console.error("Order payment confirmation error:", error);
-    return jsonError(error, error instanceof PaymentConfirmationError ? error.status : 502);
-  }
 }

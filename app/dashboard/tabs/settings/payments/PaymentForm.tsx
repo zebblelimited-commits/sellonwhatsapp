@@ -1,7 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { db } from "@/lib/firebase";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { auth } from "@/lib/firebase";
 import { ChevronsUpDown, Check, CheckCircle2, Save, Loader2, AlertCircle } from "lucide-react";
 
 export default function PaymentForm({ storeId, initialData, onComplete }: { storeId: string; initialData: any; onComplete: () => void }) {
@@ -50,9 +49,17 @@ export default function PaymentForm({ storeId, initialData, onComplete }: { stor
     if (!formData.bankCode || !formData.accountNumber) return setError("Please fill in all bank details.");
     setLoading(true); setError(null);
     try {
-      await updateDoc(doc(db, "stores", storeId), {
-        payoutSettings: { ...formData, status: "PENDING_REVIEW", submittedAt: serverTimestamp(), updatedAt: serverTimestamp() }
+      const user = auth.currentUser;
+      if (!user) throw new Error("Please sign in again before saving payout details.");
+      const token = await user.getIdToken();
+      const response = await fetch("/api/vendor/payout-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ storeId, ...formData }),
       });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Failed to verify payout account.");
+      setFormData((current) => ({ ...current, accountName: result.accountName || current.accountName, accountNumber: result.accountNumber || current.accountNumber }));
       setLoading(false); setShowModal(true);
     } catch (err: any) { setError(err.message || "Failed to save."); setLoading(false); }
   };

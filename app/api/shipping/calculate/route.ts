@@ -8,6 +8,11 @@ import { fetchTopshipQuote, type TopshipAddress, type TopshipQuote, topshipConfi
 
 export const runtime = "nodejs";
 
+const configuredShippingTimeout = Number(process.env.SHIPPING_PROVIDER_TIMEOUT_MS);
+const SHIPPING_PROVIDER_TIMEOUT_MS = Number.isFinite(configuredShippingTimeout) && configuredShippingTimeout > 0
+    ? Math.max(3_000, configuredShippingTimeout)
+    : 8_000;
+
 interface ShippingRequest {
     destinationState: string;
     totalWeightKg?: number;
@@ -41,6 +46,22 @@ function isCancelledOrMalformedRequest(error: unknown) {
     if (!(error instanceof Error)) return false;
     const code = (error as Error & { code?: string }).code;
     return error.name === "AbortError" || code === "ABORT_ERR" || code === "UND_ERR_ABORTED" || /aborted|terminated|request body/i.test(error.message);
+}
+
+async function withProviderTimeout<T>(promise: Promise<T>, providerName: string): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    reject(new Error(`${providerName} did not return a quote within ${Math.round(SHIPPING_PROVIDER_TIMEOUT_MS / 1000)} seconds.`));
+                }, SHIPPING_PROVIDER_TIMEOUT_MS);
+            }),
+        ]);
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+    }
 }
 
 export async function POST(req: NextRequest) {
@@ -147,8 +168,9 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // 2. Loop through couriers and dynamically check availability & rates
-        for (const doc of courierEntries) {
+        // 2. Check couriers concurrently so one slow provider cannot block
+        // every other option from appearing at checkout.
+        await Promise.all(courierEntries.map(async (doc) => {
             const courier = doc.data();
             const courierCode = courier.code?.toLowerCase() || "";
             const courierName = courier.name?.toLowerCase() || "";
@@ -187,7 +209,7 @@ export async function POST(req: NextRequest) {
                         reason: "Sendbox is not configured on the server. Add SENDBOX_ACCESS_TOKEN and redeploy.",
                     });
                 }
-                continue;
+                return;
             }
 
             // Chowdeck coverage changes by service area and must be checked by
@@ -198,7 +220,7 @@ export async function POST(req: NextRequest) {
                 const isAvailable = courier.availableStates.some(
                     (state: string) => state.toLowerCase() === destinationState.toLowerCase()
                 );
-                if (!isAvailable) continue; // Skip courier if not available in this state
+                if (!isAvailable) return; // Skip courier if not available in this state
             }
 
             let finalFee = 0;
@@ -208,10 +230,10 @@ export async function POST(req: NextRequest) {
             // Check FEZ Delivery
             if (isFez) {
                 try {
-                    const fezRate = await fetchFezDeliveryCost({
+                    const fezRate = await withProviderTimeout(fetchFezDeliveryCost({
                         state: destinationState,
                         weight: Math.max(1, totalWeightKg),
-                    });
+                    }), "FEZ");
                     finalFee = fezRate.totalCost;
                 } catch (fezErr) {
                     console.error("⚠️ [FEZ API RATE ERROR], falling back to static formula:", fezErr);
@@ -223,11 +245,11 @@ export async function POST(req: NextRequest) {
             // would leave us with a paid order but no valid fee_id.
             else if (isChowdeck) {
                 try {
-                    const chowdeckQuote = await fetchChowdeckDeliveryFee({
+                    const chowdeckQuote = await withProviderTimeout(fetchChowdeckDeliveryFee({
                         sourceAddress: pickupAddress || "Seller pickup address not provided",
                         destinationAddress: destinationAddress || "Buyer delivery address not provided",
                         estimatedOrderAmountNaira: estimatedOrderAmount,
-                    });
+                    }), "Chowdeck");
                     finalFee = chowdeckQuote.totalAmountNaira;
                     providerQuoteId = chowdeckQuote.id;
                 } catch (chowdeckErr) {
@@ -243,7 +265,7 @@ export async function POST(req: NextRequest) {
                         name: courier.name || "Chowdeck",
                         reason,
                     });
-                    continue;
+                    return;
                 }
             }
             // Topship returns a quote object rather than a quote ID. Keep the
@@ -251,11 +273,11 @@ export async function POST(req: NextRequest) {
             // draft shipment after Nomba payment is confirmed.
             else if (isTopship) {
                 try {
-                    const topShipQuote = await fetchTopshipQuote({
+                    const topShipQuote = await withProviderTimeout(fetchTopshipQuote({
                         sender: pickupAddress as TopshipAddress || {},
                         receiver: destinationAddress as TopshipAddress || {},
                         totalWeightKg: Math.max(1, totalWeightKg),
-                    });
+                    }), "Topship");
                     finalFee = topShipQuote.totalCost / 100;
                     providerQuote = topShipQuote;
                 } catch (topshipErr) {
@@ -268,13 +290,13 @@ export async function POST(req: NextRequest) {
                         name: courier.name || "Topship",
                         reason: "Topship could not return a delivery quote for this route. Check the staging API key and both address locations.",
                     });
-                    continue;
+                    return;
                 }
             }
             // Check Sendbox
             else if (isSendbox) {
                 try {
-                    const quotes = await fetchSendboxQuote({
+                    const quotes = await withProviderTimeout(fetchSendboxQuote({
                         origin_name: pickupAddress?.name,
                         origin_phone: pickupAddress?.phone,
                         origin_state: pickupAddress?.state,
@@ -286,7 +308,7 @@ export async function POST(req: NextRequest) {
                         destination_city: destinationAddress?.city || destinationAddress?.lga,
                         destination_street: destinationAddress?.address,
                         weight: Math.max(1, totalWeightKg),
-                    });
+                    }), "Sendbox");
 
                     if (quotes && quotes.length > 0) {
                         const quote = quotes[0] as Record<string, unknown>;
@@ -303,7 +325,7 @@ export async function POST(req: NextRequest) {
                         name: courier.name || "Sendbox",
                         reason: sendboxErr instanceof Error ? sendboxErr.message : "Sendbox could not return a delivery quote.",
                     });
-                    continue;
+                    return;
                 }
             }
             // Static fallback for other quote-only couriers (Dellyman, Glovo,
@@ -348,7 +370,7 @@ export async function POST(req: NextRequest) {
                 ...(providerQuoteId !== undefined ? { providerQuoteId } : {}),
                 ...(providerQuote ? { providerQuote } : {}),
             });
-        }
+        }));
 
         // 3. Sort active options from lowest to highest fee
         shippingOptions.sort((a, b) => a.shippingFee - b.shippingFee);

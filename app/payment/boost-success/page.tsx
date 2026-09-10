@@ -32,16 +32,9 @@ function BoostSuccessContent() {
 
   const orderReference = searchParams.get("reference") || searchParams.get("orderReference");
   
-  // ✅ CRITICAL FIX: Extract the orderId that Nomba appends on successful redirect
-  const orderId = searchParams.get("orderId"); 
-  
-  const isMock = searchParams.get("mock") === "true";
-
-  // ✅ Check if the payment gateway explicitly confirmed success in the URL
-  const urlStatus = searchParams.get("status");
-  
-  // ✅ If Nomba redirected the user back with an orderId, we know payment succeeded on their end!
-  const isUrlConfirmed = !!orderId || urlStatus === "success" || searchParams.get("confirmed") === "true";
+  // Mock success is available only during local development. A callback URL
+  // is not proof of payment; the server must return an activated boost record.
+  const isMock = process.env.NODE_ENV === "development" && searchParams.get("mock") === "true";
 
   const [status, setStatus] = useState<"verifying" | "success" | "error">("verifying");
   const [boostData, setBoostData] = useState<BoostData | null>(null);
@@ -73,15 +66,16 @@ function BoostSuccessContent() {
         authMatch: boostData.storeId === currentUser?.uid,
         refMatch: orderReference === boostData.nombaReference,
         boostStatus: boostData.status,
-        isUrlConfirmed: isUrlConfirmed // Log if we are bypassing the webhook
       });
     }
-  }, [boostData, orderReference, currentUser, isUrlConfirmed]);
+  }, [boostData, orderReference, currentUser]);
 
   useEffect(() => {
     if (!orderReference || !currentUser || !mounted) return;
 
     let pollTimer: NodeJS.Timeout;
+    let cancelled = false;
+    const controller = new AbortController();
 
     const checkBoostStatus = async () => {
       try {
@@ -100,8 +94,11 @@ function BoostSuccessContent() {
         const apiUrl = `/api/boost-store/${orderReference}`;
         
         const response = await fetch(apiUrl, {
-          headers: { Authorization: `Bearer ${idToken}` }
+          headers: { Authorization: `Bearer ${idToken}` },
+          signal: controller.signal,
         });
+
+        if (cancelled) return;
 
         if (response.ok) {
           const data = await response.json();
@@ -110,14 +107,8 @@ function BoostSuccessContent() {
           const boost = data.boost || data.data || data;
           console.log("🔍 EXTRACTED BOOST OBJECT & STATUS:", boost?.status);
           
-          // ✅ If API returns empty but URL confirms success, use fallback data
           if (!boost || Object.keys(boost).length === 0) {
-             if (isUrlConfirmed) {
-                console.log("✅ URL confirms success (orderId present), but API data is empty. Using fallback data.");
-                setBoostData({ packageName: "Pro Boost", tier: "pro", status: "active", nombaReference: orderReference, totalAmount: 0 });
-                setStatus("success");
-                return;
-             }
+            console.log("⏳ Boost status response did not contain a record yet.");
           } else {
              setBoostData(boost);
           }
@@ -137,23 +128,8 @@ function BoostSuccessContent() {
             return;
           }
 
-          // ✅ CRITICAL FIX: If the API says 'pending' but the URL explicitly has an orderId, 
-          // trust the payment gateway's synchronous redirect over the delayed webhook!
-          if (isUrlConfirmed && (boostStatus === "pending" || boostStatus === "pending_payment" || boostStatus === "processing" || !boostStatus)) {
-             console.log("✅ Payment gateway URL confirms success (orderId present), bypassing webhook delay!");
-             setStatus("success");
-             return;
-          }
-
           console.log(`⏳ Boost status is currently '${boost?.status}', waiting for webhook...`);
         } else if (response.status === 404) {
-          // ✅ If API returns 404 (document not created yet) but URL confirms success, trust the URL!
-          if (isUrlConfirmed) {
-             console.log("✅ API returned 404, but URL confirms success (orderId present). Bypassing webhook delay!");
-             setBoostData({ packageName: "Pro Boost", tier: "pro", status: "active", nombaReference: orderReference, totalAmount: 0 });
-             setStatus("success");
-             return;
-          }
           console.log(`⏳ Boost ${orderReference} verification is processing (404), retrying...`);
         } else {
           console.error(`❌ Non-404 infrastructure error detected: ${response.status}`);
@@ -163,20 +139,12 @@ function BoostSuccessContent() {
         if (attemptsRef.current <maxAttempts) {
           pollTimer = setTimeout(checkBoostStatus, 2000);
         } else {
-          // ✅ FINAL FALLBACK: If we hit the polling ceiling, but the URL said success, show success anyway!
-          if (isUrlConfirmed) {
-             console.log("⚠️ Polling ceiling reached, but URL confirmed success (orderId present). Showing success screen.");
-             if (!boostData) {
-                setBoostData({ packageName: "Pro Boost", tier: "pro", status: "active", nombaReference: orderReference, totalAmount: 0 });
-             }
-             setStatus("success");
-             return;
-          }
           console.error(`❌ Transaction verification polling ceiling surpassed`);
           setStatus("error");
           setError("Verification window timed out. Check your dashboard within 2 minutes for processing updates.");
         }
       } catch (err: any) {
+        if (err?.name === "AbortError" || cancelled) return;
         console.error("❌ Thread tracking poll failure error context:", err);
         attemptsRef.current += 1;
         if (attemptsRef.current <maxAttempts) {
@@ -193,9 +161,11 @@ function BoostSuccessContent() {
     }
 
     return () => {
+      cancelled = true;
+      controller.abort();
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [orderReference, currentUser, isMock, mounted, status, isUrlConfirmed, boostData]);
+  }, [orderReference, currentUser, isMock, mounted]);
 
   const getEndDate = (): string => {
     if (!mounted) return "Loading...";

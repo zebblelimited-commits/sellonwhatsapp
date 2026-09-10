@@ -70,6 +70,25 @@ export function getNovuWorkflowId(eventType: string): string {
   );
 }
 
+function safeNovuError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return { message: String(error || "Unknown Novu error") };
+  }
+
+  const value = error as Record<string, unknown>;
+  const body = value.body;
+  const bodyMessage = body && typeof body === "object"
+    ? (body as Record<string, unknown>).message || (body as Record<string, unknown>).description
+    : undefined;
+
+  return {
+    message: typeof value.message === "string" ? value.message : "Novu request failed",
+    statusCode: value.statusCode,
+    type: value.type,
+    ...(bodyMessage ? { providerMessage: String(bodyMessage) } : {}),
+  };
+}
+
 /**
  * Trigger a Novu workflow using its WhatsApp step. This helper intentionally
  * resolves failures to false: notifications are a side effect and must never
@@ -115,7 +134,9 @@ export async function sendWhatsAppNotification({
     console.log(`[NOVU WHATSAPP] Sent '${eventType}' to ${normalizedPhone}`);
     return true;
   } catch (error) {
-    console.error(`[NOVU WHATSAPP] Failed '${eventType}' to ${normalizedPhone}:`, error);
+    // Do not log the SDK error object directly: it can contain the Novu
+    // Authorization header and other request internals.
+    console.error(`[NOVU WHATSAPP] Failed '${eventType}' to ${normalizedPhone}:`, safeNovuError(error));
     return false;
   }
 }

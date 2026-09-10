@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { chowdeckConfigured } from "@/lib/chowdeck";
 import { sendboxConfigured } from "@/lib/sendbox";
 import { topshipConfigured, type TopshipQuote } from "@/lib/topship";
+import { calculateEscrowBreakdown } from "@/lib/escrow/calculator";
+import { createEscrowRecord } from "@/src/infrastructure/db/escrowService";
+import { createNombaCheckoutOrder, nombaBaseUrl } from "@/lib/payments/nomba/client";
 
 interface CheckoutRequestBody {
     buyerId: string;
@@ -38,6 +41,26 @@ function hasValidCoordinates(value: unknown): boolean {
         && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
 }
 
+function normalizeCustomerPhone(value: unknown): string {
+    const raw = String(value ?? "").trim();
+    const digits = raw.replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.startsWith("234")) return `+${digits}`;
+    if (digits.startsWith("0") && digits.length === 11) return `+234${digits.slice(1)}`;
+    if (digits.length >= 10 && digits.length <= 15) return `+${digits}`;
+    return "";
+}
+
+function isPublicHttpsUrl(value: string): boolean {
+    try {
+        const url = new URL(value);
+        return url.protocol === "https:"
+            && !["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(url.hostname);
+    } catch {
+        return false;
+    }
+}
+
 async function fetchWithRetry(
     url: string,
     options: RequestInit,
@@ -69,17 +92,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
         console.log("🔵 [CHECKOUT API] Request received");
 
-        const accountId = process.env.NOMBA_ACCOUNT_ID;
-        const clientId = process.env.NOMBA_CLIENT_ID;
-        const clientSecret = process.env.NOMBA_CLIENT_SECRET;
-
-        if (!accountId || !clientId || !clientSecret) {
+        if (!process.env.NOMBA_CLIENT_ID || !process.env.NOMBA_CLIENT_SECRET || !process.env.NOMBA_ACCOUNT_ID) {
             console.error("❌ [CHECKOUT API] Missing Nomba API environment variables.");
             return NextResponse.json(
-                { error: "Payment gateway configuration error." },
-                { status: 500 }
+                { error: "Payment gateway configuration error. Nomba checkout is not configured." },
+                { status: 503 }
             );
         }
+
+        const authorization = req.headers.get("authorization");
+        if (!authorization?.startsWith("Bearer ")) {
+            return NextResponse.json({ error: "Please sign in before checking out." }, { status: 401 });
+        }
+        const decoded = await adminAuth.verifyIdToken(authorization.slice("Bearer ".length).trim());
 
         const body: CheckoutRequestBody = await req.json();
 
@@ -105,6 +130,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             );
         }
 
+        if (buyerId !== decoded.uid) {
+            const payloadUid = String(buyerId || "");
+            console.error("❌ [CHECKOUT API] Buyer identity mismatch", {
+                tokenUid: decoded.uid.slice(0, 4) + "…" + decoded.uid.slice(-4),
+                payloadUid: payloadUid ? payloadUid.slice(0, 4) + "…" + payloadUid.slice(-4) : "<missing>",
+            });
+            return NextResponse.json({ error: "Your checkout session expired. Please refresh and try again." }, { status: 403 });
+        }
+
+        const customerPhone = normalizeCustomerPhone(address.phone);
+        if (!customerPhone) {
+            return NextResponse.json(
+                { error: "A valid customer phone number is required for Nomba checkout. Update the delivery address and try again." },
+                { status: 400 },
+            );
+        }
+
+        const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+        if (!isPublicHttpsUrl(appUrl)) {
+            return NextResponse.json(
+                { error: "NEXT_PUBLIC_APP_URL must be a public HTTPS URL for Nomba checkout. Use an HTTPS tunnel such as ngrok while testing locally." },
+                { status: 503 },
+            );
+        }
+
         if (!hasValidCoordinates(address)) {
             return NextResponse.json(
                 { error: "A valid buyer delivery latitude and longitude are required before checkout." },
@@ -115,7 +165,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         console.log("🔵 [CHECKOUT API] Customer email:", customerEmail);
 
         const batch = adminDb.batch();
-        const checkoutReference = `SOWA_CHK_${Date.now()}`;
+        // Keep a short, unique merchant reference for Nomba and for the
+        // Firestore escrow ledger. Nomba rejects reused order references.
+        const checkoutReference = String(Math.floor(100000000 + Math.random() * 900000000));
         let calculatedGrandTotal = 0;
         const createdOrderIds: string[] = [];
 
@@ -135,8 +187,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 estimatedDays,
                 providerQuoteId,
                 providerQuote,
-                subtotal: productSubtotal,
+                subtotal: clientSubtotal,
             } = sellerOrder;
+
+            const productSubtotal = items.reduce((sum: number, item: any) => {
+                const price = Number(item?.price);
+                const quantity = Number(item?.quantity ?? 1);
+                return sum + (Number.isFinite(price) && price >= 0 && Number.isFinite(quantity) && quantity > 0 ? price * quantity : 0);
+            }, 0);
+            if (!Number.isFinite(productSubtotal) || productSubtotal <= 0 || Number(clientSubtotal) !== productSubtotal) {
+                return NextResponse.json({ error: "One or more checkout item totals are invalid. Please refresh your cart." }, { status: 400 });
+            }
 
             if (!storeId || storeId === "unknown") {
                 console.error("❌ [CHECKOUT API] Invalid storeId detected:", storeId);
@@ -231,18 +292,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 storeData.subscriptionPlan === "pro_yearly_business_max" ||
                 String(storeData.subscriptionPlan || "").toLowerCase().includes("max");
 
-            const sellerCommissionRate = isPartner ? 0 : 0.015;
-
             // Handling fee is waived for self-arranged shipping
             const handlingFee = !isSelfArranged && shippingCost > 0 ? 200 : 0;
-
-            const sellerCommission = Math.round(productSubtotal * sellerCommissionRate);
-            const sellerPayout = productSubtotal - sellerCommission;
-            const buyerPlatformFee = Math.round((productSubtotal + shippingCost) * 0.015);
+            const breakdown = calculateEscrowBreakdown({
+                productCost: productSubtotal,
+                shippingCost,
+                courierHandlingFee: handlingFee,
+                isSubscribedSeller: isPartner,
+            });
+            const { sellerCommission, sellerPayout, platformRevenue } = breakdown.allocations;
+            const { buyerPlatformFee, totalPaidByBuyer: orderTotal } = breakdown.buyerBreakdown;
             const escrowAmount = productSubtotal;
-
-            const platformRevenue = sellerCommission + buyerPlatformFee + handlingFee;
-            const orderTotal = productSubtotal + shippingCost + buyerPlatformFee + handlingFee;
 
             calculatedGrandTotal += orderTotal;
 
@@ -289,6 +349,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 totalAmount: orderTotal,
                 status: "PENDING_PAYMENT",
                 paymentStatus: "pending",
+                paymentProvider: "nomba",
                 paymentMethod,
                 createdAt: FieldValue.serverTimestamp(),
                 updatedAt: FieldValue.serverTimestamp(),
@@ -367,130 +428,71 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // NOMBA PAYMENT INITIALIZATION
         // ---------------------------------------------------------
 
-        const nombaOrigin = process.env.NOMBA_SANDBOX_URL || "https://sandbox.nomba.com";
-        const isSandbox =
-            Boolean(process.env.NOMBA_SANDBOX_URL) ||
-            process.env.NEXT_PUBLIC_ENVIRONMENT === "sandbox";
+        const escrowAccountId = process.env.NOMBA_ESCROW_ACCOUNT_ID?.trim() || "";
+        const allowedPaymentMethods = paymentMethod === "transfer"
+            ? ["Transfer"]
+            : paymentMethod === "card"
+                ? ["Card"]
+                : ["Card", "Transfer"];
 
-        const authBaseUrl = `${nombaOrigin}/v1`;
-        const checkoutBaseUrls = isSandbox
-            ? [`${nombaOrigin}/v1`, `${nombaOrigin}/sandbox`]
-            : [`${nombaOrigin}/v1`];
-
-        console.log("🔵 [CHECKOUT API] Requesting Nomba Auth Token...");
-
-        const authRes = await fetchWithRetry(`${authBaseUrl}/auth/token/issue`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                accountId: accountId,
-            },
-            body: JSON.stringify({
-                grant_type: "client_credentials",
-                client_id: clientId,
-                client_secret: clientSecret,
-            }),
+        await createEscrowRecord({
+            externalReference: checkoutReference,
+            amount: calculatedGrandTotal,
+            orderIds: createdOrderIds,
+            buyerId,
+            buyerPhone: customerPhone,
+            description: `Checkout for ${createdOrderIds.length} order(s)`,
+            paymentProvider: "nomba",
         });
 
-        if (!authRes.ok) {
-            const errText = await authRes.text();
-            throw new Error(`Nomba Auth Failed: ${authRes.status} - ${errText}`);
-        }
-
-        const authData = await authRes.json();
-        const token = authData.data?.access_token;
-
-        if (!token) {
-            throw new Error("No access token received from Nomba");
-        }
-
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-        const callbackUrl = `${appUrl}/payment/success?reference=${checkoutReference}`;
-
-        const itemSummary =
-            sellerOrders.length > 1
-                ? `${sellerOrders.reduce((acc, curr) => acc + curr.items.length, 0)} items from ${sellerOrders.length} stores`
-                : `${sellerOrders[0].items.length} items from ${sellerOrders[0].storeName}`;
-
-        // Nomba expects the hosted-checkout method labels, not the internal
-        // gateway enum names. Sending CARD/BANK_TRANSFER can produce a link
-        // that opens without any usable payment method in the hosted UI.
-        const formattedPaymentMethods = paymentMethod?.toLowerCase() === "transfer"
-            ? ["Transfer", "Card"]
-            : ["Card", "Transfer"];
-
-        const checkoutRequest = {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${token}`,
-                accountId: accountId,
-                "Content-Type": "application/json",
+        const checkout = await createNombaCheckoutOrder({
+            orderReference: checkoutReference,
+            amount: calculatedGrandTotal.toFixed(2),
+            currency: "NGN",
+            callbackUrl: `${appUrl}/payment/success?reference=${encodeURIComponent(checkoutReference)}`,
+            customerEmail: String(customerEmail).trim(),
+            customerId: buyerId,
+            ...(escrowAccountId ? { accountId: escrowAccountId } : {}),
+            allowedPaymentMethods,
+            orderMetaData: {
+                checkoutReference,
+                orderIds: createdOrderIds.join(","),
+                buyerId,
+                flow: "escrow",
             },
-            body: JSON.stringify({
-                order: {
-                    orderReference: checkoutReference,
-                    amount: calculatedGrandTotal.toFixed(2),
-                    currency: "NGN",
-                    callbackUrl,
-                    customerEmail: customerEmail || "customer@sowa.com",
-                    description: `Checkout: ${itemSummary}`,
-                    allowedPaymentMethods: formattedPaymentMethods,
-                    orderMetaData: {
-                        checkoutReference,
-                        orderIds: createdOrderIds.join(","),
-                        buyerId,
-                    },
-                },
+        });
+
+        await Promise.all([
+            ...createdOrderIds.map((orderId) => adminDb.collection("orders").doc(orderId).update({
+                paymentProvider: "nomba",
+                nombaOrderReference: checkout.orderReference,
+                nombaCheckoutLink: checkout.checkoutLink,
+                updatedAt: FieldValue.serverTimestamp(),
+            })),
+            adminDb.collection("escrow_transactions").doc(checkoutReference).update({
+                paymentProvider: "nomba",
+                providerOrderReference: checkout.orderReference,
+                providerCheckoutLink: checkout.checkoutLink,
+                providerAccountId: escrowAccountId,
+                updatedAt: FieldValue.serverTimestamp(),
             }),
-        };
+        ]);
 
-        console.log("🔵 [CHECKOUT API] Creating Nomba Checkout Order...");
-
-        let nombaOrderRes = await fetchWithRetry(
-            `${checkoutBaseUrls[0]}/checkout/order`,
-            checkoutRequest
-        );
-
-        if (
-            !nombaOrderRes.ok &&
-            nombaOrderRes.status === 404 &&
-            checkoutBaseUrls.length > 1
-        ) {
-            console.warn("⚠️ Primary route returned 404; trying sandbox route.");
-            nombaOrderRes = await fetchWithRetry(
-                `${checkoutBaseUrls[1]}/checkout/order`,
-                checkoutRequest
-            );
-        }
-
-        if (!nombaOrderRes.ok) {
-            const errText = await nombaOrderRes.text();
-            throw new Error(`Nomba Order Creation Failed: ${nombaOrderRes.status} - ${errText}`);
-        }
-
-        const nombaData = await nombaOrderRes.json();
-
-        const checkoutLink = nombaData.data?.checkoutLink ||
-            nombaData.data?.checkoutUrl ||
-            nombaData.checkoutLink ||
-            nombaData.checkoutUrl ||
-            "";
-
-        if ((nombaData.code === "00" || nombaData.status === "success" || checkoutLink) && checkoutLink) {
-            // Nomba checkout links are signed/encrypted. Use the exact URL
-            // returned by Nomba; adding orderRef to it can invalidate the
-            // hosted checkout page. The callback already carries our ref.
-            return NextResponse.json({
-                success: true,
-                checkoutLink,
-                reference: checkoutReference,
-                orderIds: createdOrderIds,
-            });
-        } else {
-            throw new Error(nombaData.description || "Nomba Order creation failed");
-        }
+        return NextResponse.json({
+            success: true,
+            checkoutLink: checkout.checkoutLink,
+            reference: checkoutReference,
+            orderIds: createdOrderIds,
+            paymentProvider: "nomba",
+            nombaOrderReference: checkout.orderReference,
+            nombaBaseUrl: nombaBaseUrl(),
+        });
     } catch (error: any) {
-        console.error("❌ [CHECKOUT API] Fatal Error:", error.message);
+        console.error("❌ [CHECKOUT API] Fatal Error:", {
+            message: error?.message,
+            status: error?.status,
+            providerResponse: error?.responseBody,
+        });
         return NextResponse.json(
             { error: error.message || "An unexpected error occurred. Please try again." },
             { status: 500 }

@@ -49,6 +49,21 @@ function isAbortError(error: unknown) {
         || (error instanceof Error && (error.name === "AbortError" || /aborted/i.test(error.message)));
 }
 
+function addressKey(address?: ShippingAddress) {
+    if (!address) return "";
+    return [
+        address.name,
+        address.phone,
+        address.address,
+        address.city,
+        address.state,
+        address.lga,
+        address.postalCode,
+        address.latitude,
+        address.longitude,
+    ].map((value) => String(value ?? "")).join("|");
+}
+
 export default function ShippingSelector({
     selectedState,
     totalWeightKg = 1,
@@ -61,6 +76,8 @@ export default function ShippingSelector({
     const [options, setOptions] = useState<ShippingOption[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [providerMessage, setProviderMessage] = useState<string | null>(null);
+    const pickupAddressKey = addressKey(pickupAddress);
+    const destinationAddressKey = addressKey(destinationAddress);
 
     // Keep track of the latest onSelectOption reference
     const onSelectRef = useRef(onSelectOption);
@@ -79,6 +96,7 @@ export default function ShippingSelector({
 
         const fetchShippingRates = async () => {
             setLoading(true);
+            setProviderMessage(null);
             try {
                 const response = await fetch("/api/shipping/calculate", {
                     method: "POST",
@@ -105,7 +123,11 @@ export default function ShippingSelector({
                         `${provider.name || "Courier"}: ${provider.reason || "temporarily unavailable."}`
                     )
                     : [];
-                setProviderMessage(unavailable.length > 0 ? unavailable.join(" ") : null);
+                setProviderMessage(
+                    unavailable.length > 0
+                        ? unavailable.join(" ")
+                        : (typeof data.message === "string" ? data.message : null),
+                );
 
                 // Place SELF_ARRANGED_OPTION as the last option
                 const combinedOptions = [...fetchedCouriers, SELF_ARRANGED_OPTION];
@@ -137,7 +159,7 @@ export default function ShippingSelector({
             console.error("Error fetching shipping rates:", error);
         });
         return () => controller.abort();
-    }, [selectedState, totalWeightKg, pickupAddress, destinationAddress, estimatedOrderAmount]);
+    }, [selectedState, totalWeightKg, pickupAddressKey, destinationAddressKey, estimatedOrderAmount]);
 
     if (!selectedState) {
         return (

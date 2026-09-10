@@ -13,6 +13,9 @@ out/
 .env.local
 *.env.*
 
+# Safe Haven signing material (keep private keys out of source control)
+*.pem
+
 # Cache directories
 .cache/
 .nyc_output/
@@ -69,4 +72,5 @@ __pycache__/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
+*.pem
 ```

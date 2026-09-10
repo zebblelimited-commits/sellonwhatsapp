@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import {
   MapPin, Truck, CreditCard, ShieldCheck,
-  Edit3, Package, Smartphone, Building2,
+  Edit3, Package, Building2,
   Store, X, Save, Loader2, ChevronDown, PlusCircle
 } from "lucide-react";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
@@ -168,7 +168,7 @@ export default function CheckoutPage() {
           id: "default_addr",
           label: "Default Address",
           name: `${data.firstName || ""} ${data.lastName || ""}`.trim() || data.displayName || user.displayName || "",
-          phone: data.phone || data.phoneNumber || shippingAddress.phone || savedLocation.phone || "",
+          phone: data.phone || data.phoneNumber || user.phoneNumber || shippingAddress.phone || savedLocation.phone || "",
           address: [profileAddress, currentCity, currentState, data.postalCode || shippingAddress.postalCode || savedLocation.postalCode, data.country].filter(Boolean).join(", "),
           city: currentCity,
           state: currentState,
@@ -187,7 +187,7 @@ export default function CheckoutPage() {
           city: currentCity,
           state: currentState,
           postalCode: data.postalCode || "",
-          phone: data.phone || "",
+          phone: data.phone || data.phoneNumber || user.phoneNumber || "",
           latitude: profileLatitude === undefined || profileLatitude === null ? "" : String(profileLatitude),
           longitude: profileLongitude === undefined || profileLongitude === null ? "" : String(profileLongitude),
         });
@@ -391,6 +391,10 @@ export default function CheckoutPage() {
       alert("Please select a valid delivery address.");
       return;
     }
+    if (!selectedBuyerAddress.phone?.trim()) {
+      alert("Please add a valid phone number to your delivery address before checking out.");
+      return;
+    }
     if (!hasSavedCoordinates(selectedBuyerAddress)) {
       alert("Please save your delivery latitude and longitude before checking out.");
       return;
@@ -461,7 +465,10 @@ export default function CheckoutPage() {
 
       const response = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await user.getIdToken()}`,
+        },
         body: JSON.stringify(payload),
       });
 
@@ -474,9 +481,9 @@ export default function CheckoutPage() {
       if (data.success && data.checkoutLink) {
         clearCart();
         sessionStorage.removeItem("checkout_order");
-        window.location.href = data.checkoutLink;
+        window.location.assign(data.checkoutLink);
       } else {
-        throw new Error("No checkout link received from payment gateway");
+        throw new Error("No Nomba checkout link received from payment gateway");
       }
     } catch (error: any) {
       console.error("Checkout failed:", error);
@@ -800,14 +807,14 @@ export default function CheckoutPage() {
                     <CreditCard size={20} className="text-[#00a63e]" /> Payment Method
                   </h2>
                   <div className="grid grid-cols-3 gap-3">
-                    {["card", "transfer", "ussd"].map((method: string) => (
+                    {["card", "transfer"].map((method: string) => (
                       <button
                         key={method}
                         onClick={() => setPaymentMethod(method)}
                         className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1.5 transition-all ${paymentMethod === method ? "border-[#00a63e] bg-green-50/30" : "border-gray-100 hover:border-gray-200"
                           }`}
                       >
-                        {method === "card" ? <CreditCard size={20} /> : method === "transfer" ? <Building2 size={20} /> : <Smartphone size={20} />}
+                        {method === "card" ? <CreditCard size={20} /> : <Building2 size={20} />}
                         <span className="text-[10px] font-bold text-gray-700 capitalize">{method}</span>
                       </button>
                     ))}

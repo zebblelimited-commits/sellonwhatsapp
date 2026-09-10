@@ -186,7 +186,7 @@ async function settleDispute(
         vendorId,
         amount,
         status: "pending_provider_refund",
-        providerReference: order.nombaReference || order.orderId || orderId,
+        providerReference: order.paymentReference || order.providerReference || order.nombaReference || order.orderId || orderId,
         requestedBy: adminId,
         requestedByEmail: adminEmail,
         createdAt: now,

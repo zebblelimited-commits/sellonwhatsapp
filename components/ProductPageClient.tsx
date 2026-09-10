@@ -14,6 +14,12 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useRouter } from "next/navigation";
 
+declare global {
+  interface Window {
+    SafeHavenCheckout?: (config: Record<string, unknown>) => unknown;
+  }
+}
+
 const font = Plus_Jakarta_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"]
@@ -111,6 +117,10 @@ export default function ProductPageClient({ product, store }: { product: any; st
       setModalError("Please provide a valid contact email address.");
       return;
     }
+    if (!customerPhone.trim()) {
+      setModalError("Please provide a valid phone number for payment.");
+      return;
+    }
     if (isBooking && (!selectedDate || !selectedSlot)) {
       setModalError("Please select a booking date and time.");
       return;
@@ -145,7 +155,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
           address: {
             fullName: customerName.trim() || buyer.displayName || "Customer",
             email: customerEmail.trim(),
-            phone: customerPhone.trim() || "N/A",
+            phone: customerPhone.trim(),
             street: isBooking ? `Booking: ${selectedDate} ${selectedSlot}` : "Digital Delivery / Service",
             city: "N/A",
             state: isBooking ? "Booking" : "Digital Service",
@@ -180,10 +190,11 @@ export default function ProductPageClient({ product, store }: { product: any; st
         throw new Error(data.error || "Failed to initiate payment");
       }
 
-      if (data.checkoutLink) {
-        window.location.href = data.checkoutLink;
+      if (data.checkoutConfig) {
+        if (!window.SafeHavenCheckout) throw new Error("Safe Haven Checkout is still loading. Please try again.");
+        window.SafeHavenCheckout(data.checkoutConfig);
       } else {
-        throw new Error("Payment gateway checkout link not returned.");
+        throw new Error("Safe Haven checkout configuration not returned.");
       }
     } catch (err: any) {
       setModalError(err.message || "An error occurred while initiating payment.");

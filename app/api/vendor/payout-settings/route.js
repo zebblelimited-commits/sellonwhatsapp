@@ -1,54 +1,61 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/firebase"; 
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { lookupNombaBankAccount } from "@/lib/payments/nomba/client";
 
-export async function GET(req) { // Note: ': Request' is removed
+async function authenticatedUser(request) {
+  const header = request.headers.get("authorization");
+  if (!header?.startsWith("Bearer ")) throw new Error("Unauthorized");
+  return adminAuth.verifyIdToken(header.slice("Bearer ".length).trim());
+}
+
+export async function GET(request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const storeId = searchParams.get("storeId");
-
-    if (!storeId) {
-      return NextResponse.json({ error: "Store ID required" }, { status: 400 });
-    }
-
-    const storeRef = doc(db, "stores", storeId);
-    const storeSnap = await getDoc(storeRef);
-
-    if (!storeSnap.exists()) {
-      return NextResponse.json({ error: "Store not found" }, { status: 404 });
-    }
-
-    const data = storeSnap.data();
-    const activeDetails = data.pendingPayoutDetails || data;
-
+    const user = await authenticatedUser(request);
+    const storeId = new URL(request.url).searchParams.get("storeId");
+    if (!storeId || storeId !== user.uid) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const snapshot = await adminDb.collection("stores").doc(storeId).get();
+    if (!snapshot.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
+    const data = snapshot.data() || {};
+    const details = data.payoutSettings || data.pendingPayoutDetails || {};
     return NextResponse.json({
-      bankName: activeDetails.bankName || "Not Set",
-      accountNumber: activeDetails.accountNumber || "----------",
-      accountName: activeDetails.accountName || "No Account Name",
-      bankCode: activeDetails.bankCode || "",
-      status: data.payoutStatus || "UNCONFIGURED",
+      bankName: details.bankName || "Not Set",
+      accountNumber: details.accountNumber || "----------",
+      accountName: details.accountName || "No Account Name",
+      bankCode: details.bankCode || "",
+      status: data.payoutAccountVerificationStatus || details.status || data.payoutStatus || "UNCONFIGURED",
     });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error && error.message === "Unauthorized" ? "Unauthorized" : "Failed to load payout settings" }, { status: 401 });
   }
 }
 
-export async function POST(req) { // Note: ': Request' is removed
+export async function POST(request) {
   try {
-    const body = await req.json();
-    const { storeId, bankName, bankCode, accountNumber, accountName } = body;
+    const user = await authenticatedUser(request);
+    const body = await request.json();
+    const storeId = typeof body?.storeId === "string" ? body.storeId.trim() : "";
+    const bankCode = typeof body?.bankCode === "string" ? body.bankCode.trim() : "";
+    const accountNumber = typeof body?.accountNumber === "string" ? body.accountNumber.replace(/\D/g, "") : "";
+    if (!storeId || storeId !== user.uid) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!bankCode || !/^\d{10}$/.test(accountNumber)) return NextResponse.json({ error: "A valid bank and 10-digit account number are required" }, { status: 400 });
 
-    if (!storeId) return NextResponse.json({ error: "Store ID missing" }, { status: 400 });
-
-    const storeRef = doc(db, "stores", storeId);
-    await updateDoc(storeRef, {
-      pendingPayoutDetails: { bankName, bankCode, accountNumber, accountName },
+    const verified = await lookupNombaBankAccount(bankCode, accountNumber);
+    await adminDb.collection("stores").doc(storeId).update({
+      pendingPayoutDetails: {
+        bankName: typeof body.bankName === "string" ? body.bankName : "",
+        bankCode,
+        accountNumber: verified.accountNumber,
+        accountName: verified.accountName,
+        verificationSessionId: verified.sessionId,
+        submittedAt: new Date(),
+      },
       payoutStatus: "PENDING_REVIEW",
-      lastModified: serverTimestamp(),
+      payoutAccountVerificationStatus: "PENDING_REVIEW",
+      updatedAt: new Date(),
     });
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, accountName: verified.accountName, accountNumber: verified.accountNumber });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Failed to save payout settings";
+    return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 400 });
   }
 }

@@ -5,6 +5,8 @@ import { Novu } from "@novu/node";
 import { inventoryAdjustment } from "@/lib/inventory";
 import { notifyOrderPaymentConfirmed, notifyOrderStatus, notifyPayoutCompleted } from "@/lib/novu-events";
 import { sendSubscriptionConfirmationEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/events";
+import { isNombaWebhookSignatureValid, verifyNombaTransaction, initiateNombaBankTransfer } from "@/lib/payments/nomba/client";
+import { dispatchShipmentForOrder } from "@/lib/shipping-dispatch";
 
 // ✅ 1. SAFELY Initialize Novu
 const novuApiKey = process.env.NOVU_API_KEY || process.env.NOVU_SECRET_KEY;
@@ -19,13 +21,69 @@ async function triggerNovuNotification(userId: string, title: string, body: stri
     return;
   }
   try {
-    await novu.trigger(novuWorkflowId, {
-      to: { subscriberId: userId },
-      payload: { title, body, actionUrl, actionLabel, priority }
-    });
+    await Promise.race([
+      novu.trigger(novuWorkflowId, {
+        to: { subscriberId: userId },
+        payload: { title, body, actionUrl, actionLabel, priority }
+      }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("notification provider timeout")), 5_000)),
+    ]);
     console.log(`✅ [NOVU] Triggered notification for ${userId}`);
   } catch (novuErr) {
-    console.error("❌ [NOVU] Failed to trigger:", novuErr);
+    const message = novuErr instanceof Error ? novuErr.message : "request failed";
+    console.warn(`[NOVU] Notification skipped: ${message}`);
+  }
+}
+
+async function settleCourierPayout(orderId: string, order: FirebaseFirestore.DocumentData) {
+  const amount = Number(order.shippingCost || 0);
+  if (!Number.isFinite(amount) || amount <= 0 || order.deliveryMode === "self_arranged") return;
+  if (["submitted", "processing", "completed"].includes(String(order.courierPayoutStatus || "").toLowerCase())) return;
+
+  const courierId = String(order.courierId || order.shippingMethod || "").trim();
+  const courierSnap = courierId ? await adminDb.collection("couriers").doc(courierId).get() : null;
+  const courier = courierSnap?.data() || {};
+  const payout = courier.payoutSettings || courier.bankDetails || courier;
+  const bankCode = String(payout.bankCode || "").trim();
+  const accountNumber = String(payout.accountNumber || "").replace(/\D/g, "");
+
+  if (!bankCode || !/^\d{10}$/.test(accountNumber)) {
+    await adminDb.collection("orders").doc(orderId).update({
+      courierPayoutStatus: "pending_configuration",
+      courierPayoutAmount: amount,
+      courierPayoutError: "Courier payout bank details are not configured",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    console.warn(`[COURIER PAYOUT] ${orderId} is awaiting payout settings for ${courierId || "courier"}`);
+    return;
+  }
+
+  const reference = `COURIER_${orderId}`.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 50);
+  try {
+    const transfer = await initiateNombaBankTransfer({
+      destinationBankCode: bankCode,
+      accountNumber,
+      accountName: String(payout.accountName || "").trim() || undefined,
+      amount,
+      narration: `Courier settlement for ${orderId}`,
+      reference,
+    });
+    await adminDb.collection("orders").doc(orderId).update({
+      courierPayoutStatus: transfer.providerStatus === "SUCCESS" ? "completed" : "processing",
+      courierPayoutReference: transfer.transferRef,
+      courierPayoutAmount: amount,
+      courierPayoutResponse: transfer.rawResponse || null,
+      courierPayoutAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (error) {
+    await adminDb.collection("orders").doc(orderId).update({
+      courierPayoutStatus: "failed",
+      courierPayoutAmount: amount,
+      courierPayoutError: error instanceof Error ? error.message : "Courier payout failed",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    console.error(`[COURIER PAYOUT] ${orderId} failed`, error);
   }
 }
 
@@ -47,7 +105,6 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
-    console.log("🔥 [WEBHOOK HIT] Raw Body:", rawBody);
 
     let payload;
     try {
@@ -56,15 +113,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
 
+    const webhookSecret = process.env.NOMBA_WEBHOOK_SECRET?.trim();
+    const signature = request.headers.get("nomba-signature") || request.headers.get("nomba-sig-value");
+    const timestamp = request.headers.get("nomba-timestamp") || "";
+    if (webhookSecret) {
+      if (!signature || !timestamp || !isNombaWebhookSignatureValid(payload, timestamp, signature, webhookSecret)) {
+        console.error("[NOMBA WEBHOOK] Signature verification failed");
+        return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
+      }
+    } else if (process.env.NODE_ENV === "production") {
+      console.error("[NOMBA WEBHOOK] NOMBA_WEBHOOK_SECRET is required in production");
+      return NextResponse.json({ error: "Webhook is not configured" }, { status: 503 });
+    }
+
     const eventType = String(payload?.event_type || "").toUpperCase();
     const transaction = payload?.data?.transaction || payload?.transaction || {};
-    const orderRef =
-      payload?.data?.order?.orderReference ||
-      payload?.order?.orderReference ||
-      transaction?.merchantTxRef ||
-      payload?.data?.reference ||
-      payload?.reference ||
-      payload?.orderReference;
+    const orderReferences = Array.from(new Set([
+      payload?.data?.order?.orderReference,
+      payload?.order?.orderReference,
+      transaction?.merchantTxRef,
+      payload?.data?.reference,
+      payload?.reference,
+      payload?.orderReference,
+    ].filter((value): value is string => typeof value === "string" && value.trim().length > 0)));
+    const orderRef = orderReferences[0] || "";
 
     let rawStatus =
       payload?.data?.order?.status ||
@@ -100,12 +172,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 });
     }
 
-    const isBoost = orderRef.startsWith("ZEBBLE_BST_");
-    const isPayout = orderRef.startsWith("PAYOUT_");
-    const metadata = payload?.data?.order?.orderMetaData || payload?.data?.metadata || payload?.metadata;
+    const routingReference = orderReferences.find((reference) => /^(ZEBBLE_BST_|PAYOUT_|SELLER_|PARTNER_|SUB_)/.test(reference)) || orderRef;
+    const isBoost = orderReferences.some((reference) => reference.startsWith("ZEBBLE_BST_"));
+    const isPayout = orderReferences.some((reference) => reference.startsWith("PAYOUT_") || reference.startsWith("SELLER_"));
+    const metadata = payload?.data?.order?.orderMetaData || payload?.data?.order?.metaData || payload?.data?.metadata || payload?.metadata;
 
-    const isPartner = orderRef.startsWith("PARTNER_") || metadata?.type === "partner_subscription";
-    const isSubscription = orderRef.startsWith("SUB_");
+    const isPartner = orderReferences.some((reference) => reference.startsWith("PARTNER_")) || metadata?.type === "partner_subscription";
+    const isSubscription = orderReferences.some((reference) => reference.startsWith("SUB_"));
 
     let collectionName = "orders";
     // ✅ FIX 1: Use DocumentSnapshot[] to prevent QueryDocumentSnapshot type mismatch
@@ -114,36 +187,96 @@ export async function POST(request: NextRequest) {
 
     // ✅ MULTI-SELLER DOCUMENT LOOKUP
     if (isPartner) {
-      storeIdForPartner = metadata?.storeId || orderRef.split("_")[1];
+      storeIdForPartner = metadata?.storeId || routingReference.split("_")[1];
       collectionName = "stores";
       const singleSnap = await adminDb.collection(collectionName).doc(storeIdForPartner).get();
       if (singleSnap.exists) docSnaps = [singleSnap];
     } else if (isPayout) {
       collectionName = "payouts";
-      const singleSnap = await adminDb.collection(collectionName).doc(orderRef).get();
+      const singleSnap = await adminDb.collection(collectionName).doc(routingReference).get();
       if (singleSnap.exists) docSnaps = [singleSnap];
     } else {
       collectionName = isBoost ? "boosts" : isSubscription ? "subscriptions" : "orders";
 
       if (collectionName === "orders") {
         // Query by checkoutReference field for multi-seller checkouts
-        const querySnap = await adminDb.collection(collectionName).where("checkoutReference", "==", orderRef).get();
-        if (!querySnap.empty) {
-          docSnaps = querySnap.docs;
-        } else {
-          // Fallback to document ID for legacy single-seller orders
-          const singleSnap = await adminDb.collection(collectionName).doc(orderRef).get();
-          if (singleSnap.exists) docSnaps = [singleSnap];
+        for (const reference of orderReferences) {
+          const querySnap = await adminDb.collection(collectionName).where("checkoutReference", "==", reference).get();
+          if (!querySnap.empty) {
+            docSnaps = querySnap.docs;
+            break;
+          }
+          const singleSnap = await adminDb.collection(collectionName).doc(reference).get();
+          if (singleSnap.exists) {
+            docSnaps = [singleSnap];
+            break;
+          }
         }
       } else {
-        const singleSnap = await adminDb.collection(collectionName).doc(orderRef).get();
-        if (singleSnap.exists) docSnaps = [singleSnap];
+        for (const reference of orderReferences) {
+          const singleSnap = await adminDb.collection(collectionName).doc(reference).get();
+          if (singleSnap.exists) {
+            docSnaps = [singleSnap];
+            break;
+          }
+        }
       }
     }
 
     if (docSnaps.length === 0) {
       console.error(`[WEBHOOK] Document not found for ${orderRef}`);
       return NextResponse.json({ received: true }, { status: 200 });
+    }
+
+    const ledgerReference = collectionName === "orders"
+      ? String(docSnaps[0].data()?.checkoutReference || "").trim()
+      : "";
+    const escrowRef = ledgerReference ? adminDb.collection("escrow_transactions").doc(ledgerReference) : null;
+    const escrowSnap = escrowRef ? await escrowRef.get() : null;
+    let verifiedPaymentAmount = Number(transaction?.transactionAmount || transaction?.amount || payload?.data?.order?.amount || 0);
+
+    if (eventType === "PAYMENT_SUCCESS" && collectionName === "orders" && !escrowSnap?.exists) {
+      console.error(`[NOMBA WEBHOOK] No escrow ledger exists for ${ledgerReference || orderRef}`);
+      return NextResponse.json({ received: false, retryable: true }, { status: 409 });
+    }
+
+    const requiresPaymentVerification = !isPayout && (eventType === "PAYMENT_SUCCESS" || isBoost || isSubscription);
+    if (requiresPaymentVerification) {
+      const verificationReferences = [
+        providerReference,
+        ...orderReferences,
+      ].filter((value, index, values): value is string => typeof value === "string" && value.length > 0 && values.indexOf(value) === index);
+      let verified = false;
+      for (const reference of verificationReferences) {
+        const verification = await verifyNombaTransaction(reference);
+        if (verification.confirmed) {
+          verified = true;
+          if (Number.isFinite(verification.amount) && Number(verification.amount) > 0) verifiedPaymentAmount = Number(verification.amount);
+          break;
+        }
+      }
+      if (!verified) {
+        console.warn(`[NOMBA WEBHOOK] Payment ${orderRef} is not verifiable yet; asking Nomba to retry`);
+        return NextResponse.json({ received: false, retryable: true }, { status: 202 });
+      }
+    }
+
+    if (eventType === "PAYMENT_SUCCESS" && collectionName === "orders" && escrowSnap?.exists) {
+      const expectedAmount = Number(escrowSnap.data()?.amount || 0);
+      if (!Number.isFinite(expectedAmount) || expectedAmount <= 0 || !Number.isFinite(verifiedPaymentAmount) || verifiedPaymentAmount < expectedAmount) {
+        console.error(`[NOMBA WEBHOOK] Payment amount does not cover escrow ${ledgerReference}: ${verifiedPaymentAmount}/${expectedAmount}`);
+        return NextResponse.json({ received: false, retryable: true }, { status: 202 });
+      }
+    }
+
+    if (eventType === "PAYMENT_SUCCESS" && collectionName === "orders" && escrowRef && escrowSnap?.exists) {
+      await escrowRef.set({
+        status: "FUNDED",
+        fundedAmount: verifiedPaymentAmount,
+        providerReference: String(providerReference || ledgerReference),
+        paidAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
     }
 
     // ==========================================
@@ -169,6 +302,14 @@ export async function POST(request: NextRequest) {
               completedAt: admin.firestore.FieldValue.serverTimestamp(),
               updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
+            if (typeof payoutData.orderId === "string" && payoutData.orderId) {
+              transaction.update(adminDb.collection("orders").doc(payoutData.orderId), {
+                sellerPayoutStatus: "completed",
+                sellerPayoutProviderReference: providerReference,
+                sellerPayoutCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+            }
 
             transaction.set(adminDb.collection("auditLogs").doc(), {
               action: "payout_provider_completed",
@@ -338,6 +479,8 @@ export async function POST(request: NextRequest) {
             console.log(`✅ [ESCROW] Order ${orderRef} ${holdResult.transitioned ? `reserved ₦${holdResult.amount}` : "was already reserved"}.`);
             if (holdResult.transitioned) {
               await notifyOrderPaymentConfirmed({ id: docSnap.id, ...localData });
+              await settleCourierPayout(docSnap.id, { ...localData, ...holdResult });
+              await dispatchShipmentForOrder(docSnap.id);
             }
           } else {
             // Calculate plan expiration
@@ -351,13 +494,43 @@ export async function POST(request: NextRequest) {
               expiryDate.setDate(expiryDate.getDate() + activeDuration);
             }
 
-            // 1️⃣ Update the Subscription Document
-            await documentRef.update({
-              status: newStatus,
-              startDate: new Date().toISOString(),
-              expiryDate: expiryDate.toISOString(),
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
+            // Boost activation must be idempotent because Nomba can retry a
+            // webhook. Only the first verified success may activate it or
+            // trigger the downstream email/notification side effects.
+            if (collectionName === "boosts") {
+              const activation = await adminDb.runTransaction(async (transaction) => {
+                const boostSnap = await transaction.get(documentRef);
+                const boost = boostSnap.data() || {};
+                const currentStatus = String(boost.status || "").toLowerCase();
+                if (!boostSnap.exists || ["active", "failed", "cancelled", "refunded"].includes(currentStatus)) {
+                  return { transitioned: false };
+                }
+
+                transaction.update(documentRef, {
+                  status: newStatus,
+                  paymentStatus: "paid",
+                  providerReference,
+                  providerStatus: gatewayStatus,
+                  startDate: new Date().toISOString(),
+                  expiryDate: expiryDate.toISOString(),
+                  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                return { transitioned: true };
+              });
+
+              if (!activation.transitioned) {
+                console.log(`ℹ️ [WEBHOOK] Boost ${orderRef} was already finalized; skipping duplicate side effects.`);
+                continue;
+              }
+            } else {
+              // 1️⃣ Update the Subscription Document
+              await documentRef.update({
+                status: newStatus,
+                startDate: new Date().toISOString(),
+                expiryDate: expiryDate.toISOString(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+            }
 
             // 2️⃣ ✅ CRITICAL FIX: Sync Subscription state to Store and User documents
             if (collectionName === "subscriptions" && targetUserId) {
@@ -456,6 +629,13 @@ export async function POST(request: NextRequest) {
               refundedAt: admin.firestore.FieldValue.serverTimestamp(),
               updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
+            if (typeof payoutData.orderId === "string" && payoutData.orderId) {
+              transaction.update(adminDb.collection("orders").doc(payoutData.orderId), {
+                sellerPayoutStatus: "failed",
+                sellerPayoutError: `Provider reported ${gatewayStatus.toLowerCase()}`,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+            }
             return { refunded: true, alreadyFinal: false };
           });
 

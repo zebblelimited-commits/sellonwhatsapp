@@ -2,11 +2,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
-import { Novu } from "@novu/node";
 import { sendSubscriptionConfirmationEmail } from "@/lib/email/events";
+import { verifyNombaTransaction } from "@/lib/payments/nomba/client";
 
-// ✅ Initialize Novu (Make sure you have NOVU_SECRET_KEY in your .env)
-const novu = new Novu(process.env.NOVU_SECRET_KEY!);
+async function triggerNovuNotification(userId: string, payload: Record<string, string>) {
+  const apiKey = process.env.NOVU_SECRET_KEY?.trim();
+  const workflowId = process.env.NOVU_WORKFLOW_SUBSCRIPTION?.trim()
+    || process.env.NOVU_WORKFLOW_ID?.trim()
+    || "webhook-notification";
+  if (!apiKey) return;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+  try {
+    const response = await fetch("https://api.novu.co/v1/events/trigger", {
+      method: "POST",
+      headers: {
+        Authorization: `ApiKey ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: workflowId,
+        to: { subscriberId: userId },
+        payload,
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      console.warn(`[NOVU] Subscription notification returned HTTP ${response.status}.`);
+      return;
+    }
+    console.log(`✅ [NOVU] Triggered subscription notification for ${userId}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "request failed";
+    console.warn(`[NOVU] Subscription notification skipped: ${message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export async function GET(
   request: NextRequest,
@@ -48,8 +81,9 @@ export async function GET(
 
       let verifiedData = null;
 
-      // Automated fallbacks for Mock environment or local debug tests
-      if (reference.startsWith("mock-") || reference.includes("test") || reference.startsWith("SUB_")) {
+      // Only allow the local mock path when it has been explicitly enabled.
+      // A real SUB_ reference must always be verified with Nomba.
+      if (process.env.NODE_ENV === "development" && process.env.MOCK_NOMBA === "true" && reference.startsWith("SUB_")) {
         let extractedUserId = "test-user-id";
         const parts = reference.split("_");
         if (parts.length >= 4) {
@@ -71,49 +105,25 @@ export async function GET(
           productLimit: isMaxTier ? 999999 : (isProLite ? 500 : 20)
         };
       } else {
-        // 🔑 Target Nomba's Checkout receipt checking verification API via POST
-        const isSandbox = process.env.NEXT_PUBLIC_ENVIRONMENT === "sandbox";
-        const nombaUrl = isSandbox
-          ? "https://sandbox.nomba.com/v1/checkout/confirm-transaction-receipt"
-          : "https://api.nomba.com/v1/checkout/confirm-transaction-receipt";
+        const verification = await verifyNombaTransaction(reference);
+        if (verification.confirmed && subscriptionRecord?.userId) {
+          const isMaxTier = subscriptionRecord.planId === "pro_yearly_business_max"
+            || subscriptionRecord.planId === "pro_max"
+            || reference.includes("PRO_MAX")
+            || reference.includes("BUSINESS_MAX");
+          const isProLite = subscriptionRecord.planId === "pro_business_lite"
+            || subscriptionRecord.planId === "pro_lite"
+            || reference.includes("PRO_LITE");
 
-        const token = process.env.NOMBA_CLIENT_KEY || process.env.NOMBA_SECRET_KEY;
-        const accountId = process.env.NOMBA_ACCOUNT_ID;
-
-        try {
-          const nombaRes = await fetch(nombaUrl, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${token}`,
-              "accountId": accountId || "",
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ orderReference: reference })
-          });
-
-          if (nombaRes.ok) {
-            const nombaData = await nombaRes.json();
-            const tx = nombaData?.data || {};
-
-            // Nomba returns 'SUCCESS', 'SUCCESSFUL', or response code '00' on valid transactions
-            if (tx.status === "SUCCESS" || tx.status === "SUCCESSFUL" || nombaData.code === "00") {
-              const metadata = tx.metadata || {};
-              const isMaxTier = reference.includes("PRO_MAX") || reference.includes("BUSINESS_MAX") || metadata.planId === "pro_yearly_business_max";
-              const isProLite = reference.includes("PRO_LITE") || metadata.planId === "pro_business_lite";
-
-              verifiedData = {
-                status: "active",
-                userId: metadata.userId || subscriptionRecord?.userId,
-                planId: isMaxTier ? "pro_yearly_business_max" : (isProLite ? "pro_business_lite" : "pro"),
-                planName: isMaxTier ? "Pro Yearly Business Max Plan" : (isProLite ? "Pro Business Lite Plan" : (metadata.planName || "Pro Plan")),
-                durationMonths: isMaxTier ? 12 : Number(metadata.months || 1),
-                finalPrice: tx.amount || 0,
-                productLimit: isMaxTier ? 999999 : (isProLite ? 500 : 20)
-              };
-            }
-          }
-        } catch (fetchErr) {
-          console.error("⚠️ Failed to verify with Nomba API endpoint:", fetchErr);
+          verifiedData = {
+            status: "active",
+            userId: subscriptionRecord.userId,
+            planId: isMaxTier ? "pro_yearly_business_max" : (isProLite ? "pro_business_lite" : String(subscriptionRecord.planId || "pro")),
+            planName: isMaxTier ? "Pro Yearly Business Max Plan" : (isProLite ? "Pro Business Lite Plan" : String(subscriptionRecord.planName || "Pro Plan")),
+            durationMonths: Number(subscriptionRecord.durationMonths || (isMaxTier ? 12 : 1)),
+            finalPrice: verification.amount || Number(subscriptionRecord.finalPrice || 0),
+            productLimit: isMaxTier ? 999999 : (isProLite ? 500 : 20),
+          };
         }
       }
 
@@ -216,16 +226,9 @@ export async function GET(
           console.error("❌ Failed to write notification to Firestore:", notifErr);
         }
 
-        // 2️⃣ TRIGGER NOVU (Powers your Bell Icon)
-        try {
-          await novu.trigger('webhook-notification', {
-            to: { subscriberId: targetUserId },
-            payload: notifConfig
-          });
-          console.log(`✅ [NOVU] Triggered subscription notification for ${targetUserId}`);
-        } catch (novuErr) {
-          console.error("❌ [NOVU] Failed to trigger:", novuErr);
-        }
+        // 2️⃣ Trigger Novu without allowing an unavailable notification
+        // provider to block the subscription status response.
+        await triggerNovuNotification(targetUserId, notifConfig);
 
         subscriptionRecord = updatedSubPayload;
       }

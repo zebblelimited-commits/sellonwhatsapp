@@ -37,6 +37,71 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 # sellonwhatsapp
 # sellonwhatsapp
 
+## Nomba checkout and escrow configuration
+
+The cart checkout uses Nomba Checkout for card and bank-transfer payments. The
+payment is directed to the configured Nomba escrow sub-account, while Firestore
+stores the application escrow ledger and settlement state.
+
+```text
+NOMBA_BASE_URL=https://sandbox.nomba.com # use https://api.nomba.com in production
+NOMBA_CLIENT_ID=...
+NOMBA_CLIENT_SECRET=...
+NOMBA_ACCOUNT_ID=...                 # parent account used for API authentication
+NOMBA_ESCROW_ACCOUNT_ID=...          # Nomba sub-account receiving checkout funds
+NOMBA_PAYOUT_ACCOUNT_ID=...           # optional; source sub-account for bank payouts
+NOMBA_SENDER_NAME=SellOnWhatsApp
+NOMBA_WEBHOOK_SECRET=...              # Developer > Webhook Setup signature key
+CRON_SECRET=...                       # Vercel Cron bearer secret
+ESCROW_CRON_SECRET=...                # optional local alias for the escrow cron
+NEXT_PUBLIC_APP_URL=https://your-domain.example
+# Optional: maximum wait for each live courier quote (default: 8000 ms)
+SHIPPING_PROVIDER_TIMEOUT_MS=8000
+```
+
+`NOMBA_ESCROW_ACCOUNT_ID` is the sub-account created in the Nomba dashboard.
+The checkout route passes it as `order.accountId` only when it is configured;
+otherwise Nomba uses the authenticated parent account. The parent account is
+not a separate escrow balance. Seller and courier bank payouts from a
+sub-account require Nomba to enable sub-account transfers for the account.
+
+Configure Nomba webhook events `payment_success`, `payment_failed`,
+`payment_reversal`, `payout_success`, `payout_failed`, and `payout_refund` to
+point to `/api/webhooks/nomba`. The webhook is signature-checked and successful
+payments are verified against Nomba before the Firestore ledger is funded.
+
+For courier settlement, add `bankCode`, `accountNumber`, and `accountName` to
+the courier document’s `payoutSettings` (or `bankDetails`). If those details
+are absent, the order is recorded as `pending_configuration` and is not paid
+out silently.
+
+## Meta WhatsApp webhook configuration
+
+The Meta/WhatsApp webhook endpoint is:
+
+```text
+https://<your-production-domain>/api/webhooks/whatsapp
+```
+
+Set these server-only environment variables in `.env.local` and in the
+production deployment:
+
+```text
+META_WHATSAPP_VERIFY_TOKEN=<long-random-string-you-choose>
+META_WHATSAPP_APP_SECRET=<Meta-app-secret>
+```
+
+In Meta Business Manager, use the endpoint above as the **Callback URL** and
+the exact value of `META_WHATSAPP_VERIFY_TOKEN` as the **Verify token**. The
+route handles Meta's GET verification challenge and POST deliveries, verifies
+`X-Hub-Signature-256`, and stores raw events in `whatsapp_webhook_events` plus
+normalized messages and status updates in `whatsapp_messages` and
+`whatsapp_message_statuses`.
+
+Leave **Attach a client certificate to Webhook requests** disabled unless you
+have separately configured mutual TLS at your hosting provider. A normal HTTPS
+deployment with the app-secret signature check is sufficient for this route.
+
 
 
 rules_version = '2';
@@ -522,6 +587,3 @@ service cloud.firestore {
     }
   }
 }
-
-
-

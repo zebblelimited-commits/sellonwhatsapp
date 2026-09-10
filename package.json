@@ -14,6 +14,7 @@
     "@novu/api": "^3.19.0",
     "@novu/node": "^2.6.6",
     "@novu/react": "^3.16.0",
+    "@prisma/client": "^7.10.0",
     "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.1.0",
     "@remixicon/react": "^4.9.0",
@@ -25,6 +26,7 @@
     "framer-motion": "^12.38.0",
     "html5-qrcode": "^2.3.8",
     "jose": "^6.2.3",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.8.0",
     "next": "16.2.4",
     "qr-code-styling": "^1.9.2",
@@ -36,11 +38,13 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "prisma": "^7.10.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

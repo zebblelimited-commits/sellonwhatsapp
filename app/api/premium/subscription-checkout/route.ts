@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as admin from "firebase-admin";
 import { getAuth } from "firebase-admin/auth";
+import { createNombaCheckoutOrder } from "@/lib/payments/nomba/client";
 
 // ✅ Initialize Firebase Admin (if not already initialized)
 if (!admin.apps.length) {
@@ -158,82 +159,35 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ✅ Nomba 2-step auth flow
-    const BASE_URL = `${process.env.NOMBA_SANDBOX_URL}/v1`;
-
-    // Step 1: Get access token
-    const authRes = await fetch(`${BASE_URL}/auth/token/issue`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "accountId": process.env.NOMBA_ACCOUNT_ID!
+    const checkout = await createNombaCheckoutOrder({
+      orderReference,
+      amount: Number(chargeAmount).toFixed(2),
+      currency: "NGN",
+      callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/payment/subscription-success?reference=${encodeURIComponent(orderReference)}`,
+      customerEmail: userEmail || decoded.email || "",
+      customerId: userId,
+      allowedPaymentMethods: ["Card", "Transfer"],
+      orderMetaData: {
+        userId: String(userId),
+        planId: String(planId),
+        planName: String(plan.name),
+        durationMonths: String(durationMonths),
+        durationLabel: String(durationLabel),
+        monthlyPrice: String(plan.monthlyPrice),
+        actualAmount: String(chargeAmount),
+        originalAmount: String(plan.monthlyPrice * durationMonths),
+        savingsAmount: String(totalSavings),
+        discount: String(discount || 0),
+        discountPercentage: String(Math.round((discount || 0) * 100)),
+        autoRenew: String(autoRenew),
+        interval: String(plan.interval),
+        returnUrl: String(returnUrl || process.env.NEXT_PUBLIC_APP_URL || ""),
+        isSubscription: "true",
+        ...Object.fromEntries(Object.entries(clientMetadata).map(([key, value]) => [key, String(value)])),
       },
-      body: JSON.stringify({
-        grant_type: "client_credentials",
-        client_id: process.env.NOMBA_CLIENT_ID,
-        client_secret: process.env.NOMBA_CLIENT_SECRET,
-      }),
     });
 
-    if (!authRes.ok) {
-      const authErr = await authRes.text();
-      console.error('Nomba Auth Error:', authErr);
-      throw new Error(`Nomba Auth Failed: ${authErr}`);
-    }
-
-    const authData = await authRes.json();
-    const token = authData.data?.access_token;
-    if (!token) throw new Error("No access token returned from Nomba");
-
-    // Step 2: Create checkout order with CORRECT amount
-    const orderRes = await fetch(`${BASE_URL}/checkout/order`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "accountId": process.env.NOMBA_ACCOUNT_ID!,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        order: {
-          orderReference,
-          amount: chargeAmount.toFixed(2),  // ✅ Use the calculated amount!
-          currency: "NGN",
-          callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/payment/subscription-success?reference=${orderReference}`,
-          customerEmail: userEmail || decoded.email,
-          description: `${plan.name} - ${durationLabel}${autoRenew ? ' (Auto-renew)' : ''}`,
-          allowedPaymentMethods: ["Card", "Transfer"],
-          metaData: {
-            userId,
-            planId,
-            planName: plan.name,
-            durationMonths,
-            durationLabel,
-            monthlyPrice: plan.monthlyPrice,
-            actualAmount: chargeAmount,
-            originalAmount: plan.monthlyPrice * durationMonths,
-            savingsAmount: totalSavings,
-            discount: discount || 0,
-            discountPercentage: Math.round((discount || 0) * 100),
-            autoRenew,
-            interval: plan.interval,
-            returnUrl: returnUrl || process.env.NEXT_PUBLIC_APP_URL,
-            // ✅ Pass all metadata through for webhook processing
-            isSubscription: true,
-            ...clientMetadata
-          }
-        }
-      }),
-    });
-
-    const orderData = await orderRes.json();
-
-    if (orderData.code !== "00" && orderData.status !== "success") {
-      console.error('Nomba Order Error:', orderData);
-      throw new Error(orderData.description || "Failed to create Nomba checkout order");
-    }
-
-    const checkoutLink = orderData.data?.checkoutLink;
-    if (!checkoutLink) throw new Error("No checkout link returned from Nomba");
+    const checkoutLink = checkout.checkoutLink;
 
     // ✅ Create pending subscription record with full duration info
     await adminDb.collection("subscriptions").add({

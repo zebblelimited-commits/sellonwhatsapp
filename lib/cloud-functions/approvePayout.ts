@@ -1,5 +1,6 @@
 import { adminDb } from "../firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { NombaProvider } from "@/lib/payments/nomba/client";
 
 export interface PayoutApprovalResult {
     success: boolean;
@@ -43,32 +44,70 @@ export async function approvePayout(
             };
         }
 
-        // Update payout with approval details
+        const amount = Number(payoutData.netAmount ?? payoutData.amount ?? 0);
+        const bankCode = String(payoutData.bankCode || "").trim();
+        const accountNumber = String(payoutData.accountNumber || "").trim();
+        if (!Number.isFinite(amount) || amount <= 0 || !bankCode || !accountNumber) {
+            return { success: false, message: "Payout is missing a valid amount or destination account", error: "INVALID_PAYOUT_DATA" };
+        }
+
+        // Lock the request before calling the provider. Nomba transfers
+        // are asynchronous, so this function deliberately does not mark the
+        // payout completed or increase vendor totals until a provider status
+        // webhook confirms the debit.
         await payoutRef.update({
-            status: "approved",
+            status: "processing",
             approvedBy: adminId,
             approvedByEmail: adminEmail,
             approvedAt: FieldValue.serverTimestamp(),
-            processedAt: FieldValue.serverTimestamp(),
+            gatewayAttemptedAt: FieldValue.serverTimestamp(),
+            paymentProvider: "nomba",
             updatedAt: FieldValue.serverTimestamp(),
         });
 
-        // Update vendor's payout history
-        const vendorRef = adminDb.collection("vendors").doc(payoutData.vendorId);
-        await vendorRef.update({
-            totalPayouts: FieldValue.increment(1),
-            totalPaidOut: FieldValue.increment(payoutData.amount || 0),
-            lastPayoutDate: FieldValue.serverTimestamp(),
+        let transfer;
+        try {
+            transfer = await new NombaProvider().initiatePayout({
+                destinationBankCode: bankCode,
+                accountNumber,
+                amount,
+                narration: "SellOnWhatsApp seller payout",
+                reference: payoutId,
+            });
+        } catch (providerError) {
+            await payoutRef.update({
+                status: "failed",
+                failureReason: providerError instanceof Error ? providerError.message : "Nomba transfer failed",
+                updatedAt: FieldValue.serverTimestamp(),
+            });
+            return { success: false, message: "Nomba transfer failed", error: "PROVIDER_TRANSFER_FAILED" };
+        }
+
+        await payoutRef.update({
+            providerReference: transfer.transferRef,
+            providerStatus: transfer.success ? "SUBMITTED" : "REJECTED",
+            nombaResponse: transfer.rawResponse || null,
+            processedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+        });
+        if (!transfer.success) return { success: false, message: "Nomba rejected the payout", error: "PROVIDER_REJECTED" };
+
+        // Update payout with approval details
+        await payoutRef.update({
+            status: "processing",
+            providerReference: transfer.transferRef,
+            updatedAt: FieldValue.serverTimestamp(),
         });
 
-        // Create transaction record
+        // Create an audit transaction. Final accounting belongs to the
+        // Nomba payout completion webhook.
         await adminDb.collection("transactions").add({
             type: "payout",
             payoutId,
             vendorId: payoutData.vendorId,
-            amount: payoutData.amount,
+            amount,
             currency: payoutData.currency || "NGN",
-            status: "completed",
+            status: "processing",
             direction: "outbound",
             processedBy: adminId,
             createdAt: FieldValue.serverTimestamp(),
@@ -76,7 +115,7 @@ export async function approvePayout(
 
         return {
             success: true,
-            message: "Payout approved successfully",
+            message: "Payout submitted to Nomba",
             payoutId,
         };
     } catch (error: any) {

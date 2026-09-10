@@ -20,6 +20,16 @@ function addressText(address: unknown): string {
   return [data.address, data.city, data.lga, data.state, data.postalCode].filter(Boolean).join(", ") || "the delivery address";
 }
 
+function appUrl(): string {
+  return (process.env.NEXT_PUBLIC_APP_URL || "https://sellonwhatsapp.com").replace(/\/$/, "");
+}
+
+function productName(order: Data): string {
+  const items = Array.isArray(order.items) ? order.items : [];
+  const firstItem = items[0] && typeof items[0] === "object" ? items[0] as Data : {};
+  return firstString(firstItem.name, firstItem.productName, firstItem.title) || "Marketplace order";
+}
+
 async function storeForOrder(order: Data, store?: Data): Promise<Data> {
   if (store) return store;
   const storeId = firstString(order.storeId, order.vendorId);
@@ -45,6 +55,9 @@ function baseOrderPayload(order: Data, store: Data, eventType: string, transacti
     eventType,
     transactionId,
     orderId,
+    orderNumber: firstString(order.orderNumber, order.orderId, order.id, order.checkoutReference) || orderId,
+    productName: productName(order),
+    actionUrl: `${appUrl()}/buyer/orders/${encodeURIComponent(orderId)}`,
     storeName: firstString(order.storeName, store.storeName, store.name) || "the store",
     buyerName: firstString(order.customerName, order.buyerName) || "Buyer",
     sellerName: firstString(store.storeName, store.ownerName, store.name) || "Seller",
@@ -73,14 +86,22 @@ export async function notifyOrderPaymentConfirmed(order: Data, store?: Data): Pr
     const storeData = await storeForOrder(order, store);
     const orderId = firstString(order.orderId, order.id);
     const payload = baseOrderPayload(order, storeData, "order-placed", `order-paid-${orderId}`);
+    const buyerPayload = {
+      ...payload,
+      actionUrl: `${appUrl()}/buyer/orders/${encodeURIComponent(orderId || "order")}`,
+    };
+    const sellerPayload = {
+      ...payload,
+      actionUrl: `${appUrl()}/dashboard?tab=orders&order=${encodeURIComponent(orderId || "order")}`,
+    };
     const tasks: Promise<boolean>[] = [];
 
-    tasks.push(dispatch("order-placed", firstString(order.buyerId), buyerPhone(order), payload));
-    tasks.push(dispatch("new-order-received", firstString(order.storeId, order.vendorId), sellerPhone(storeData), { ...payload, eventType: "new-order-received", transactionId: `new-order-${orderId}` }));
+    tasks.push(dispatch("order-placed", firstString(order.buyerId), buyerPhone(order), buyerPayload));
+    tasks.push(dispatch("new-order-received", firstString(order.storeId, order.vendorId), sellerPhone(storeData), { ...sellerPayload, eventType: "new-order-received", transactionId: `new-order-${orderId}` }));
 
     const hasCourier = firstString(order.courierId, order.shippingMethod) && firstString(order.shippingMethod) !== "self_arranged" && Number(order.shippingCost || 0) > 0;
     if (hasCourier) {
-      tasks.push(dispatch("order-pickup-scheduled", firstString(order.storeId, order.vendorId), sellerPhone(storeData), { ...payload, eventType: "order-pickup-scheduled", transactionId: `pickup-scheduled-${orderId}` }));
+      tasks.push(dispatch("order-pickup-scheduled", firstString(order.storeId, order.vendorId), sellerPhone(storeData), { ...sellerPayload, eventType: "order-pickup-scheduled", transactionId: `pickup-scheduled-${orderId}` }));
     }
     await Promise.allSettled(tasks);
     await sendOrderPaymentEmails(order, storeData);

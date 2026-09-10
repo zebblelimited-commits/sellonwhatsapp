@@ -3,6 +3,10 @@
         {
             "path": "/api/cron/subscriptions",
             "schedule": "0 0 * * *"
+        },
+        {
+            "path": "/api/cron/escrow-expiry",
+            "schedule": "*/10 * * * *"
         }
     ]
 }

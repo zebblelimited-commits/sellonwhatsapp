@@ -31,6 +31,10 @@ export default function SuccessPage() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const orderReference = searchParams.get("reference") || searchParams.get("orderReference") || searchParams.get("orderRef");
+    const virtualAccountNumber = searchParams.get("accountNumber");
+    const virtualAccountBank = searchParams.get("bankName") || "Nomba";
+    const virtualAccountName = searchParams.get("accountName") || "SellOnWhatsApp Escrow";
+    const paymentAmount = searchParams.get("amount");
 
     const [status, setStatus] = useState("verifying");
     const [orderData, setOrderData] = useState<SuccessOrder | null>(null);
@@ -169,8 +173,16 @@ export default function SuccessPage() {
                 ) : viewStatus === "pending" ? (
                     <div className="p-8 text-center space-y-4">
                         <Loader2 className="h-10 w-10 text-amber-500 animate-spin mx-auto" />
-                        <h1 className="text-xl font-extrabold text-slate-900">Payment received</h1>
-                        <p className="text-slate-500 text-xs leading-relaxed">We are waiting for the payment provider to finish confirmation.</p>
+                        <h1 className="text-xl font-extrabold text-slate-900">Verifying payment</h1>
+                        {virtualAccountNumber ? (
+                            <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-left text-xs text-amber-950">
+                                <p className="font-black uppercase tracking-wider text-[10px]">Transfer exactly</p>
+                                <p className="mt-1 text-lg font-black">₦{Number(paymentAmount || 0).toLocaleString()}</p>
+                                <p className="mt-3"><span className="font-bold">Bank:</span> {virtualAccountBank}</p>
+                                <p><span className="font-bold">Account:</span> {virtualAccountNumber}</p>
+                                <p><span className="font-bold">Name:</span> {virtualAccountName}</p>
+                            </div>
+                        ) : <p className="text-slate-500 text-xs leading-relaxed">We are waiting for Nomba to confirm your payment.</p>}
                         <button onClick={() => window.location.reload()} className="w-full rounded-xl bg-slate-900 py-3 text-sm font-bold text-white">Check again</button>
                     </div>
                 ) : viewStatus === "error" ? (
