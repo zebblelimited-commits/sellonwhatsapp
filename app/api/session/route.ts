@@ -13,11 +13,11 @@ async function resolvePortalRole(uid: string, tokenRole?: unknown) {
   ]);
 
   return resolveRole({
-    admin: { exists: adminSnapshot.exists() && adminSnapshot.data()?.isActive === true, role: adminSnapshot.data()?.role },
-    store: { exists: storeSnapshot.exists(), role: storeSnapshot.data()?.role },
-    vendor: { exists: vendorSnapshot.exists(), role: vendorSnapshot.data()?.role },
-    buyer: { exists: buyerSnapshot.exists(), role: buyerSnapshot.data()?.role },
-    user: { exists: userSnapshot.exists(), role: userSnapshot.data()?.role },
+    admin: { exists: adminSnapshot.exists && adminSnapshot.data()?.isActive === true, role: adminSnapshot.data()?.role },
+    store: { exists: storeSnapshot.exists, role: storeSnapshot.data()?.role },
+    vendor: { exists: vendorSnapshot.exists, role: vendorSnapshot.data()?.role },
+    buyer: { exists: buyerSnapshot.exists, role: buyerSnapshot.data()?.role },
+    user: { exists: userSnapshot.exists, role: userSnapshot.data()?.role },
     tokenRole,
   });
 }
