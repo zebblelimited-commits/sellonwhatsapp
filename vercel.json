@@ -6,7 +6,7 @@
         },
         {
             "path": "/api/cron/escrow-expiry",
-            "schedule": "*/10 * * * *"
+            "schedule": "10 0 * * *"
         }
     ]
 }

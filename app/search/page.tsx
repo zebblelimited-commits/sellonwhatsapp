@@ -13,6 +13,7 @@ import { getAllSubcategories } from "@/app/dashboard/nigeriaData";
 import Image from "next/image";
 import FollowButton from "@/components/store/FollowButton";
 import { trackMetric, trackSearch } from "@/lib/analytics";
+import { isPublicStore } from "@/lib/categoryCatalog";
 
 const CATEGORY_OPTIONS = getAllSubcategories();
 const PRICE_SLIDER_MAX = 1000000;
@@ -203,7 +204,7 @@ function SearchResultsContent() {
         const storeSnap = await getDocs(collection(db, "stores"));
         const storeResults = storeSnap.docs
           .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
-          .filter((store: any) => !["inactive", "banned"].includes(store.status))
+          .filter(isPublicStore)
           .filter((store: any) => {
             if (!queryParam) return true;
             const searchTerm = queryParam.toLowerCase();

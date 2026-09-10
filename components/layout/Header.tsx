@@ -12,6 +12,7 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { collection, query as firestoreQuery, getDocs, getDoc, doc, limit } from "firebase/firestore";
 import { useCart } from "@/contexts/CartContext";
 import dynamic from "next/dynamic";
+import { isPublicStore } from "@/lib/categoryCatalog";
 
 // Dynamic import to prevent SSR issues with canvas/camera libraries
 const QrCodeModal = dynamic(() => import("@/components/store/QrCode"), {
@@ -119,6 +120,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
 
         const matchedStores = storeSnap.docs
           .map(d => ({ id: d.id, ...d.data() }))
+          .filter(isPublicStore)
           .filter((s: any) => s.username?.toLowerCase().includes(cleanQuery) || s.storeName?.toLowerCase().includes(cleanQuery))
           .slice(0, 3);
 

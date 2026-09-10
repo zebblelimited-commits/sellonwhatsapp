@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 import { sendSubscriptionConfirmationEmail } from "@/lib/email/events";
 import { verifyNombaTransaction } from "@/lib/payments/nomba/client";
+import { updateExistingStore } from "@/lib/store-sync";
 
 async function triggerNovuNotification(userId: string, payload: Record<string, string>) {
   const apiKey = process.env.NOVU_SECRET_KEY?.trim();
@@ -185,12 +186,12 @@ export async function GET(
 
         // ✅ FIX: ALSO UPDATE STORES COLLECTION
         // Keeps store-level subscription plan and partner status in sync with checkout tier checks
-        await adminDb.collection("stores").doc(verifiedData.userId).set({
+        await updateExistingStore(verifiedData.userId, {
           subscriptionPlan: verifiedData.planId,
           isPartner: isMaxTier,
           partnerExpiry: expiry.toISOString(),
           updatedAt: now.toISOString()
-        }, { merge: true });
+        }, "subscription status verification");
 
         console.log(`🎉 [ Activation Success ] Upgraded User & Store ${verifiedData.userId} to ${verifiedData.planName}.`);
 

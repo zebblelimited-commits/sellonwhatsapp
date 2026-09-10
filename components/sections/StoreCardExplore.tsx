@@ -7,6 +7,7 @@ import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { Crown, LayoutGrid, MapPin, MessageCircle, ShieldCheck, Users } from "lucide-react";
 import FollowButton from "@/components/store/FollowButton";
 import { trackMetric } from "@/lib/analytics";
+import { isPublicStore } from "@/lib/categoryCatalog";
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -20,7 +21,7 @@ interface StoreCardExploreProps {
 export default function StoreCardExplore({ store }: StoreCardExploreProps) {
   const [localFollowerCount, setLocalFollowerCount] = useState(store?.followerCount || 0);
 
-  if (!store) return null;
+  if (!store || !isPublicStore(store)) return null;
 
   const storeName = store.storeName || store.name || "Unnamed Store";
   const username = store.username || store.id;

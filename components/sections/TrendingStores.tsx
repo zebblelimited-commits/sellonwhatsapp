@@ -9,6 +9,7 @@ import { LayoutGrid, Search, Users, ShieldCheck } from "lucide-react";
 import { db } from "@/lib/firebase";
 import FollowButton from "@/components/store/FollowButton";
 import { trackMetric } from "@/lib/analytics";
+import { isPublicStore } from "@/lib/categoryCatalog";
 
 const font = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -39,10 +40,6 @@ type Store = {
 type TrendingStoresProps = {
   fullPage?: boolean;
 };
-
-function isVisibleStore(store: Store) {
-  return store.isDeleted !== true && store.isActive !== false && !["inactive", "banned", "suspended", "deleted"].includes(String(store.status || "").toLowerCase());
-}
 
 function formatCount(value: number) {
   return value.toLocaleString();
@@ -124,7 +121,7 @@ export default function TrendingStores({ fullPage = false }: TrendingStoresProps
 
         const loadedStores = storeSnapshot.docs
           .map((item) => ({ id: item.id, ...(item.data() as Omit<Store, "id">), productCount: productCounts.get(item.id) || Number(item.data().productCount || 0) }))
-          .filter(isVisibleStore)
+          .filter(isPublicStore)
           .sort((left, right) => (Number(right.followerCount || 0) + Number(right.productCount || 0)) - (Number(left.followerCount || 0) + Number(left.productCount || 0)));
 
         if (!cancelled) setStores(loadedStores.slice(0, fullPage ? 80 : 6));

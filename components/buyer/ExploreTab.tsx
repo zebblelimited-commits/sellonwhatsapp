@@ -13,6 +13,7 @@ import { collection, getDocs, query, limit, where } from "firebase/firestore";
 import StoreCardExplore from "@/components/sections/StoreCardExplore";
 import ProductSection from "@/components/sections/ProductSection";
 import { trackMetric } from "@/lib/analytics";
+import { isPublicStore } from "@/lib/categoryCatalog";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
@@ -108,10 +109,12 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
           getDocs(query(collection(db, "stores"), limit(6)))
         ]);
         
-        const storesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const storesData = querySnapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(isPublicStore);
         const recommendedData = recommendedSnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter((store: any) => !["inactive", "banned"].includes(store.status))
+          .filter(isPublicStore)
           .slice(0, 5);
           
         setStores(storesData);
@@ -128,6 +131,7 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
 
   const visibleStores = stores.filter((store) => {
     const record = store as Record<string, unknown>;
+    if (!isPublicStore(record)) return false;
     const location = record.location && typeof record.location === "object" ? record.location as Record<string, unknown> : {};
     const state = String(record.state || location.state || "").toLowerCase();
     const status = String(record.status || "").toLowerCase();

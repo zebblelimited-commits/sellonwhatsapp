@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 import { sendRenewalReminderEmail, sendSubscriptionConfirmationEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/events";
+import { updateExistingStore } from "@/lib/store-sync";
 
 export const runtime = "nodejs";
 
@@ -130,12 +131,12 @@ export async function GET(req: NextRequest) {
 
                 // Sync Store & User Records
                 const isMaxTier = planId === "pro_yearly_business_max" || planId.includes("max");
-                await adminDb.collection("stores").doc(userId).set({
+                await updateExistingStore(userId, {
                     isPartner: isMaxTier,
                     subscriptionPlan: planId,
                     partnerExpiry: newExpiry.toISOString(),
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                }, { merge: true });
+                }, "subscription renewal");
 
                 await sendSubscriptionConfirmationEmail({
                     ...sub,
@@ -218,11 +219,11 @@ export async function GET(req: NextRequest) {
             });
 
             // Downgrade Store Status so Checkout Defaults back to 1.5% commission
-            await adminDb.collection("stores").doc(userId).set({
+            await updateExistingStore(userId, {
                 isPartner: false,
                 subscriptionPlan: "free",
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            }, { merge: true });
+            }, "subscription expiry");
 
             // Downgrade User Profile
             await adminDb.collection("users").doc(userId).set({

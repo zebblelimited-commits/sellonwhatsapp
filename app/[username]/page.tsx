@@ -14,6 +14,7 @@ import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
 import { useCart } from "@/contexts/CartContext";
+import { isPublicStore } from "@/lib/categoryCatalog";
 
 // Components
 import Header from "@/components/layout/Header";
@@ -87,6 +88,10 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
         if (!storeSnap.empty) {
           const storeDoc = storeSnap.docs[0];
           const data = toPlainObject({ id: storeDoc.id, ...storeDoc.data() });
+          if (!isPublicStore(data)) {
+            setStoreData(null);
+            return;
+          }
           setStoreData(data);
           setVendorId(storeDoc.id);
           setFollowerCount(data.followerCount || 0);

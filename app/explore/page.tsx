@@ -16,6 +16,7 @@ import Header from "@/components/layout/Header";
 import StoreCardExplore from "@/components/sections/StoreCardExplore";
 import ProductSection from "@/components/sections/ProductSection"; // ✅ Import ProductSection
 import { trackMetric } from "@/lib/analytics";
+import { isPublicStore } from "@/lib/categoryCatalog";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
@@ -99,10 +100,12 @@ export default function ExplorePage() {
           getDocs(q),
           getDocs(query(collection(db, "stores"), limit(12)))
         ]);
-        const storesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const storesData = querySnapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(isPublicStore);
         const recommendedData = recommendedSnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter((store: any) => !["inactive", "banned"].includes(store.status))
+          .filter(isPublicStore)
           .slice(0, 5);
         setStores(storesData);
         setRecommendedStores(recommendedData);
@@ -118,6 +121,7 @@ export default function ExplorePage() {
 
   const nearbyStores = useMemo(() => {
     const filteredStores = stores.filter((store) => {
+      if (!isPublicStore(store)) return false;
       const state = String(store.state || store.location?.state || "").toLowerCase();
       const stateMatches = selectedState === "All Nigeria" || state === selectedState.toLowerCase();
       const verifiedMatches = !onlyVerified || store.isVerified === true;
@@ -136,6 +140,7 @@ export default function ExplorePage() {
   }, [stores, selectedState, onlyVerified, userLocation]);
 
   const visibleStores = useMemo(() => stores.filter((store) => {
+    if (!isPublicStore(store)) return false;
     const state = String(store.state || store.location?.state || "").toLowerCase();
     const stateMatches = selectedState === "All Nigeria" || state === selectedState.toLowerCase();
     return stateMatches && (!onlyVerified || store.isVerified === true);

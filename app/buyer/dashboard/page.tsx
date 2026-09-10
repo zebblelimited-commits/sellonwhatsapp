@@ -36,6 +36,7 @@ import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 import { BuyerProfile as ProfileTab } from "@/components/buyer/BuyerProfile";
 import BuyerShipping from "@/components/buyer/BuyerShipping";
 import CoordinatesRequiredModal, { hasSavedCoordinates } from "@/components/location/CoordinatesRequiredModal";
+import { isPublicStore } from "@/lib/categoryCatalog";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -646,11 +647,7 @@ function BuyerHome({ userData, stats, buyerDisputeStats, onExploreClick, onViewO
 
       let stores: RecommendedStore[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      stores = stores.filter(s =>
-        s.isActive !== false &&
-        s.isDeleted !== true &&
-        s.id !== userData?.storeId
-      );
+      stores = stores.filter(s => isPublicStore(s) && s.id !== userData?.storeId);
 
       stores = stores
         .map(s => ({

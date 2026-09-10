@@ -7,6 +7,7 @@ import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { collection, onSnapshot } from "firebase/firestore";
 import { ShieldCheck, Store as StoreIcon } from "lucide-react";
 import { db } from "@/lib/firebase";
+import { isPublicStore } from "@/lib/categoryCatalog";
 
 const font = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -44,7 +45,7 @@ function timestampValue(value: unknown) {
 }
 
 function isPublicVerifiedStore(store: Store) {
-  return store.isVerified === true && store.isDeleted !== true && store.isActive !== false && !["inactive", "banned", "suspended", "deleted"].includes(String(store.status || "").toLowerCase());
+  return store.isVerified === true && isPublicStore(store);
 }
 
 function MiniStoreCard({ store }: { store: Store }) {

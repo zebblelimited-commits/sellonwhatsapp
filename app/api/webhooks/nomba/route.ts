@@ -7,6 +7,7 @@ import { notifyOrderPaymentConfirmed, notifyOrderStatus, notifyPayoutCompleted }
 import { sendSubscriptionConfirmationEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/events";
 import { isNombaWebhookSignatureValid, verifyNombaTransaction, initiateNombaBankTransfer } from "@/lib/payments/nomba/client";
 import { dispatchShipmentForOrder } from "@/lib/shipping-dispatch";
+import { updateExistingStore } from "@/lib/store-sync";
 
 // ✅ 1. SAFELY Initialize Novu
 const novuApiKey = process.env.NOVU_API_KEY || process.env.NOVU_SECRET_KEY;
@@ -538,12 +539,12 @@ export async function POST(request: NextRequest) {
               const isMaxTier = planId === "pro_yearly_business_max" || planId.includes("max");
 
               // Sync Store document (used by Checkout API for 0% commission check)
-              await adminDb.collection("stores").doc(targetUserId).set({
+              await updateExistingStore(targetUserId, {
                 subscriptionPlan: planId,
                 isPartner: isMaxTier,
                 partnerExpiry: expiryDate.toISOString(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-              }, { merge: true });
+              }, "Nomba subscription webhook");
 
               // Sync User document
               await adminDb.collection("users").doc(targetUserId).set({

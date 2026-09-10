@@ -58,12 +58,17 @@ function matchesAlias(values: string[], aliases: readonly string[]) {
   });
 }
 
-export function isPublicStore(store: StoreCategoryRecord) {
-  const status = normalize(store.status);
+export function isPublicStore(store: unknown) {
+  if (!store || typeof store !== "object" || Array.isArray(store)) return false;
+  const record = store as StoreCategoryRecord;
+  const storeName = normalize(record.storeName) || normalize(record.name);
+  const username = normalize(record.username);
+  const status = normalize(record.status);
   return (
-    store.isDeleted !== true &&
-    store.isActive !== false &&
-    !["inactive", "banned", "suspended"].includes(status)
+    Boolean(storeName && username) &&
+    record.isDeleted !== true &&
+    record.isActive !== false &&
+    !["inactive", "banned", "suspended", "deleted"].includes(status)
   );
 }
 
