@@ -17,6 +17,8 @@ export interface ShippingOption {
 }
 
 type ShippingAddress = {
+    name?: string;
+    phone?: string;
     address?: string;
     city?: string;
     state?: string;
