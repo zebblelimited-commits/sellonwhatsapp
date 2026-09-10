@@ -114,7 +114,7 @@ export default function BuyerDashboard() {
             admin: { exists: adminSnap?.exists() === true, role: adminSnap?.data()?.role },
             store: { exists: storeSnap?.exists() === true, role: storeSnap?.data()?.role },
             vendor: { exists: vendorSnap?.exists() === true, role: vendorSnap?.data()?.role },
-            buyer: { exists: buyerSnap.exists, role: buyerSnap.data()?.role },
+            buyer: { exists: buyerSnap.exists(), role: buyerSnap.data()?.role },
             user: { exists: userSnap?.exists() === true, role: userSnap?.data()?.role },
           });
 

@@ -96,9 +96,9 @@ export default function LoginPage() {
 
     const role = resolvePortalRole({
       admin: { exists: adminDoc?.exists() === true && adminDoc.data()?.isActive === true, role: adminDoc?.data()?.role },
-      store: { exists: storeDoc.exists, role: storeDoc.data()?.role },
+      store: { exists: storeDoc.exists(), role: storeDoc.data()?.role },
       vendor: { exists: vendorDoc?.exists() === true, role: vendorDoc?.data()?.role },
-      buyer: { exists: buyerDoc.exists, role: buyerDoc.data()?.role },
+      buyer: { exists: buyerDoc.exists(), role: buyerDoc.data()?.role },
       user: { exists: userDoc?.exists() === true, role: userDoc?.data()?.role },
     });
 
