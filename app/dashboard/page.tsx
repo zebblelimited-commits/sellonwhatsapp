@@ -47,6 +47,7 @@ import { ZebbleNotificationCenter } from "./ZebbleNotificationCenter";
 import PremiumFeatureModal from "./modals/PremiumFeatureModal";
 import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 import CoordinatesRequiredModal, { hasSavedCoordinates } from "@/components/location/CoordinatesRequiredModal";
+import { resolvePortalRole } from "@/lib/portal-role";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -172,11 +173,19 @@ function Dashboard() {
           getDoc(doc(db, "users", user.uid)).catch(() => null),
         ]);
 
-        if (!storeSnap?.exists() && !vendorSnap?.exists()) {
+        const role = resolvePortalRole({
+          admin: { exists: adminSnap?.exists() === true, role: adminSnap?.data()?.role },
+          store: { exists: storeSnap?.exists() === true, role: storeSnap?.data()?.role },
+          vendor: { exists: vendorSnap?.exists() === true, role: vendorSnap?.data()?.role },
+          buyer: { exists: buyerSnap?.exists() === true, role: buyerSnap?.data()?.role },
+          user: { exists: userSnap?.exists() === true, role: userSnap?.data()?.role },
+        });
+
+        if (role !== "vendor") {
           setLoading(false);
-          if (adminSnap?.exists() && adminSnap.data()?.isActive === true) {
+          if (role === "admin") {
             router.replace("/admin");
-          } else if (buyerSnap?.exists() || userSnap?.exists()) {
+          } else if (role === "buyer") {
             router.replace("/buyer/dashboard");
           } else {
             router.replace("/register/onboarding/role");

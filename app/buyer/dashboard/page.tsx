@@ -37,6 +37,7 @@ import { BuyerProfile as ProfileTab } from "@/components/buyer/BuyerProfile";
 import BuyerShipping from "@/components/buyer/BuyerShipping";
 import CoordinatesRequiredModal, { hasSavedCoordinates } from "@/components/location/CoordinatesRequiredModal";
 import { isPublicStore } from "@/lib/categoryCatalog";
+import { resolvePortalRole } from "@/lib/portal-role";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -109,11 +110,19 @@ export default function BuyerDashboard() {
             getDoc(doc(db, "users", user.uid)).catch(() => null),
           ]);
 
-          if (!buyerSnap.exists() && !userSnap?.exists()) {
+          const role = resolvePortalRole({
+            admin: { exists: adminSnap?.exists() === true, role: adminSnap?.data()?.role },
+            store: { exists: storeSnap?.exists() === true, role: storeSnap?.data()?.role },
+            vendor: { exists: vendorSnap?.exists() === true, role: vendorSnap?.data()?.role },
+            buyer: { exists: buyerSnap.exists, role: buyerSnap.data()?.role },
+            user: { exists: userSnap?.exists() === true, role: userSnap?.data()?.role },
+          });
+
+          if (role !== "buyer") {
             setLoading(false);
-            if (adminSnap?.exists() && adminSnap.data()?.isActive === true) {
+            if (role === "admin") {
               router.replace("/admin");
-            } else if (storeSnap?.exists() || vendorSnap?.exists()) {
+            } else if (role === "vendor") {
               router.replace("/dashboard");
             } else {
               router.replace("/register/onboarding/role");

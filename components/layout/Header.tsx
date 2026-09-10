@@ -13,6 +13,7 @@ import { collection, query as firestoreQuery, getDocs, getDoc, doc, limit } from
 import { useCart } from "@/contexts/CartContext";
 import dynamic from "next/dynamic";
 import { isPublicStore } from "@/lib/categoryCatalog";
+import { resolvePortalRole } from "@/lib/portal-role";
 
 // Dynamic import to prevent SSR issues with canvas/camera libraries
 const QrCodeModal = dynamic(() => import("@/components/store/QrCode"), {
@@ -63,12 +64,20 @@ export default function Header({ isStorePage = false, storeName = "" }) {
             getDoc(doc(db, "users", currentUser.uid)).catch(() => null),
           ]);
 
-          if (adminSnap?.exists() && adminSnap.data()?.isActive === true) {
+          const role = resolvePortalRole({
+            admin: { exists: adminSnap?.exists() === true, role: adminSnap?.data()?.role },
+            store: { exists: storeSnap.exists, role: storeSnap.data()?.role },
+            vendor: { exists: vendorSnap?.exists() === true, role: vendorSnap?.data()?.role },
+            buyer: { exists: buyerSnap?.exists() === true, role: buyerSnap?.data()?.role },
+            user: { exists: userSnap?.exists() === true, role: userSnap?.data()?.role },
+          });
+
+          if (role === "admin") {
             setIsAdmin(true);
             setIsBuyer(false);
             setVendorUsername("");
             setStoreData(null);
-          } else if (storeSnap.exists() || vendorSnap?.exists()) {
+          } else if (role === "vendor") {
             const data = storeSnap.exists() ? storeSnap.data() : vendorSnap?.data();
             setIsAdmin(false);
             setIsBuyer(false);

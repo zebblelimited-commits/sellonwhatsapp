@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { cookies } from "next/headers";
+import { resolvePortalRole as resolveRole } from "@/lib/portal-role";
 
 async function resolvePortalRole(uid: string, tokenRole?: unknown) {
   const [adminSnapshot, storeSnapshot, vendorSnapshot, buyerSnapshot, userSnapshot] = await Promise.all([
@@ -11,15 +12,14 @@ async function resolvePortalRole(uid: string, tokenRole?: unknown) {
     adminDb.collection("users").doc(uid).get(),
   ]);
 
-  if (adminSnapshot.exists && adminSnapshot.data()?.isActive === true) return "admin";
-  if (storeSnapshot.exists || vendorSnapshot.exists) return "vendor";
-  if (buyerSnapshot.exists || userSnapshot.exists) return "buyer";
-
-  // Claims support users created by older versions while the profile migration
-  // is completed. The Firestore records above always take precedence.
-  return tokenRole === "vendor" || tokenRole === "buyer" || tokenRole === "admin"
-    ? tokenRole
-    : "unknown";
+  return resolveRole({
+    admin: { exists: adminSnapshot.exists && adminSnapshot.data()?.isActive === true, role: adminSnapshot.data()?.role },
+    store: { exists: storeSnapshot.exists, role: storeSnapshot.data()?.role },
+    vendor: { exists: vendorSnapshot.exists, role: vendorSnapshot.data()?.role },
+    buyer: { exists: buyerSnapshot.exists, role: buyerSnapshot.data()?.role },
+    user: { exists: userSnapshot.exists, role: userSnapshot.data()?.role },
+    tokenRole,
+  });
 }
 
 export async function POST(request: NextRequest) {

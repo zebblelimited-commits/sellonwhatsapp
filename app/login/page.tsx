@@ -12,6 +12,7 @@ import { auth, db, googleProvider } from "@/lib/firebase";
 import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { getApps } from "firebase/app";
+import { resolvePortalRole } from "@/lib/portal-role";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -93,19 +94,17 @@ export default function LoginPage() {
       getDoc(doc(db, "users", uid)).catch(() => null),
     ]);
 
-    if (adminDoc?.exists() && adminDoc.data()?.isActive === true) {
-      router.replace("/admin");
-      return;
-    }
-    if (storeDoc.exists() || vendorDoc?.exists()) {
-      router.replace("/dashboard");
-      return;
-    }
-    if (buyerDoc.exists() || userDoc?.exists()) {
-      router.replace("/buyer/dashboard");
-      return;
-    }
+    const role = resolvePortalRole({
+      admin: { exists: adminDoc?.exists() === true && adminDoc.data()?.isActive === true, role: adminDoc?.data()?.role },
+      store: { exists: storeDoc.exists, role: storeDoc.data()?.role },
+      vendor: { exists: vendorDoc?.exists() === true, role: vendorDoc?.data()?.role },
+      buyer: { exists: buyerDoc.exists, role: buyerDoc.data()?.role },
+      user: { exists: userDoc?.exists() === true, role: userDoc?.data()?.role },
+    });
 
+    if (role === "admin") return router.replace("/admin");
+    if (role === "vendor") return router.replace("/dashboard");
+    if (role === "buyer") return router.replace("/buyer/dashboard");
     router.replace("/register/onboarding/role");
   };
 
