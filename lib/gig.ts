@@ -225,7 +225,7 @@ function stationRecords(payload: unknown): GigStation[] {
         ownValue(record, ["city", "town"]),
         ownValue(record, ["state", "stateName"]),
         ownValue(record, ["address", "location"]),
-      ].map(text).filter(Boolean).join(" ");
+      ].map((value) => text(value)).filter(Boolean).join(" ");
       records.push({ id, text: stationText });
     }
     Object.values(record).forEach((child) => visit(child, depth - 1));
