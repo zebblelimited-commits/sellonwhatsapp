@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { nombaBaseUrl } from "@/lib/payments/nomba/client";
 
 // ✅ Initialize Firebase Admin
 if (!getApps().length) {
@@ -19,7 +20,7 @@ const auth = getAuth();
 
 // ✅ Helper to get Nomba Access Token
 async function getNombaToken() {
-  const authUrl = process.env.NOMBA_AUTH_URL || process.env.NOMBA_SANDBOX_URL || "https://api.nomba.com";
+  const authUrl = nombaBaseUrl();
   const response = await fetch(`${authUrl}/v1/auth/token/issue`, {
     method: "POST",
     headers: {
@@ -61,13 +62,13 @@ export async function POST(request: NextRequest) {
 
     // App URL & Dynamic Nomba API Base URL
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const nombaBaseUrl = process.env.NOMBA_SANDBOX_URL || "https://api.nomba.com";
+    const nombaOrigin = nombaBaseUrl();
 
     // UI Callback URL for browser redirect after checkout completion
     const callbackUrl = `${appUrl}/dashboard?tab=partner&reference=${orderReference}`;
 
     // ✅ 3. Create Checkout Order
-    const response = await fetch(`${nombaBaseUrl}/v1/checkout/order`, {
+    const response = await fetch(`${nombaOrigin}/v1/checkout/order`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${nombaToken}`,

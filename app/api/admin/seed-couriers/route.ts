@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { sendboxConfigured } from "@/lib/sendbox";
+import { gigConfigured } from "@/lib/gig";
 import admin from "firebase-admin";
 
 export async function POST(req: NextRequest) {
@@ -71,8 +72,8 @@ export async function POST(req: NextRequest) {
                 code: "gig",
                 logo: "/images/couriers/gigilogo.jpg",
                 isActive: true,
-                dispatchEnabled: false,
-                integrationStatus: "not_configured",
+                dispatchEnabled: gigConfigured(),
+                integrationStatus: gigConfigured() ? "ready" : "not_configured",
                 baseRate: 2000,
                 ratePerKg: 400,
                 estimatedDays: "2-4 Business Days",

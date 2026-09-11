@@ -5,6 +5,7 @@ import { fetchFezDeliveryCost } from "@/lib/fez";
 import { fetchSendboxQuote, sendboxConfigured } from "@/lib/sendbox";
 import { chowdeckConfigured, fetchChowdeckDeliveryFee, type ChowdeckAddress } from "@/lib/chowdeck";
 import { fetchTopshipQuote, type TopshipAddress, type TopshipQuote, topshipConfigured } from "@/lib/topship";
+import { fetchGigDeliveryQuote, gigConfigured, type GigAddress, type GigQuote } from "@/lib/gig";
 
 export const runtime = "nodejs";
 
@@ -32,7 +33,7 @@ interface CourierOption {
     integrationStatus: string;
     provider?: string;
     providerQuoteId?: number | string;
-    providerQuote?: TopshipQuote | Record<string, unknown>;
+    providerQuote?: TopshipQuote | GigQuote | Record<string, unknown>;
 }
 
 interface UnavailableProvider {
@@ -122,6 +123,10 @@ export async function POST(req: NextRequest) {
             const courier = data();
             return courier.code?.toLowerCase() === "sendbox" || courier.name?.toLowerCase().includes("sendbox");
         });
+        const hasGigRecord = courierEntries.some(({ data }) => {
+            const courier = data();
+            return courier.code?.toLowerCase() === "gig" || courier.name?.toLowerCase().includes("gig logistics");
+        });
 
         if (chowdeckConfigured() && !hasChowdeckRecord) {
             courierEntries.push({
@@ -159,6 +164,18 @@ export async function POST(req: NextRequest) {
                 }),
             });
         }
+        if (gigConfigured() && !hasGigRecord) {
+            courierEntries.push({
+                id: "gig_logistics",
+                data: () => ({
+                    name: "GIG Logistics",
+                    code: "gig",
+                    logo: "/images/couriers/gigilogo.jpg",
+                    estimatedDays: "2-4 Business Days",
+                    integrationStatus: "ready",
+                }),
+            });
+        }
 
         if (courierEntries.length === 0) {
             return NextResponse.json({
@@ -178,6 +195,7 @@ export async function POST(req: NextRequest) {
             const isChowdeck = courierCode === "chowdeck" || courierName.includes("chowdeck");
             const isTopship = courierCode === "topship" || courierName.includes("topship");
             const isSendbox = courierCode === "sendbox" || courierName.includes("sendbox");
+            const isGig = courierCode === "gig" || courierName.includes("gig logistics");
 
             // Only show providers that can receive a real order from the
             // platform. Static quote-only records must not look dispatchable
@@ -186,7 +204,8 @@ export async function POST(req: NextRequest) {
             const dispatchEnabled = (isFez && courier.dispatchEnabled !== false)
                 || (isChowdeck && chowdeckConfigured())
                 || (isTopship && topshipConfigured())
-                || (isSendbox && sendboxConfigured());
+                || (isSendbox && sendboxConfigured())
+                || (isGig && gigConfigured());
             if (!dispatchEnabled) {
                 if (isChowdeck) {
                     unavailableProviders.push({
@@ -209,6 +228,13 @@ export async function POST(req: NextRequest) {
                         reason: "Sendbox is not configured on the server. Add SENDBOX_ACCESS_TOKEN and redeploy.",
                     });
                 }
+                if (isGig) {
+                    unavailableProviders.push({
+                        id: doc.id,
+                        name: courier.name || "GIG Logistics",
+                        reason: "GIG Logistics is not configured on the server. Add GIG_EMAIL/GIG_PASSWORD, then redeploy.",
+                    });
+                }
                 return;
             }
 
@@ -216,7 +242,7 @@ export async function POST(req: NextRequest) {
             // its live fee endpoint. A stale Firestore state list can hide a
             // valid option (for example, Jos/Plateau), so skip this filter for
             // Chowdeck. An unsuccessful quote is handled below.
-            if (!isChowdeck && !isTopship && !isSendbox && Array.isArray(courier.availableStates) && courier.availableStates.length > 0) {
+            if (!isChowdeck && !isTopship && !isSendbox && !isGig && Array.isArray(courier.availableStates) && courier.availableStates.length > 0) {
                 const isAvailable = courier.availableStates.some(
                     (state: string) => state.toLowerCase() === destinationState.toLowerCase()
                 );
@@ -225,7 +251,7 @@ export async function POST(req: NextRequest) {
 
             let finalFee = 0;
             let providerQuoteId: number | string | undefined;
-            let providerQuote: TopshipQuote | Record<string, unknown> | undefined;
+            let providerQuote: TopshipQuote | GigQuote | Record<string, unknown> | undefined;
 
             // Check FEZ Delivery
             if (isFez) {
@@ -328,8 +354,34 @@ export async function POST(req: NextRequest) {
                     return;
                 }
             }
+            // GIG calculates a live rate from its station directory and the
+            // sender/receiver locations. Keep the quote for post-payment
+            // shipment capture.
+            else if (isGig) {
+                try {
+                    const gigQuote = await withProviderTimeout(fetchGigDeliveryQuote({
+                        sender: (pickupAddress || {}) as GigAddress,
+                        receiver: (destinationAddress || { state: destinationState }) as GigAddress,
+                        totalWeightKg: Math.max(1, totalWeightKg),
+                        cartTotal: estimatedOrderAmount,
+                    }), "GIG Logistics");
+                    finalFee = gigQuote.shippingFeeNaira;
+                    providerQuote = gigQuote;
+                } catch (gigErr) {
+                    console.error("⚠️ [GIG API RATE ERROR], hiding unavailable option:", {
+                        courierId: doc.id,
+                        error: gigErr,
+                    });
+                    unavailableProviders.push({
+                        id: doc.id,
+                        name: courier.name || "GIG Logistics",
+                        reason: gigErr instanceof Error ? gigErr.message : "GIG Logistics could not return a delivery quote.",
+                    });
+                    return;
+                }
+            }
             // Static fallback for other quote-only couriers (Dellyman, Glovo,
-            // Kwikpik, GIG, etc.).
+            // Kwikpik, etc.).
             else {
                 finalFee = calculateStaticFallback(courier, destinationState, totalWeightKg);
             }

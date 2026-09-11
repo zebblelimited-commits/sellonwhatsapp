@@ -4,12 +4,13 @@ import { adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 import { sendRenewalReminderEmail, sendSubscriptionConfirmationEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/events";
 import { updateExistingStore } from "@/lib/store-sync";
+import { nombaBaseUrl } from "@/lib/payments/nomba/client";
 
 export const runtime = "nodejs";
 
 // ✅ Helper to fetch Nomba Access Token for charging saved payment tokens
 async function getNombaToken() {
-    const nombaOrigin = process.env.NOMBA_SANDBOX_URL || "https://api.nomba.com";
+    const nombaOrigin = nombaBaseUrl();
     const response = await fetch(`${nombaOrigin}/v1/auth/token/issue`, {
         method: "POST",
         headers: {
@@ -30,7 +31,7 @@ async function getNombaToken() {
 
 // ✅ Charge saved payment token via Nomba API
 async function chargeSavedToken(token: string, amount: number, customerEmail: string, reference: string) {
-    const nombaOrigin = process.env.NOMBA_SANDBOX_URL || "https://api.nomba.com";
+    const nombaOrigin = nombaBaseUrl();
     const nombaToken = await getNombaToken();
 
     const response = await fetch(`${nombaOrigin}/v1/checkout/token/charge`, {

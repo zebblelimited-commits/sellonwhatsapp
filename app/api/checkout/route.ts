@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { chowdeckConfigured } from "@/lib/chowdeck";
 import { sendboxConfigured } from "@/lib/sendbox";
 import { topshipConfigured, type TopshipQuote } from "@/lib/topship";
+import { gigConfigured, type GigQuote } from "@/lib/gig";
 import { calculateEscrowBreakdown } from "@/lib/escrow/calculator";
 import { createEscrowRecord } from "@/src/infrastructure/db/escrowService";
 import { createNombaCheckoutOrder, nombaBaseUrl } from "@/lib/payments/nomba/client";
@@ -22,7 +23,7 @@ interface CheckoutRequestBody {
         shippingCost: number;
         estimatedDays?: string;
         providerQuoteId?: number | string;
-        providerQuote?: TopshipQuote | Record<string, unknown>;
+        providerQuote?: TopshipQuote | GigQuote | Record<string, unknown>;
         subtotal: number;
     }[];
     paymentMethod: string;
@@ -247,16 +248,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 const courierCode = String(courier.code || courierId || "").toLowerCase();
                 const isTopship = courierCode === "topship" || courierId === "topship";
                 const isSendbox = courierCode === "sendbox" || courierId === "sendbox_shipping";
+                const isGig = courierCode === "gig" || courierId === "gig_logistics";
                 const dispatchEnabled = (courierCode === "fez" && courier.dispatchEnabled !== false)
                     || (courierCode === "chowdeck" && chowdeckConfigured())
                     || (isTopship && topshipConfigured())
-                    || (isSendbox && sendboxConfigured());
+                    || (isSendbox && sendboxConfigured())
+                    || (isGig && gigConfigured());
                 const usesFallbackChowdeck = courierCode === "chowdeck" && courierId === "chowdeck";
                 const usesFallbackTopship = isTopship && courierId === "topship";
                 const usesFallbackSendbox = isSendbox && courierId === "sendbox_shipping";
-                if ((!courierSnap.exists && !usesFallbackChowdeck && !usesFallbackTopship && !usesFallbackSendbox) || !dispatchEnabled) {
+                const usesFallbackGig = isGig && courierId === "gig_logistics";
+                if ((!courierSnap.exists && !usesFallbackChowdeck && !usesFallbackTopship && !usesFallbackSendbox && !usesFallbackGig) || !dispatchEnabled) {
                     return NextResponse.json(
-                        { error: `${courierName || "This courier"} is not currently available for automated dispatch. Choose Chowdeck Relay, FEZ, Topship, or Self-Arranged.` },
+                        { error: `${courierName || "This courier"} is not currently available for automated dispatch. Choose Chowdeck Relay, FEZ, Topship, GIG Logistics, or Self-Arranged.` },
                         { status: 400 },
                     );
                 }
@@ -275,6 +279,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 if (isSendbox && (providerQuoteId === undefined || providerQuoteId === null || providerQuoteId === "")) {
                     return NextResponse.json(
                         { error: "Sendbox delivery pricing expired. Please refresh the shipping quote and try again." },
+                        { status: 400 },
+                    );
+                }
+                if (isGig && !providerQuote) {
+                    return NextResponse.json(
+                        { error: "GIG Logistics delivery pricing expired. Please refresh the shipping quote and try again." },
                         { status: 400 },
                     );
                 }

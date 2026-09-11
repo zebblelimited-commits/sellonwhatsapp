@@ -4,6 +4,7 @@ import { createFezOrders } from "@/lib/fez";
 import { createChowdeckDelivery } from "@/lib/chowdeck";
 import { createSendboxShipment, type SendboxAddress } from "@/lib/sendbox";
 import { createTopshipShipment, payTopshipShipment, type TopshipAddress, type TopshipQuote } from "@/lib/topship";
+import { createGigShipment, type GigAddress, type GigQuote } from "@/lib/gig";
 
 type DispatchResult = {
   shipmentId: string;
@@ -44,7 +45,10 @@ const isPaid = (order: any) => {
 };
 
 function providerCode(shipment: any, courier: any) {
-  return asText(courier?.code || shipment?.courierCode || shipment?.courierId).toLowerCase();
+  const code = asText(courier?.code || shipment?.courierCode || shipment?.courierId).toLowerCase();
+  if (code === "gig_logistics") return "gig";
+  if (code === "sendbox_shipping") return "sendbox";
+  return code;
 }
 
 /**
@@ -376,8 +380,101 @@ export async function dispatchShipmentForOrder(orderId: string): Promise<Dispatc
     }
   }
 
+  if (code === "gig") {
+    try {
+      const quote = shipment.providerQuote as GigQuote | undefined;
+      if (!quote || quote.senderStationId === undefined || quote.receiverStationId === undefined) {
+        throw new Error("GIG delivery quote is missing or expired");
+      }
+
+      const deliveryAddress = order.deliveryAddress || shipment.deliveryAddress;
+      const pickupAddress = shipment.pickupAddress || {};
+      const sender: GigAddress = {
+        name: asText(pickupAddress?.name, order.storeName || "SellOnWhatsApp seller"),
+        phone: normalisePhone(pickupAddress?.phone || shipment.pickupPhone || shipment.storePhone),
+        email: asText(order.storeEmail) || undefined,
+        address: addressText(pickupAddress),
+        city: asText(pickupAddress?.city),
+        state: asText(pickupAddress?.state || shipment.pickupState),
+        lga: asText(pickupAddress?.lga),
+        postalCode: asText(pickupAddress?.postalCode),
+        latitude: pickupAddress?.latitude,
+        longitude: pickupAddress?.longitude,
+      };
+      const receiver: GigAddress = {
+        name: asText(order.customerName, "Customer"),
+        phone: normalisePhone(order.customerPhone || deliveryAddress?.phone),
+        email: asText(order.customerEmail) || undefined,
+        address: addressText(deliveryAddress),
+        city: asText(deliveryAddress?.city),
+        state: stateText(deliveryAddress),
+        lga: asText(deliveryAddress?.lga),
+        postalCode: asText(deliveryAddress?.postalCode),
+        latitude: deliveryAddress?.latitude,
+        longitude: deliveryAddress?.longitude,
+      };
+      const items = Array.isArray(order.items) ? order.items : [];
+      const weight = Math.max(1, items.reduce((total: number, item: any) => total + (Number(item.weightKg ?? item.weight) || 1) * (Number(item.quantity) || 1), 0));
+      const shipmentResult = await createGigShipment({
+        reference: shipmentId,
+        sender,
+        receiver,
+        quote,
+        items,
+        totalWeightKg: weight,
+        totalValueNaira: Number(order.productSubtotal ?? order.total ?? 0),
+      });
+      const providerReference = asText(shipmentResult.providerReference);
+
+      await Promise.all([
+        shipmentRef.update({
+          status: "AWAITING_PICKUP",
+          dispatchStatus: "DISPATCHED",
+          provider: "gig",
+          providerReference,
+          courierOrderId: providerReference,
+          trackingId: shipmentResult.trackingId || providerReference,
+          trackingUrl: shipmentResult.trackingUrl || null,
+          providerStatus: shipmentResult.status || "created",
+          dispatchedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          dispatchError: admin.firestore.FieldValue.delete(),
+        }),
+        orderRef.update({
+          deliveryStatus: "AWAITING_PICKUP",
+          courierStatus: shipmentResult.status || "DISPATCHED",
+          providerReference,
+          trackingId: shipmentResult.trackingId || providerReference,
+          trackingUrl: shipmentResult.trackingUrl || null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }),
+      ]);
+      console.log(`[SHIPPING] GIG shipment ${shipmentId} created as ${providerReference}`);
+      return {
+        shipmentId,
+        orderId,
+        status: "AWAITING_PICKUP",
+        dispatchStatus: "DISPATCHED",
+        providerReference,
+        trackingId: shipmentResult.trackingId || providerReference,
+        trackingUrl: shipmentResult.trackingUrl,
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "GIG Logistics dispatch failed";
+      await shipmentRef.update({
+        status: "PENDING_PICKUP",
+        dispatchStatus: "FAILED",
+        dispatchError: reason.slice(0, 500),
+        lastDispatchAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.error(`[SHIPPING] GIG dispatch failed for ${shipmentId}:`, reason);
+      return { shipmentId, orderId, status: "PENDING_PICKUP", dispatchStatus: "FAILED", reason };
+    }
+  }
+
   if (code !== "fez") {
-    const reason = `Automated dispatch is not configured for ${asText(shipment.courierName, code || "this courier")}. Choose Chowdeck, FEZ, Sendbox, Topship, or Self-Arranged.`;
+    const reason = `Automated dispatch is not configured for ${asText(shipment.courierName, code || "this courier")}. Choose Chowdeck, FEZ, Sendbox, Topship, GIG Logistics, or Self-Arranged.`;
     await shipmentRef.update({
       status: "PENDING_PICKUP",
       dispatchStatus: "PROVIDER_INTEGRATION_REQUIRED",

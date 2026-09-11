@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
+import { createNombaCheckoutOrder } from "@/lib/payments/nomba/client";
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,46 +31,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Plan price is invalid" }, { status: 400 });
     }
 
-    // 3. Create Nomba payment session
-    const nomabaResponse = await fetch(`${process.env.NOMBA_SANDBOX_URL}/api/v1/charges`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.NOMBA_CLIENT_SECRET}`,
-        "Content-Type": "application/json"
+    // 3. Create the checkout through the shared environment-aware Nomba client.
+    const orderReference = `PREMIUM_${userId}_${Date.now()}`;
+    const checkout = await createNombaCheckoutOrder({
+      amount: planPrice.toFixed(2),
+      currency: "NGN",
+      orderReference,
+      callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?tab=partner&reference=${encodeURIComponent(orderReference)}`,
+      customerEmail: decoded.email || "",
+      customerId: userId,
+      allowedPaymentMethods: ["Card", "Transfer"],
+      orderMetaData: {
+        userId,
+        planId,
+        returnUrl: String(returnUrl || ""),
+        flow: "premium_checkout",
       },
-      body: JSON.stringify({
-        amount: planPrice,
-        currency: "NGN",
-        email: decoded.email,
-        reference: `premium_${userId}_${Date.now()}`,
-        callback_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/premium/webhook`,
-        metadata: {
-          userId,
-          planId,
-          returnUrl
-        }
-      })
     });
-
-    const nomabaData = await nomabaResponse.json();
-    
-    if (!nomabaData.success || !nomabaData.data?.checkout_url) {
-      throw new Error("Nomba checkout failed");
-    }
 
     // 4. Create pending subscription record
     await adminDb.collection("subscriptions").add({
       userId,
       planId,
       status: "pending_payment",
-      nomabaReference: nomabaData.data.reference,
+      nombaReference: checkout.orderReference,
       createdAt: new Date(),
       updatedAt: new Date()
     });
 
     return NextResponse.json({ 
       success: true, 
-      checkoutUrl: nomabaData.data.checkout_url 
+      checkoutUrl: checkout.checkoutLink 
     });
 
   } catch (error) {
