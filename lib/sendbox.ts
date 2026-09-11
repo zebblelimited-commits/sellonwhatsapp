@@ -7,6 +7,16 @@ const SENDBOX_BASE_URL = configuredBaseUrl.endsWith("/shipping")
 
 let cachedToken: string | null = null;
 
+async function sendboxFetch(input: string, init?: RequestInit) {
+    try {
+        return await fetch(input, init);
+    } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        const method = init?.method || "GET";
+        throw new Error(`Sendbox request failed (${method} ${input}): ${detail}`);
+    }
+}
+
 export function sendboxConfigured() {
     return Boolean(
         process.env.SENDBOX_ACCESS_TOKEN?.trim() ||
@@ -37,7 +47,7 @@ export async function getSendboxAuthToken(): Promise<string> {
         throw new Error("SENDBOX_EMAIL or SENDBOX_PASSWORD missing from environment variables.");
     }
 
-    const response = await fetch(`${SENDBOX_BASE_URL}/user/authenticate`, {
+    const response = await sendboxFetch(`${SENDBOX_BASE_URL}/user/authenticate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -108,7 +118,7 @@ export interface SendboxShipment {
 export async function fetchSendboxQuote(params: SendboxQuoteRequest) {
     const authToken = await getSendboxAuthToken();
 
-    const response = await fetch(`${SENDBOX_BASE_URL}/shipment_delivery_quote`, {
+    const response = await sendboxFetch(`${SENDBOX_BASE_URL}/shipment_delivery_quote`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -219,7 +229,7 @@ export async function createSendboxShipment(params: {
         ...(params.selectedCourierId ? { selected_courier_id: params.selectedCourierId } : {}),
         callback_url: `${appUrl}/api/webhooks/sendbox`,
     };
-    const response = await fetch(`${SENDBOX_BASE_URL}/shipments`, {
+    const response = await sendboxFetch(`${SENDBOX_BASE_URL}/shipments`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",

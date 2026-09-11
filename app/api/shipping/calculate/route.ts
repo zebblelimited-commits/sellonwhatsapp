@@ -311,10 +311,13 @@ export async function POST(req: NextRequest) {
                         courierId: doc.id,
                         error: topshipErr,
                     });
+                    const detail = topshipErr instanceof Error
+                        ? topshipErr.message
+                        : String(topshipErr);
                     unavailableProviders.push({
                         id: doc.id,
                         name: courier.name || "Topship",
-                        reason: "Topship could not return a delivery quote for this route. Check the staging API key and both address locations.",
+                        reason: `Topship could not return a delivery quote: ${detail}`,
                     });
                     return;
                 }
