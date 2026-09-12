@@ -17,6 +17,7 @@ const SHIPPING_PROVIDER_TIMEOUT_MS = Number.isFinite(configuredShippingTimeout) 
 interface ShippingRequest {
     destinationState: string;
     totalWeightKg?: number;
+    items?: Array<Record<string, unknown>>;
     cartTotal?: number;
     pickupAddress?: ChowdeckAddress;
     destinationAddress?: ChowdeckAddress;
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
             }
             throw error;
         }
-        const { destinationState, totalWeightKg = 1, cartTotal = 0, pickupAddress, destinationAddress, estimatedOrderAmount = cartTotal } = body;
+        const { destinationState, totalWeightKg = 1, items = [], cartTotal = 0, pickupAddress, destinationAddress, estimatedOrderAmount = cartTotal } = body;
 
         if (!destinationState) {
             return NextResponse.json(
@@ -367,6 +368,7 @@ export async function POST(req: NextRequest) {
                         receiver: (destinationAddress || { state: destinationState }) as GigAddress,
                         totalWeightKg: Math.max(1, totalWeightKg),
                         cartTotal: estimatedOrderAmount,
+                        items,
                     }), "GIG Logistics");
                     finalFee = gigQuote.shippingFeeNaira;
                     providerQuote = gigQuote;

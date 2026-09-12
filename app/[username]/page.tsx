@@ -15,6 +15,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
 import { useCart } from "@/contexts/CartContext";
 import { isPublicStore } from "@/lib/categoryCatalog";
+import { productCheckoutAttributes } from "@/lib/product-checkout-attributes";
 
 // Components
 import Header from "@/components/layout/Header";
@@ -151,6 +152,7 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
         storeUsername: storeData?.username,
         vendorNombaAccountId: storeData?.nombaAccountId || "",
         image: p.images?.[0] || p.image || "/placeholder.png",
+        ...productCheckoutAttributes(p),
       };
       sessionStorage.setItem("checkout_order", JSON.stringify(orderDetails));
       router.push("/checkout");
@@ -463,6 +465,7 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
                               storeId: vendorId,
                               storeName: storeData?.storeName || "Store",
                               username: storeData?.username,
+                              ...productCheckoutAttributes(p),
                             });
                           }
                         }}

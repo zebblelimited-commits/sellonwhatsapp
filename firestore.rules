@@ -165,6 +165,14 @@ service cloud.firestore {
       ]);
       
       allow create: if request.auth != null && request.resource.data.storeId == request.auth.uid;
+
+      // Booking availability belongs to the product owner. Reads are public
+      // because customers need the schedule before making a booking.
+      match /availability/{dayId} {
+        allow read: if true;
+        allow create, update, delete: if request.auth != null &&
+          get(/databases/$(database)/documents/products/$(productId)).data.storeId == request.auth.uid;
+      }
     }
     
     // ═══════════════════════════════════════════════════════════

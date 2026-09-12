@@ -222,7 +222,7 @@ export default function CheckoutPage() {
     acc[storeId].items.push(item);
     acc[storeId].subtotal += item.price * item.quantity;
 
-    const itemWeight = Number(item.weightKg) || 1;
+    const itemWeight = Number(item.weightKg ?? item.weight) || 1;
     acc[storeId].totalWeightKg += itemWeight * item.quantity;
 
     return acc;
@@ -699,6 +699,7 @@ export default function CheckoutPage() {
                       <ShippingSelector
                         selectedState={selectedState}
                         totalWeightKg={group.totalWeightKg}
+                        items={group.items}
                         pickupAddress={sellerLocations.find((location) => location.id === storeId)}
                         destinationAddress={selectedBuyerAddress}
                         estimatedOrderAmount={group.subtotal}

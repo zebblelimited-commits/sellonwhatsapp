@@ -14,24 +14,6 @@ type ProductType = 'physical' | 'service' | 'booking' | 'utility';
 type ProductImage = { file?: File; preview: string; isExisting: boolean };
 type ProductVariant = { type: string; value: string };
 
-interface ShipbubbleCategory {
-  id: string | number;
-  name: string;
-  description?: string | null;
-  isActive?: boolean;
-}
-
-// Default fallback categories (used if API fetch fails)
-const DEFAULT_SHIPBUBBLE_CATEGORIES: ShipbubbleCategory[] = [
-  { id: "90097994", name: "Accessories" },
-  { id: "3035980", name: "Electronics" },
-  { id: "70830897", name: "Electronic gadgets" },
-  { id: "66484941", name: "Jewelry" },
-  { id: "69709726", name: "Food" },
-  { id: "98246239", name: "Fashion wears" }
-
-];
-
 type ProductRecord = {
   id?: string;
   productType?: ProductType;
@@ -43,7 +25,6 @@ type ProductRecord = {
     lengthCm?: number;
     widthCm?: number;
     heightCm?: number;
-    shipbubbleCategoryId?: number;
   };
   [key: string]: any;
 };
@@ -66,7 +47,6 @@ type ProductFormData = {
     lengthCm: string;
     widthCm: string;
     heightCm: string;
-    shipbubbleCategoryId: string;
   };
 };
 
@@ -100,10 +80,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
   const [productLimit, setProductLimit] = useState(20);
   const [loadingLimits, setLoadingLimits] = useState(true);
 
-  // Shipbubble categories state - fetch from API on mount
-  const [shipbubbleCategories, setShipbubbleCategories] = useState<ShipbubbleCategory[]>(DEFAULT_SHIPBUBBLE_CATEGORIES);
-  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
-
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
     description: '',
@@ -122,7 +98,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
       lengthCm: '',
       widthCm: '',
       heightCm: '',
-      shipbubbleCategoryId: '90097994' // Default to General/Other
     }
   });
 
@@ -159,8 +134,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
           weightKg: String(initialData.shipping?.weightKg || ''),
           lengthCm: String(initialData.shipping?.lengthCm || ''),
           widthCm: String(initialData.shipping?.widthCm || ''),
-          heightCm: String(initialData.shipping?.heightCm || ''),
-          shipbubbleCategoryId: String(initialData.shipping?.shipbubbleCategoryId || '90097994')
+          heightCm: String(initialData.shipping?.heightCm || '')
         }
       });
     } else if (isOpen) {
@@ -173,7 +147,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         name: '', description: '', price: '', discountPrice: '',
         mainCategory: '', subCategory: '', stockCount: '1', deliveryType: 'state',
         duration: '1 Hour', metricType: 'flat', unitLabel: 'Service', locationType: 'remote',
-        shipping: { weightKg: '', lengthCm: '', widthCm: '', heightCm: '', shipbubbleCategoryId: '90097994' }
+        shipping: { weightKg: '', lengthCm: '', widthCm: '', heightCm: '' }
       });
     }
 
@@ -200,30 +174,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
     };
     fetchUsageAndLimits();
 
-    // Fetch Shipbubble categories from API
-    const fetchShipbubbleCategories = async () => {
-      setIsLoadingCategories(true);
-      try {
-        const response = await fetch('/api/shipping/categories');
-        const data = await response.json();
-
-        if (response.ok && data.success && data.categories?.length > 0) {
-          setShipbubbleCategories(data.categories);
-        } else {
-          console.warn('Failed to fetch Shipbubble categories, using defaults:', data);
-          // Keep default categories
-        }
-      } catch (error) {
-        console.error('Error fetching Shipbubble categories:', error);
-        // Keep default categories on error
-      } finally {
-        setIsLoadingCategories(false);
-      }
-    };
-
-    if (isOpen) {
-      fetchShipbubbleCategories();
-    }
   }, [initialData, isOpen]);
 
   if (!isOpen) return null;
@@ -272,14 +222,10 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
 
     // STRICT VALIDATION FOR PHYSICAL PRODUCTS
     if (productType === 'physical') {
-      const { weightKg, lengthCm, widthCm, heightCm, shipbubbleCategoryId } = formData.shipping;
+      const { weightKg, lengthCm, widthCm, heightCm } = formData.shipping;
       if (!weightKg || !lengthCm || !widthCm || !heightCm ||
         Number(weightKg) <= 0 || Number(lengthCm) <= 0 || Number(widthCm) <= 0 || Number(heightCm) <= 0) {
         showToast("error", "Please enter valid package weight and dimensions for physical products.");
-        return;
-      }
-      if (!shipbubbleCategoryId) {
-        showToast("error", "Please select a valid Shipbubble package category.");
         return;
       }
     }
@@ -324,8 +270,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
             weightKg: parseFloat(formData.shipping.weightKg),
             lengthCm: parseFloat(formData.shipping.lengthCm),
             widthCm: parseFloat(formData.shipping.widthCm),
-            heightCm: parseFloat(formData.shipping.heightCm),
-            shipbubbleCategoryId: String(formData.shipping.shipbubbleCategoryId)
+            heightCm: parseFloat(formData.shipping.heightCm)
           }
         }),
         ...(productType === 'service' && { fulfillmentMethod: formData.deliveryType, turnaroundTime: formData.duration }),
@@ -515,28 +460,9 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                           </div>
                         </div>
 
-                        {/* ✅ UPDATED: Dropdown for Valid Shipbubble Categories */}
-                        <div className="mt-2">
-                          <label className="text-[9px] text-gray-500 block mb-1">Shipbubble Category *</label>
-                          <select
-                            required
-                            className="w-full bg-white border border-emerald-100 rounded-lg p-2 text-xs outline-none"
-                            value={formData.shipping.shipbubbleCategoryId}
-                            onChange={e => setFormData({ ...formData, shipping: { ...formData.shipping, shipbubbleCategoryId: e.target.value } })}
-                          >
-                            {isLoadingCategories ? (
-                              <option value="" disabled>Loading categories...</option>
-                            ) : (
-                              shipbubbleCategories.map(cat => (
-                                <option key={cat.id} value={String(cat.id)}>{cat.name}</option>
-                              ))
-                            )}
-                          </select>
-                        </div>
-
                         <p className="text-[9px] text-emerald-700/70 mt-1 flex items-start gap-1">
                           <Info size={10} className="mt-0.5 shrink-0" />
-                          Accurate dimensions and category prevent unexpected courier surcharges.
+                          Accurate dimensions help prevent unexpected courier surcharges.
                         </p>
                       </div>
                     </div>

@@ -9,6 +9,7 @@ import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
 import { useCart } from "@/contexts/CartContext";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { productCheckoutAttributes } from "@/lib/product-checkout-attributes";
 
 type ProductCardProps = {
   product: any;
@@ -74,6 +75,7 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
         storeUsername: product.username,
         vendorNombaAccountId: product.nombaAccountId,
         image,
+        ...productCheckoutAttributes(product),
       };
       sessionStorage.setItem("checkout_order", JSON.stringify(orderDetails));
       router.push("/checkout");
@@ -220,6 +222,7 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
                     storeId,
                     storeName: product.vendorName || "Marketplace seller",
                     username: product.username,
+                    ...productCheckoutAttributes(product),
                   });
                 }
               }}

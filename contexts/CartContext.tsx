@@ -2,7 +2,10 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { auth } from "@/lib/firebase"; // ✅ Ensure this path matches your firebase config
+import { db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { productCheckoutAttributes } from "@/lib/product-checkout-attributes";
 
 export type CartItem = {
   id: string;
@@ -14,6 +17,14 @@ export type CartItem = {
   storeId: string;
   storeName: string;
   username?: string;
+  description?: string;
+  category?: string;
+  productType?: string;
+  weightKg?: number;
+  weight?: number;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
 };
 
 type CartContextType = {
@@ -36,14 +47,36 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // 1. Load cart from localStorage on mount
   useEffect(() => {
-    const savedCart = localStorage.getItem("sellonwhatsapp_cart");
-    if (savedCart) {
+    let active = true;
+
+    const hydrateCart = async () => {
+      const savedCart = localStorage.getItem("sellonwhatsapp_cart");
+      if (!savedCart) return;
+
       try {
-        setItems(JSON.parse(savedCart));
-      } catch (e) {
-        console.error("Failed to parse cart", e);
+        const parsed = JSON.parse(savedCart);
+        if (!Array.isArray(parsed)) return;
+
+        const hydrated = await Promise.all(parsed.map(async (item) => {
+          if (!item || typeof item !== "object" || !item.productId) return item;
+          try {
+            const productSnapshot = await getDoc(doc(db, "products", String(item.productId)));
+            return productSnapshot.exists()
+              ? { ...item, ...productCheckoutAttributes(productSnapshot.data()) }
+              : item;
+          } catch {
+            return item;
+          }
+        }));
+
+        if (active) setItems(hydrated);
+      } catch (error) {
+        console.error("Failed to parse cart", error);
       }
-    }
+    };
+
+    void hydrateCart();
+    return () => { active = false; };
   }, []);
 
   // 2. Save cart to localStorage whenever it changes

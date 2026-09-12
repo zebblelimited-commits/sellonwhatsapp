@@ -13,6 +13,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useRouter } from "next/navigation";
+import { productCheckoutAttributes } from "@/lib/product-checkout-attributes";
 
 declare global {
   interface Window {
@@ -102,6 +103,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
         storeUsername: store?.username,
         vendorNombaAccountId: store?.nombaAccountId,
         image: images[0],
+        ...productCheckoutAttributes(product),
       };
       sessionStorage.setItem("checkout_order", JSON.stringify(orderDetails));
       router.push("/checkout");
@@ -335,6 +337,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
                         storeId,
                         storeName: store?.storeName || "Store",
                         username: store?.username,
+                        ...productCheckoutAttributes(product),
                       });
                     }
                   }}

@@ -33,6 +33,7 @@ interface ShippingSelectorProps {
     totalWeightKg?: number;
     onSelectOption: (option: ShippingOption | null) => void;
     selectedOptionId?: string;
+    items?: Array<Record<string, unknown>>;
     pickupAddress?: ShippingAddress;
     destinationAddress?: ShippingAddress;
     estimatedOrderAmount?: number;
@@ -71,6 +72,7 @@ export default function ShippingSelector({
     totalWeightKg = 1,
     onSelectOption,
     selectedOptionId,
+    items = [],
     pickupAddress,
     destinationAddress,
     estimatedOrderAmount = 0,
@@ -80,6 +82,14 @@ export default function ShippingSelector({
     const [providerMessage, setProviderMessage] = useState<string | null>(null);
     const pickupAddressKey = addressKey(pickupAddress);
     const destinationAddressKey = addressKey(destinationAddress);
+    const itemsKey = items.map((item) => [
+        item.productId,
+        item.quantity,
+        item.weightKg ?? item.weight,
+        item.lengthCm,
+        item.widthCm,
+        item.heightCm,
+    ].map((value) => String(value ?? "")).join(":")).join("|");
 
     // Keep track of the latest onSelectOption reference
     const onSelectRef = useRef(onSelectOption);
@@ -106,6 +116,7 @@ export default function ShippingSelector({
                     body: JSON.stringify({
                         destinationState: selectedState,
                         totalWeightKg,
+                        items,
                         pickupAddress,
                         destinationAddress,
                         estimatedOrderAmount,
@@ -161,7 +172,7 @@ export default function ShippingSelector({
             console.error("Error fetching shipping rates:", error);
         });
         return () => controller.abort();
-    }, [selectedState, totalWeightKg, pickupAddressKey, destinationAddressKey, estimatedOrderAmount]);
+    }, [selectedState, totalWeightKg, itemsKey, pickupAddressKey, destinationAddressKey, estimatedOrderAmount]);
 
     if (!selectedState) {
         return (

@@ -13,6 +13,7 @@ import { db, auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
 import { useCart } from "@/contexts/CartContext";
+import { productCheckoutAttributes } from "@/lib/product-checkout-attributes";
 
 const font = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -189,6 +190,7 @@ export default function Popular({ fullPage = false }: PopularProps) {
         storeUsername: product.username,
         vendorNombaAccountId: product.nombaAccountId,
         image: productImage(product),
+        ...productCheckoutAttributes(product),
       };
       sessionStorage.setItem("checkout_order", JSON.stringify(orderDetails));
       router.push("/checkout");
@@ -352,6 +354,7 @@ export default function Popular({ fullPage = false }: PopularProps) {
                             storeId: product.storeId,
                             storeName: product.vendorName || "Marketplace seller",
                             username: product.username,
+                            ...productCheckoutAttributes(product),
                           });
                         }
                       }}
