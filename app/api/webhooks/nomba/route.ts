@@ -107,6 +107,13 @@ export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
 
+    // Nomba validates a newly configured webhook with an empty POST before
+    // sending signed payment events. This probe must be acknowledged, while
+    // every real event below still requires the configured HMAC signature.
+    if (!rawBody.trim()) {
+      return NextResponse.json({ received: true }, { status: 200 });
+    }
+
     let payload;
     try {
       payload = JSON.parse(rawBody);
@@ -114,10 +121,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
 
+    const isValidationProbe = payload
+      && typeof payload === "object"
+      && !payload.event_type
+      && !payload.data
+      && !payload.transaction;
+
     const webhookSecret = process.env.NOMBA_WEBHOOK_SECRET?.trim();
     const signature = request.headers.get("nomba-signature") || request.headers.get("nomba-sig-value");
     const timestamp = request.headers.get("nomba-timestamp") || "";
     if (webhookSecret) {
+      if (isValidationProbe && (!signature || !timestamp)) {
+        return NextResponse.json({ received: true }, { status: 200 });
+      }
       if (!signature || !timestamp || !isNombaWebhookSignatureValid(payload, timestamp, signature, webhookSecret)) {
         console.error("[NOMBA WEBHOOK] Signature verification failed");
         return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
