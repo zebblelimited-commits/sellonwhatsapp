@@ -55,6 +55,10 @@ NOMBA_WEBHOOK_SECRET=...              # Developer > Webhook Setup signature key
 CRON_SECRET=...                       # Vercel Cron bearer secret
 ESCROW_CRON_SECRET=...                # optional local alias for the escrow cron
 NEXT_PUBLIC_APP_URL=https://your-domain.example
+
+
+########################
+https://sellonwhatsapp.com/payment/success?reference=175743566&orderId=ea260d25-c8b3-426a-aa9e-aeb747db868c&orderReference=175743566
 # Optional: maximum wait for each live courier quote (default: 8000 ms)
 SHIPPING_PROVIDER_TIMEOUT_MS=8000
 ```

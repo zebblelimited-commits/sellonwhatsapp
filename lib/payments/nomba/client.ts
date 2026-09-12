@@ -207,6 +207,43 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
       throw error;
     }
   }
+
+  // Production's checkout-details endpoint is especially useful for bank
+  // transfers because it includes transactionDetails.statusCode and the
+  // transfer payment reference. Use it as a fallback when the compact
+  // transaction lookup returns "not found" for an order reference.
+  if (!isSandbox(config)) {
+    const url = new URL(`${nombaBaseUrl(config)}/v1/checkout/transaction`);
+    url.searchParams.set("idType", "ORDER_REFERENCE");
+    url.searchParams.set("id", value);
+    try {
+      const result = await nombaRequest<JsonObject>(url.pathname + url.search, { method: "GET" }, config);
+      const data = responseData(result);
+      const details = data.transactionDetails && typeof data.transactionDetails === "object"
+        ? data.transactionDetails as JsonObject
+        : {};
+      const order = data.order && typeof data.order === "object" ? data.order as JsonObject : {};
+      const status = String(
+        details.statusCode || data.status || data.gatewayMessage || data.message || ""
+      ).toUpperCase();
+      const confirmed = data.success === true
+        || String(data.success).toLowerCase() === "true"
+        || /SUCCESS|APPROVED|COMPLETED/.test(status);
+      return {
+        confirmed,
+        status,
+        transactionId: String(data.id || details.paymentReference || details.transactionId || "") || undefined,
+        amount: Number.isFinite(Number(order.amount || data.amount)) ? Number(order.amount || data.amount) : undefined,
+        rawResponse: result,
+      };
+    } catch (error) {
+      const responseCode = error instanceof NombaError && error.responseBody && typeof error.responseBody === "object"
+        ? String((error.responseBody as JsonObject).code || "")
+        : "";
+      if (!(error instanceof NombaError && (error.status === 404 || error.status === 200 || responseCode === "01"))) throw error;
+    }
+  }
+
   return { confirmed: false, status: "NOT_FOUND" };
 }
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { notifyOrderPaymentConfirmed } from "@/lib/novu-events";
 import { dispatchShipmentForOrder } from "@/lib/shipping-dispatch";
-import { verifyNombaTransaction } from "@/lib/payments/nomba/client";
+import { nombaBaseUrl, verifyNombaTransaction } from "@/lib/payments/nomba/client";
 import { createEscrowRecord, fundEscrowAndOrders, getEscrowByReference } from "@/src/infrastructure/db/escrowService";
 
 class PaymentConfirmationError extends Error {
@@ -26,12 +26,14 @@ function summary(id: string, data: FirebaseFirestore.DocumentData) {
 }
 
 export async function POST(request: NextRequest) {
+    let requestedOrderReference = "<unknown>";
     try {
         const authorization = request.headers.get("authorization");
         if (!authorization?.startsWith("Bearer ")) throw new PaymentConfirmationError("Unauthorized", 401);
         const decoded = await adminAuth.verifyIdToken(authorization.slice("Bearer ".length).trim());
         const body = await request.json() as { orderReference?: unknown };
         const orderReference = typeof body.orderReference === "string" ? body.orderReference.trim() : "";
+        requestedOrderReference = orderReference || "<missing>";
         if (!orderReference) throw new PaymentConfirmationError("Order reference is required", 400);
 
         let ordersSnapshot = await adminDb.collection("orders").where("checkoutReference", "==", orderReference).get();
@@ -127,7 +129,11 @@ export async function POST(request: NextRequest) {
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Payment confirmation failed";
         const status = error instanceof PaymentConfirmationError ? error.status : 502;
-        console.error("Order payment confirmation error:", error);
+        console.error("Order payment confirmation error:", {
+            nombaBaseUrl: nombaBaseUrl(),
+            orderReference: requestedOrderReference,
+            error,
+        });
         return NextResponse.json({ error: message }, { status });
     }
 }
