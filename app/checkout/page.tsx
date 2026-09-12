@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import {
   MapPin, Truck, CreditCard, ShieldCheck,
-  Edit3, Package, Building2,
+  Edit3, Package, Building2, AlertCircle,
   Store, X, Save, Loader2, ChevronDown, PlusCircle
 } from "lucide-react";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
@@ -64,7 +64,9 @@ export default function CheckoutPage() {
   const [addresses, setAddresses] = useState<CheckoutAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("default_addr");
   const [selectedState, setSelectedState] = useState<string>("");
-  const [paymentMethod, setPaymentMethod] = useState("card");
+  const [paymentMethod, setPaymentMethod] = useState("transfer");
+  const [cardSettlementAcknowledged, setCardSettlementAcknowledged] = useState(false);
+  const [showCardSettlementNotice, setShowCardSettlementNotice] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Direct checkout order from sessionStorage (fallback)
@@ -387,6 +389,11 @@ export default function CheckoutPage() {
 
   // 5. Submit Order Payload
   const handleCheckout = async () => {
+    if (paymentMethod === "card" && !cardSettlementAcknowledged) {
+      setShowCardSettlementNotice(true);
+      return;
+    }
+
     if (!selectedBuyerAddress) {
       alert("Please select a valid delivery address.");
       return;
@@ -807,19 +814,36 @@ export default function CheckoutPage() {
                   <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
                     <CreditCard size={20} className="text-[#00a63e]" /> Payment Method
                   </h2>
-                  <div className="grid grid-cols-3 gap-3">
-                    {["card", "transfer"].map((method: string) => (
+                  <div className="grid grid-cols-2 gap-3">
+                    {["transfer", "card"].map((method: string) => (
                       <button
                         key={method}
-                        onClick={() => setPaymentMethod(method)}
+                        onClick={() => {
+                          if (method === "card") {
+                            setPaymentMethod("card");
+                            setCardSettlementAcknowledged(false);
+                            setShowCardSettlementNotice(true);
+                          } else {
+                            setPaymentMethod("transfer");
+                            setCardSettlementAcknowledged(false);
+                            setShowCardSettlementNotice(false);
+                          }
+                        }}
                         className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1.5 transition-all ${paymentMethod === method ? "border-[#00a63e] bg-green-50/30" : "border-gray-100 hover:border-gray-200"
                           }`}
                       >
                         {method === "card" ? <CreditCard size={20} /> : <Building2 size={20} />}
-                        <span className="text-[10px] font-bold text-gray-700 capitalize">{method}</span>
+                        <span className="text-[10px] font-bold text-gray-700">
+                          {method === "transfer" ? "Bank Transfer" : "Card"}
+                        </span>
                       </button>
                     ))}
                   </div>
+                  {paymentMethod === "transfer" && (
+                    <p className="mt-3 text-[10px] leading-relaxed text-emerald-700">
+                      Bank transfer settles instantly and allows courier funds to be settled immediately after payment confirmation.
+                    </p>
+                  )}
                 </div>
 
                 <button
@@ -843,6 +867,63 @@ export default function CheckoutPage() {
           </div>
         </div>
       </main>
+
+      {showCardSettlementNotice && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => {
+              setShowCardSettlementNotice(false);
+              if (!cardSettlementAcknowledged) setPaymentMethod("transfer");
+            }}
+          />
+          <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl bg-amber-50 p-3 text-amber-600">
+                <AlertCircle size={22} />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-gray-900">Card settlement notice</h2>
+                <p className="mt-2 text-sm leading-relaxed text-gray-600">
+                  Card payments settle on the next day. Courier funds cannot be settled until that payment settlement is received.
+                </p>
+              </div>
+            </div>
+
+            <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-100 bg-amber-50/50 p-4 text-xs font-semibold leading-relaxed text-gray-700">
+              <input
+                type="checkbox"
+                checked={cardSettlementAcknowledged}
+                onChange={(event) => setCardSettlementAcknowledged(event.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-amber-600"
+              />
+              <span>I understand and agree that courier settlement will be processed the next day when I pay by card.</span>
+            </label>
+
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCardSettlementNotice(false);
+                  setCardSettlementAcknowledged(false);
+                  setPaymentMethod("transfer");
+                }}
+                className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-xs font-bold text-gray-600 hover:bg-gray-50"
+              >
+                Use bank transfer
+              </button>
+              <button
+                type="button"
+                disabled={!cardSettlementAcknowledged}
+                onClick={() => setShowCardSettlementNotice(false)}
+                className="flex-1 rounded-xl bg-[#00a63e] px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                Continue with card
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 1. Edit Default Profile Address Modal */}
       {isEditModalOpen && (

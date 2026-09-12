@@ -128,7 +128,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             customerEmail,
             address,
             sellerOrders,
-            paymentMethod,
+            paymentMethod = "transfer",
             total: frontendTotal,
         } = body;
 
