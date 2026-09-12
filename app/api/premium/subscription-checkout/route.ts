@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as admin from "firebase-admin";
 import { getAuth } from "firebase-admin/auth";
-import { createNombaCheckoutOrder } from "@/lib/payments/nomba/client";
+import { createNombaParentCheckoutOrder } from "@/lib/payments/nomba/client";
 
 // ✅ Initialize Firebase Admin (if not already initialized)
 if (!admin.apps.length) {
@@ -159,7 +159,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const checkout = await createNombaCheckoutOrder({
+    // Platform subscriptions are credited to the authenticated parent account.
+    const checkout = await createNombaParentCheckoutOrder({
       orderReference,
       amount: Number(chargeAmount).toFixed(2),
       currency: "NGN",

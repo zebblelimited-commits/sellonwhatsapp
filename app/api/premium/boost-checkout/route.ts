@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { auth } from "firebase-admin";
 import crypto from "crypto";
-import { createNombaCheckoutOrder } from "@/lib/payments/nomba/client";
+import { createNombaParentCheckoutOrder } from "@/lib/payments/nomba/client";
 
 export async function POST(request: NextRequest) {
   try {
@@ -68,7 +68,9 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date().toISOString(),
     });
 
-    const checkout = await createNombaCheckoutOrder({
+    // Store boosts are platform revenue. Do not route them through seller
+    // escrow or the courier settlement account.
+    const checkout = await createNombaParentCheckoutOrder({
       orderReference: uniqueOrderRef,
       amount: resolvedPrice.toFixed(2),
       currency: "NGN",

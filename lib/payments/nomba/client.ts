@@ -32,6 +32,13 @@ export interface NombaCheckoutResult {
   rawResponse: unknown;
 }
 
+/**
+ * Checkout flows that belong to the platform itself must not route funds to a
+ * seller or courier subaccount. Omitting `order.accountId` and `splitRequest`
+ * makes Nomba credit the authenticated parent account.
+ */
+export type NombaParentCheckoutOrder = Omit<NombaCheckoutOrder, "accountId" | "splitRequest">;
+
 export interface NombaTransactionResult {
   confirmed: boolean;
   status: string;
@@ -153,6 +160,13 @@ export async function createNombaCheckoutOrder(order: NombaCheckoutOrder, config
     orderReference: String(data.orderReference || order.orderReference),
     rawResponse: result,
   };
+}
+
+export async function createNombaParentCheckoutOrder(
+  order: NombaParentCheckoutOrder,
+  config?: NombaConfig,
+): Promise<NombaCheckoutResult> {
+  return createNombaCheckoutOrder(order, config);
 }
 
 export async function verifyNombaTransaction(reference: string, config?: NombaConfig): Promise<NombaTransactionResult> {

@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
-import { createNombaCheckoutOrder } from "@/lib/payments/nomba/client";
+import { createNombaParentCheckoutOrder } from "@/lib/payments/nomba/client";
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,7 +33,8 @@ export async function POST(req: NextRequest) {
 
     // 3. Create the checkout through the shared environment-aware Nomba client.
     const orderReference = `PREMIUM_${userId}_${Date.now()}`;
-    const checkout = await createNombaCheckoutOrder({
+    // Legacy premium subscriptions also belong to the platform parent account.
+    const checkout = await createNombaParentCheckoutOrder({
       amount: planPrice.toFixed(2),
       currency: "NGN",
       orderReference,

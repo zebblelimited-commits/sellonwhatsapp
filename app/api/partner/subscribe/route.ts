@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
-import { nombaBaseUrl } from "@/lib/payments/nomba/client";
+import { createNombaParentCheckoutOrder } from "@/lib/payments/nomba/client";
 
 // ✅ Initialize Firebase Admin
 if (!getApps().length) {
@@ -18,28 +18,6 @@ if (!getApps().length) {
 const db = getFirestore();
 const auth = getAuth();
 
-// ✅ Helper to get Nomba Access Token
-async function getNombaToken() {
-  const authUrl = nombaBaseUrl();
-  const response = await fetch(`${authUrl}/v1/auth/token/issue`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      accountId: process.env.NOMBA_ACCOUNT_ID!,
-    },
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      client_id: process.env.NOMBA_CLIENT_ID,
-      client_secret: process.env.NOMBA_CLIENT_SECRET,
-    }),
-    cache: "no-store",
-  });
-
-  const result = await response.json();
-  if (!response.ok) throw new Error(result?.description || "Failed to authenticate with Nomba");
-  return result?.data?.access_token;
-}
-
 export async function POST(request: NextRequest) {
   try {
     // 1. Verify the user is logged in
@@ -53,66 +31,37 @@ export async function POST(request: NextRequest) {
     const storeId = decodedToken.uid;
     const userEmail = decodedToken.email || "";
 
-    // 2. Get Nomba Token
-    const nombaToken = await getNombaToken();
-
     // ✅ Nomba Checkout expects amount in NGN (Naira) as a string/float
     const amountInNaira = "10000.00";
     const orderReference = `PARTNER_${storeId}_${Date.now()}`;
 
-    // App URL & Dynamic Nomba API Base URL
+    // App URL
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const nombaOrigin = nombaBaseUrl();
 
     // UI Callback URL for browser redirect after checkout completion
     const callbackUrl = `${appUrl}/dashboard?tab=partner&reference=${orderReference}`;
 
-    // ✅ 3. Create Checkout Order
-    const response = await fetch(`${nombaOrigin}/v1/checkout/order`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${nombaToken}`,
-        accountId: process.env.NOMBA_ACCOUNT_ID!,
-        "Content-Type": "application/json",
+    // Partner subscriptions are platform revenue. Omitting order.accountId
+    // and splitRequest sends the payment to the authenticated parent account.
+    const checkout = await createNombaParentCheckoutOrder({
+      amount: amountInNaira,
+      currency: "NGN",
+      orderReference,
+      customerEmail: userEmail,
+      customerId: storeId,
+      callbackUrl,
+      allowedPaymentMethods: ["Card", "Transfer"],
+      orderMetaData: {
+        type: "partner_subscription",
+        storeId,
+        userId: storeId,
+        durationDays: "30",
+        productName: "SellOnWhatsapp Marketplace Partner Subscription (1 Month)",
       },
-      body: JSON.stringify({
-        order: {
-          amount: amountInNaira,
-          currency: "NGN",
-          orderReference: orderReference,
-          customerEmail: userEmail,
-          customerId: storeId,
-          accountId: process.env.NOMBA_ACCOUNT_ID,
-          callbackUrl: callbackUrl,
-          metaData: {
-            type: "partner_subscription",
-            storeId: storeId,
-            userId: storeId,
-            durationDays: 30,
-            productName: "SellOnWhatsapp Marketplace Partner Subscription (1 Month)"
-          }
-        },
-        tokenizeCard: "false"
-      }),
     });
 
-    const result = await response.json();
-
-    if (!response.ok) {
-      console.error("Nomba Checkout Order Error:", result);
-      throw new Error(result?.description || "Failed to create Nomba checkout order");
-    }
-
-    // ✅ 4. Extract the checkout link
-    const checkoutLink = result?.data?.checkoutLink || result?.checkoutLink;
-
-    if (!checkoutLink) {
-      console.error("Nomba Response missing checkoutLink:", result);
-      throw new Error("Checkout link not found in Nomba response");
-    }
-
     return NextResponse.json({
-      checkoutUrl: checkoutLink
+      checkoutUrl: checkout.checkoutLink,
     });
 
   } catch (error: any) {
