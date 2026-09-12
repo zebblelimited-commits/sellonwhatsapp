@@ -62,6 +62,20 @@ function isPublicHttpsUrl(value: string): boolean {
     }
 }
 
+function checkoutProductName(items: unknown[]): string {
+    const names = items
+        .map((item) => {
+            if (!item || typeof item !== "object") return "";
+            const record = item as Record<string, unknown>;
+            return String(record.name ?? record.productName ?? record.title ?? "").trim();
+        })
+        .filter(Boolean);
+
+    if (names.length === 0) return "Marketplace Order";
+    if (names.length === 1) return names[0];
+    return `${names[0]} + ${names.length - 1} more item${names.length === 2 ? "" : "s"}`;
+}
+
 async function fetchWithRetry(
     url: string,
     options: RequestInit,
@@ -169,6 +183,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // Keep a short, unique merchant reference for Nomba and for the
         // Firestore escrow ledger. Nomba rejects reused order references.
         const checkoutReference = String(Math.floor(100000000 + Math.random() * 900000000));
+        const checkoutProductTitle = checkoutProductName(
+            sellerOrders.flatMap((sellerOrder) => Array.isArray(sellerOrder.items) ? sellerOrder.items : []),
+        );
         let calculatedGrandTotal = 0;
         let sellerEscrowAmount = 0;
         let courierSettlementAmount = 0;
@@ -510,6 +527,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 orderIds: createdOrderIds.join(","),
                 buyerId,
                 flow: "escrow",
+                productName: checkoutProductTitle,
             },
             ...(splitList.length > 0 ? { splitRequest: { splitType: "AMOUNT" as const, splitList } } : {}),
         });
