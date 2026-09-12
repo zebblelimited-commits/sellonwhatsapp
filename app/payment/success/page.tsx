@@ -109,6 +109,7 @@ export default function SuccessPage() {
     useEffect(() => {
         if (authLoading || !currentUser || !orderReference) return;
         let cancelled = false;
+        const controller = new AbortController();
         const confirmPayment = async (): Promise<{ confirmed: boolean; pending: boolean }> => {
             const pendingTimer = window.setTimeout(() => { if (!cancelled) setStatus("pending"); }, 10000);
             try {
@@ -117,6 +118,7 @@ export default function SuccessPage() {
                     method: "POST",
                     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                     body: JSON.stringify({ orderReference }),
+                    signal: controller.signal,
                 });
                 const result = await response.json().catch(() => ({})) as {
                     confirmed?: boolean;
@@ -127,7 +129,12 @@ export default function SuccessPage() {
                     const totalAmount = result.orders.reduce((total, order) => total + amountOf(order.total, order.totalAmount), 0);
                     setOrderData({ ...result.orders[0], totalAmount });
                 }
-                return { confirmed: result.confirmed === true, pending: response.status === 202 };
+                return {
+                    confirmed: result.confirmed === true,
+                    // Any non-success response should leave the user with a
+                    // retry action, not an infinite "Verifying..." spinner.
+                    pending: response.status === 202 || !result.confirmed,
+                };
             } catch (error) {
                 if (error instanceof DOMException && error.name === "AbortError") return { confirmed: false, pending: true };
                 return { confirmed: false, pending: true };
@@ -139,7 +146,7 @@ export default function SuccessPage() {
             if (result.confirmed) { paymentConfirmedRef.current = true; setStatus("success"); }
             else if (result.pending) { setStatus("pending"); }
         });
-        return () => { cancelled = true; };
+        return () => { cancelled = true; controller.abort(); };
     }, [authLoading, currentUser, orderReference]);
 
     useEffect(() => {

@@ -189,9 +189,11 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
     try {
       const result = await nombaRequest<JsonObject>(url.pathname + url.search, { method: "GET" }, config);
       const data = responseData(result);
-      const status = String(data.status || data.transactionStatus || "").toUpperCase();
+      const status = String(data.status || data.transactionStatus || data.gatewayMessage || "").toUpperCase();
+      const confirmed = ["SUCCESS", "PAYMENT_SUCCESS", "PAYMENT_SUCCESSFUL", "PAYMENT SUCCESSFUL", "APPROVED", "COMPLETED"]
+        .includes(status);
       return {
-        confirmed: status === "SUCCESS",
+        confirmed,
         status,
         transactionId: String(data.id || data.transactionId || "") || undefined,
         amount: Number.isFinite(Number(data.amount)) ? Number(data.amount) : undefined,
