@@ -222,6 +222,7 @@ export async function POST(request: NextRequest) {
       amount: reservation.netPayout,
       narration: "SellOnWhatsApp seller payout",
       reference: transferRef,
+      sourceAccountId: process.env.NOMBA_ESCROW_ACCOUNT_ID?.trim() || undefined,
     });
     const providerReference = transferResponse.transferRef || transferRef;
     const providerStatus = transferResponse.success ? "SUBMITTED" : "REJECTED";

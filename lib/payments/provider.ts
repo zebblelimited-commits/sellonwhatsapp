@@ -26,6 +26,8 @@ export interface PayoutRequest {
     amount: number;
     narration: string;
     reference: string;
+    /** Optional Nomba subaccount to debit for this payout. */
+    sourceAccountId?: string;
 }
 
 export interface PayoutResponse {

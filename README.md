@@ -39,17 +39,18 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ## Nomba checkout and escrow configuration
 
-The cart checkout uses Nomba Checkout for card and bank-transfer payments. The
-payment is directed to the configured Nomba escrow sub-account, while Firestore
-stores the application escrow ledger and settlement state.
+The cart checkout uses Nomba Checkout for card and bank-transfer payments.
+Nomba splits each paid checkout into seller escrow, courier settlement, and
+the primary platform balance, while Firestore stores the application escrow
+ledger and settlement state.
 
 ```text
 NOMBA_BASE_URL=https://sandbox.nomba.com # use https://api.nomba.com in production
 NOMBA_CLIENT_ID=...
 NOMBA_CLIENT_SECRET=...
 NOMBA_ACCOUNT_ID=...                 # parent account used for API authentication
-NOMBA_ESCROW_ACCOUNT_ID=...          # Nomba sub-account receiving checkout funds
-NOMBA_PAYOUT_ACCOUNT_ID=...           # optional; source sub-account for bank payouts
+NOMBA_ESCROW_ACCOUNT_ID=...          # seller-net split destination and seller payout source
+NOMBA_PAYOUT_ACCOUNT_ID=...           # courier-shipping split destination and courier payout source
 NOMBA_SENDER_NAME=SellOnWhatsApp
 NOMBA_WEBHOOK_SECRET=...              # Developer > Webhook Setup signature key
 CRON_SECRET=...                       # Vercel Cron bearer secret
@@ -63,11 +64,13 @@ https://sellonwhatsapp.com/payment/success?reference=175743566&orderId=ea260d25-
 SHIPPING_PROVIDER_TIMEOUT_MS=8000
 ```
 
-`NOMBA_ESCROW_ACCOUNT_ID` is the sub-account created in the Nomba dashboard.
-The checkout route passes it as `order.accountId` only when it is configured;
-otherwise Nomba uses the authenticated parent account. The parent account is
-not a separate escrow balance. Seller and courier bank payouts from a
-sub-account require Nomba to enable sub-account transfers for the account.
+The checkout uses Nomba's `splitRequest` with exact amounts. Seller net product
+proceeds are split to `NOMBA_ESCROW_ACCOUNT_ID`, courier shipping is split to
+`NOMBA_PAYOUT_ACCOUNT_ID`, and the remaining buyer fees, handling fee, and
+seller commission remain in the authenticated primary account. Seller payouts
+debit the escrow sub-account; courier payouts debit the payout/settlements
+sub-account. Nomba must enable split payments and sub-account transfers before
+production use.
 
 Configure Nomba webhook events `payment_success`, `payment_failed`,
 `payment_reversal`, `payout_success`, `payout_failed`, and `payout_refund` to

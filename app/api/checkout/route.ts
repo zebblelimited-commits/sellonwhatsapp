@@ -170,6 +170,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // Firestore escrow ledger. Nomba rejects reused order references.
         const checkoutReference = String(Math.floor(100000000 + Math.random() * 900000000));
         let calculatedGrandTotal = 0;
+        let sellerEscrowAmount = 0;
+        let courierSettlementAmount = 0;
         const createdOrderIds: string[] = [];
 
         // ---------------------------------------------------------
@@ -312,9 +314,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             });
             const { sellerCommission, sellerPayout, platformRevenue } = breakdown.allocations;
             const { buyerPlatformFee, totalPaidByBuyer: orderTotal } = breakdown.buyerBreakdown;
-            const escrowAmount = productSubtotal;
+            // Only the seller's net product proceeds belong in seller escrow.
+            // Buyer fees, seller commission, shipping and handling remain
+            // outside that allocation and are settled separately.
+            const escrowAmount = sellerPayout;
 
             calculatedGrandTotal += orderTotal;
+            sellerEscrowAmount += sellerPayout;
+            courierSettlementAmount += shippingCost;
 
             const orderId = `ORD_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
             createdOrderIds.push(orderId);
@@ -430,6 +437,42 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             );
         }
 
+        const escrowAccountId = process.env.NOMBA_ESCROW_ACCOUNT_ID?.trim() || "";
+        const courierSettlementAccountId = process.env.NOMBA_PAYOUT_ACCOUNT_ID?.trim() || "";
+        const splitList = [
+            sellerEscrowAmount > 0 && escrowAccountId
+                ? { accountId: escrowAccountId, value: sellerEscrowAmount.toFixed(2) }
+                : null,
+            courierSettlementAmount > 0 && courierSettlementAccountId
+                ? { accountId: courierSettlementAccountId, value: courierSettlementAmount.toFixed(2) }
+                : null,
+        ].filter((item): item is { accountId: string; value: string } => Boolean(item));
+
+        // Do not silently send seller or courier allocations to the primary
+        // account when the split destinations are incomplete.
+        if (sellerEscrowAmount > 0 && !escrowAccountId) {
+            return NextResponse.json(
+                { error: "NOMBA_ESCROW_ACCOUNT_ID is required for seller escrow settlement." },
+                { status: 503 },
+            );
+        }
+        if (courierSettlementAmount > 0 && !courierSettlementAccountId) {
+            return NextResponse.json(
+                { error: "NOMBA_PAYOUT_ACCOUNT_ID is required for courier settlement." },
+                { status: 503 },
+            );
+        }
+        if (
+            sellerEscrowAmount > 0
+            && courierSettlementAmount > 0
+            && escrowAccountId === courierSettlementAccountId
+        ) {
+            return NextResponse.json(
+                { error: "Seller escrow and courier settlement must use different Nomba subaccounts." },
+                { status: 503 },
+            );
+        }
+
         console.log("🔵 [CHECKOUT API] Committing batch to Firestore...");
         await batch.commit();
         console.log("✅ [CHECKOUT API] Firestore batch committed successfully.");
@@ -438,7 +481,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // NOMBA PAYMENT INITIALIZATION
         // ---------------------------------------------------------
 
-        const escrowAccountId = process.env.NOMBA_ESCROW_ACCOUNT_ID?.trim() || "";
         const allowedPaymentMethods = paymentMethod === "transfer"
             ? ["Transfer"]
             : paymentMethod === "card"
@@ -462,7 +504,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             callbackUrl: `${appUrl}/payment/success?reference=${encodeURIComponent(checkoutReference)}`,
             customerEmail: String(customerEmail).trim(),
             customerId: buyerId,
-            ...(escrowAccountId ? { accountId: escrowAccountId } : {}),
             allowedPaymentMethods,
             orderMetaData: {
                 checkoutReference,
@@ -470,6 +511,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 buyerId,
                 flow: "escrow",
             },
+            ...(splitList.length > 0 ? { splitRequest: { splitType: "AMOUNT" as const, splitList } } : {}),
         });
 
         await Promise.all([

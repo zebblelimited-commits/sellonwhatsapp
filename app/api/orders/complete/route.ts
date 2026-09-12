@@ -184,6 +184,7 @@ export async function POST(request: NextRequest) {
             amount: sellerPayoutAmount,
             narration: `Seller settlement for ${orderId}`,
             reference: payoutReference,
+            sourceAccountId: process.env.NOMBA_ESCROW_ACCOUNT_ID?.trim() || undefined,
           });
           await adminDb.collection("payouts").doc(payoutReference).update({ status: "processing", providerReference: transfer.transferRef, providerStatus: transfer.providerStatus || "SUBMITTED", rawProviderResponse: transfer.rawResponse || null, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
           if (transfer.providerStatus === "SUCCESS") await adminDb.collection("orders").doc(orderId).update({ sellerPayoutStatus: "completed", sellerPayoutProviderReference: transfer.transferRef, sellerPayoutCompletedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });

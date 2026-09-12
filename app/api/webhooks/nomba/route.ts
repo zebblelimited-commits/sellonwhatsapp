@@ -68,6 +68,7 @@ async function settleCourierPayout(orderId: string, order: FirebaseFirestore.Doc
       amount,
       narration: `Courier settlement for ${orderId}`,
       reference,
+      sourceAccountId: process.env.NOMBA_PAYOUT_ACCOUNT_ID?.trim() || undefined,
     });
     await adminDb.collection("orders").doc(orderId).update({
       courierPayoutStatus: transfer.providerStatus === "SUCCESS" ? "completed" : "processing",

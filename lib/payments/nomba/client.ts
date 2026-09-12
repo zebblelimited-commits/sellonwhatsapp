@@ -20,6 +20,10 @@ export interface NombaCheckoutOrder {
   accountId?: string;
   allowedPaymentMethods: string[];
   orderMetaData: Record<string, string>;
+  splitRequest?: {
+    splitType: "AMOUNT" | "PERCENTAGE";
+    splitList: Array<{ accountId: string; value: string }>;
+  };
 }
 
 export interface NombaCheckoutResult {
@@ -292,7 +296,9 @@ export async function listNombaBanks(config?: NombaConfig): Promise<unknown[]> {
 
 export async function initiateNombaBankTransfer(request: PayoutRequest, config?: NombaConfig): Promise<PayoutResponse> {
   const beneficiary = await lookupNombaBankAccount(request.destinationBankCode, request.accountNumber, config);
-  const sourceAccount = process.env.NOMBA_PAYOUT_ACCOUNT_ID?.trim() || process.env.NOMBA_ESCROW_ACCOUNT_ID?.trim();
+  const sourceAccount = request.sourceAccountId?.trim()
+    || process.env.NOMBA_PAYOUT_ACCOUNT_ID?.trim()
+    || process.env.NOMBA_ESCROW_ACCOUNT_ID?.trim();
   const path = sourceAccount ? `v2/transfers/bank/${encodeURIComponent(sourceAccount)}` : "v2/transfers/bank";
   const result = await nombaRequest<JsonObject>(path, {
     method: "POST",
