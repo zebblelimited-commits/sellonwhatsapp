@@ -301,6 +301,7 @@ function itemsForApi(items: Array<Record<string, unknown>>, fallbackWeightKg: nu
     // The item-level GIG schema accepts only Regular (1) or Special (0).
     // Ecommerce (2) is used at the order/ShipmentDetails level below.
     ShipmentType: 1,
+    ItemName: text(item.name || item.title, "Marketplace item").slice(0, 200),
     Description: text(item.name || item.title, "Marketplace item").slice(0, 200),
     Quantity: Math.max(1, Number(item.quantity) || 1),
     Weight: Math.max(0.1, Number(item.weightKg ?? item.weight) || fallbackWeightKg),
