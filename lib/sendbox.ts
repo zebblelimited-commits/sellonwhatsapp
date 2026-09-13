@@ -9,9 +9,20 @@ let cachedToken: string | null = null;
 
 async function sendboxFetch(input: string, init?: RequestInit) {
     try {
-        return await fetch(input, init);
+        const requestInit: RequestInit = {
+            ...init,
+            signal: init?.signal ?? AbortSignal.timeout(15_000),
+        };
+        return await fetch(input, requestInit);
     } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
+        const cause = error && typeof error === "object" && "cause" in error
+            ? (error as { cause?: unknown }).cause
+            : undefined;
+        const causeCode = cause && typeof cause === "object" && "code" in cause
+            ? String((cause as { code?: unknown }).code || "")
+            : "";
+        const message = error instanceof Error ? error.message : String(error);
+        const detail = [message, causeCode && `code ${causeCode}`].filter(Boolean).join("; ");
         const method = init?.method || "GET";
         throw new Error(`Sendbox request failed (${method} ${input}): ${detail}`);
     }
