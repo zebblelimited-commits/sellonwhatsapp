@@ -84,6 +84,40 @@ function cityOf(address?: TopshipAddress) {
     .trim() || "Lagos";
 }
 
+function uniqueLocationValues(values: unknown[]) {
+  return [...new Set(values
+    .map((value) => String(value || "").trim())
+    .filter(Boolean))];
+}
+
+/**
+ * Topship service areas are not always named consistently. Some accounts use
+ * the parent city ("Jos"), while others expose the saved LGA ("Jos North")
+ * as the rate location. Try only the supplied values and a normalized value;
+ * never invent a location or a price.
+ */
+function routeLocationCandidates(sender?: TopshipAddress, receiver?: TopshipAddress) {
+  const senderLocations = uniqueLocationValues([
+    cityOf(sender),
+    sender?.city,
+    sender?.lga,
+  ]).slice(0, 2);
+  const receiverLocations = uniqueLocationValues([
+    cityOf(receiver),
+    receiver?.city,
+    receiver?.lga,
+  ]).slice(0, 2);
+  const candidates: Array<[string, string]> = [];
+  for (const senderCity of senderLocations) {
+    for (const receiverCity of receiverLocations) {
+      if (!candidates.some(([from, to]) => from === senderCity && to === receiverCity)) {
+        candidates.push([senderCity, receiverCity]);
+      }
+    }
+  }
+  return candidates;
+}
+
 function addressDetail(address?: TopshipAddress) {
   const addressLine1 = [address?.address, address?.street].filter(Boolean).join(", ") || "Address not provided";
   const addressLine2 = [address?.lga, address?.city].filter(Boolean).join(", ");
@@ -145,18 +179,35 @@ export async function fetchTopshipQuote(params: {
   receiver: TopshipAddress;
   totalWeightKg: number;
 }): Promise<TopshipQuote> {
-  const shipmentDetail = {
-    senderDetails: { cityName: cityOf(params.sender), countryCode: "NG" },
-    receiverDetails: { cityName: cityOf(params.receiver), countryCode: "NG" },
-    totalWeight: Math.max(1, Number(params.totalWeightKg) || 1),
-  };
-  const query = new URLSearchParams({ shipmentDetail: JSON.stringify(shipmentDetail) });
-  const rateResponse = await fetch(`${TOPSHIP_BASE_URL}/get-shipment-rate?${query.toString()}`, {
-    method: "GET",
-    headers: headers(),
-    cache: "no-store",
-  });
-  const rates = ratesFrom(await parseResponse<unknown>(rateResponse))
+  const weight = Math.max(1, Number(params.totalWeightKg) || 1);
+  let rates: TopshipRate[] = [];
+  let lastRouteError: unknown;
+
+  for (const [senderCity, receiverCity] of routeLocationCandidates(params.sender, params.receiver)) {
+    try {
+      const shipmentDetail = {
+        senderDetails: { cityName: senderCity, countryCode: "NG" },
+        receiverDetails: { cityName: receiverCity, countryCode: "NG" },
+        totalWeight: weight,
+      };
+      const query = new URLSearchParams({ shipmentDetail: JSON.stringify(shipmentDetail) });
+      const rateResponse = await fetch(`${TOPSHIP_BASE_URL}/get-shipment-rate?${query.toString()}`, {
+        method: "GET",
+        headers: headers(),
+        cache: "no-store",
+      });
+      const candidateRates = ratesFrom(await parseResponse<unknown>(rateResponse))
+        .filter((rate) => numberOf(rate.cost) > 0);
+      if (candidateRates.length > 0) {
+        rates = candidateRates;
+        break;
+      }
+    } catch (error) {
+      lastRouteError = error;
+    }
+  }
+
+  const normalizedRates = rates
     .map((rate) => ({
       mode: String(rate.mode || "Standard"),
       cost: numberOf(rate.cost),
@@ -167,8 +218,9 @@ export async function fetchTopshipQuote(params: {
     .filter((rate) => rate.cost > 0)
     .sort((a, b) => a.cost - b.cost);
 
-  const routeRate = rates[0];
+  const routeRate = normalizedRates[0];
   if (!routeRate) {
+    if (lastRouteError) throw lastRouteError;
     throw new Error(
       `Topship returned no delivery rates for ${cityOf(params.sender)} to ${cityOf(params.receiver)}`
     );
