@@ -24,6 +24,7 @@ export type GigQuote = {
   senderStationId: string | number;
   receiverStationId: string | number;
   customerCode: string;
+  deliveryOptionIds: number[];
   tempCode?: string;
   priceResponse?: JsonRecord;
 };
@@ -259,6 +260,18 @@ function configuredStationId(key: string) {
   return value ? numberOrUndefined(value) ?? value : undefined;
 }
 
+function configuredDeliveryOptionIds() {
+  const raw = text(process.env.GIG_DELIVERY_OPTION_IDS, "1");
+  const ids = raw
+    .split(",")
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isFinite(value));
+  if (ids.length === 0) {
+    throw new Error("GIG_DELIVERY_OPTION_IDS must contain at least one numeric delivery option ID.");
+  }
+  return Array.from(new Set(ids));
+}
+
 function resolveStationId(address: GigAddress | undefined, stations: GigStation[], overrideKey: string) {
   const override = configuredStationId(overrideKey);
   if (override !== undefined) return override;
@@ -317,6 +330,7 @@ export async function fetchGigDeliveryQuote(params: {
   const senderStationId = resolveStationId(params.sender, stations, "GIG_SENDER_STATION_ID");
   const receiverStationId = resolveStationId(params.receiver, stations, "GIG_RECEIVER_STATION_ID");
   const shipmentItems = itemsForApi(params.items || [], Math.max(1, params.totalWeightKg), params.cartTotal);
+  const deliveryOptionIds = configuredDeliveryOptionIds();
 
   const payload = await authenticatedRequest("/price", {
     method: "POST",
@@ -332,7 +346,7 @@ export async function fetchGigDeliveryQuote(params: {
       IsFromAgility: false,
       CustomerCode: customerCode,
       CustomerType: 0,
-      DeliveryOptionIds: [],
+      DeliveryOptionIds: deliveryOptionIds,
       PickUpOptions: 0,
       ShipmentItems: shipmentItems,
       Value: params.cartTotal,
@@ -344,6 +358,7 @@ export async function fetchGigDeliveryQuote(params: {
     senderStationId,
     receiverStationId,
     customerCode,
+    deliveryOptionIds,
     tempCode: text(findValue(payload, ["tempCode", "temp_code", "preShipmentCode"])) || undefined,
     priceResponse: payload,
   };
@@ -378,6 +393,9 @@ export async function createGigShipment(params: {
   if (senderStationId === undefined || receiverStationId === undefined) throw new Error("GIG shipment is missing station IDs");
 
   const shipmentItems = itemsForApi(params.items, Math.max(1, params.totalWeightKg), params.totalValueNaira);
+  const deliveryOptionIds = params.quote.deliveryOptionIds?.length
+    ? params.quote.deliveryOptionIds
+    : configuredDeliveryOptionIds();
   const payload = await authenticatedRequest("/create/dropOff", {
     method: "POST",
     body: JSON.stringify({
@@ -391,7 +409,7 @@ export async function createGigShipment(params: {
         ShipmentType: 2,
         VehicleType: 1,
         PickUpOptions: 0,
-        DeliveryOptionIds: [],
+        DeliveryOptionIds: deliveryOptionIds,
         Value: params.totalValueNaira,
         Weight: Math.max(1, params.totalWeightKg),
       },
