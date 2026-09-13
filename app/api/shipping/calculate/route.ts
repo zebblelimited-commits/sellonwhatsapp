@@ -50,6 +50,10 @@ function isCancelledOrMalformedRequest(error: unknown) {
     return error.name === "AbortError" || code === "ABORT_ERR" || code === "UND_ERR_ABORTED" || /aborted|terminated|request body/i.test(error.message);
 }
 
+function isTopshipCoverageUnavailable(error: unknown) {
+    return error instanceof Error && /Topship returned no delivery rates for/i.test(error.message);
+}
+
 async function withProviderTimeout<T>(promise: Promise<T>, providerName: string): Promise<T> {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -308,6 +312,17 @@ export async function POST(req: NextRequest) {
                     finalFee = topShipQuote.totalCost / 100;
                     providerQuote = topShipQuote;
                 } catch (topshipErr) {
+                    // An empty rate list is a normal coverage result for a
+                    // location Topship does not serve. Hide Topship for this
+                    // request and keep the other couriers/self-arranged option
+                    // available without showing a noisy provider error.
+                    if (isTopshipCoverageUnavailable(topshipErr)) {
+                        console.info("[TOPSHIP] No coverage for this route; hiding Topship for this request.", {
+                            courierId: doc.id,
+                            error: topshipErr instanceof Error ? topshipErr.message : String(topshipErr),
+                        });
+                        return;
+                    }
                     console.error("⚠️ [TOPSHIP API RATE ERROR], hiding unavailable option:", {
                         courierId: doc.id,
                         error: topshipErr,
