@@ -22,7 +22,9 @@ async function sendboxFetch(input: string, init?: RequestInit) {
             ? String((cause as { code?: unknown }).code || "")
             : "";
         const message = error instanceof Error ? error.message : String(error);
-        const detail = [message, causeCode && `code ${causeCode}`].filter(Boolean).join("; ");
+        const detail = causeCode === "ERR_TLS_CERT_ALTNAME_INVALID"
+            ? "Sendbox endpoint TLS certificate does not match its hostname; contact Sendbox to repair the staging certificate"
+            : [message, causeCode && `code ${causeCode}`].filter(Boolean).join("; ");
         const method = init?.method || "GET";
         throw new Error(`Sendbox request failed (${method} ${input}): ${detail}`);
     }
