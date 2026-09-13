@@ -321,8 +321,36 @@ function itemsForApi(items: Array<Record<string, unknown>>, fallbackWeightKg: nu
 }
 
 function amountFromPriceResponse(payload: unknown) {
-  const keys = ["totalAmount", "totalPrice", "shippingFee", "deliveryFee", "shipmentPrice", "amount", "price", "cost", "value"];
-  const value = numberOrUndefined(findValue(payload, keys));
+  const keys = [
+    "totalAmount",
+    "totalPrice",
+    "total",
+    "totalCost",
+    "totalFee",
+    "totalCharge",
+    "grandTotal",
+    "finalAmount",
+    "amountToPay",
+    "amountPayable",
+    "customerPayableAmount",
+    "shippingFee",
+    "shippingCost",
+    "shippingAmount",
+    "deliveryFee",
+    "deliveryCost",
+    "deliveryAmount",
+    "shipmentPrice",
+    "shipmentCost",
+    "price",
+    "cost",
+    "amount",
+    "fee",
+    "charge",
+  ];
+  const rawValue = findValue(payload, keys);
+  const value = typeof rawValue === "string"
+    ? numberOrUndefined(rawValue.replace(/[₦,\s]/g, ""))
+    : numberOrUndefined(rawValue);
   if (value === undefined || value < 0) throw new Error(`GIG returned no usable shipment price: ${responseMessage(payload)}`);
   return value;
 }
