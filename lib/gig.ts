@@ -186,12 +186,10 @@ async function authenticatedRequest(path: string, init: RequestInit) {
   }
 }
 
-function locationForApi(address: GigAddress | undefined) {
+function locationFieldsForApi(address: GigAddress | undefined) {
   const latitude = numberOrUndefined(address?.latitude);
   const longitude = numberOrUndefined(address?.longitude);
-  const addressText = text(address?.address || address?.street, "Address not provided");
   return {
-    Address: addressText,
     City: text(address?.city || address?.lga),
     LGA: text(address?.lga),
     State: text(address?.state),
@@ -199,6 +197,13 @@ function locationForApi(address: GigAddress | undefined) {
     PostalCode: text(address?.postalCode),
     Latitude: latitude,
     Longitude: longitude,
+  };
+}
+
+function locationForApi(address: GigAddress | undefined) {
+  return {
+    Address: text(address?.address || address?.street, "Address not provided"),
+    ...locationFieldsForApi(address),
   };
 }
 
@@ -316,8 +321,11 @@ export async function fetchGigDeliveryQuote(params: {
       SenderStationId: senderStationId,
       ReceiverStationId: receiverStationId,
       VehicleType: 1,
-      ReceiverLocation: locationForApi(params.receiver),
-      SenderLocation: locationForApi(params.sender),
+      // GIG's /price endpoint rejects the Address property inside these
+      // location objects. Full addresses are still sent when creating the
+      // shipment through SenderDetails/ReceiverDetails below.
+      ReceiverLocation: locationFieldsForApi(params.receiver),
+      SenderLocation: locationFieldsForApi(params.sender),
       IsFromAgility: false,
       CustomerCode: customerCode,
       CustomerType: 0,
