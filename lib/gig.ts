@@ -296,20 +296,29 @@ function resolveStationId(address: GigAddress | undefined, stations: GigStation[
 
 function itemsForApi(items: Array<Record<string, unknown>>, fallbackWeightKg: number, totalValue: number) {
   const source = items.length > 0 ? items : [{ name: "Marketplace parcel", quantity: 1, weightKg: fallbackWeightKg, price: totalValue }];
-  return source.map((item) => ({
-    ItemType: 0,
-    // The item-level GIG schema accepts only Regular (1) or Special (0).
-    // Ecommerce (2) is used at the order/ShipmentDetails level below.
-    ShipmentType: 1,
-    ItemName: text(item.name || item.title, "Marketplace item").slice(0, 200),
-    Description: text(item.name || item.title, "Marketplace item").slice(0, 200),
-    Quantity: Math.max(1, Number(item.quantity) || 1),
-    Weight: Math.max(0.1, Number(item.weightKg ?? item.weight) || fallbackWeightKg),
-    Value: Math.max(0, Number(item.price ?? item.value) || 0),
-    Length: numberOrUndefined(item.lengthCm ?? item.length),
-    Width: numberOrUndefined(item.widthCm ?? item.width),
-    Height: numberOrUndefined(item.heightCm ?? item.height),
-  }));
+  return source.map((item) => {
+    const length = numberOrUndefined(item.lengthCm ?? item.length);
+    const width = numberOrUndefined(item.widthCm ?? item.width);
+    const height = numberOrUndefined(item.heightCm ?? item.height);
+    const isVolumetric = [length, width, height].every((value) => value !== undefined && value > 0);
+    const itemName = text(item.name || item.title, "Marketplace item").slice(0, 200);
+
+    return {
+      ItemType: 0,
+      // The item-level GIG schema accepts only Regular (1) or Special (0).
+      // Ecommerce (2) is used at the order/ShipmentDetails level below.
+      ShipmentType: 1,
+      ItemName: itemName,
+      Description: itemName,
+      IsVolumetric: isVolumetric,
+      Quantity: Math.max(1, Number(item.quantity) || 1),
+      Weight: Math.max(0.1, Number(item.weightKg ?? item.weight) || fallbackWeightKg),
+      Value: Math.max(0, Number(item.price ?? item.value) || 0),
+      Length: length,
+      Width: width,
+      Height: height,
+    };
+  });
 }
 
 function amountFromPriceResponse(payload: unknown) {
