@@ -298,6 +298,9 @@ function itemsForApi(items: Array<Record<string, unknown>>, fallbackWeightKg: nu
   const source = items.length > 0 ? items : [{ name: "Marketplace parcel", quantity: 1, weightKg: fallbackWeightKg, price: totalValue }];
   return source.map((item) => ({
     ItemType: 0,
+    // GIG requires the shipment type on every item as well as on
+    // ShipmentDetails. SellOnWhatsApp orders use ecommerce shipments.
+    ShipmentType: 2,
     Description: text(item.name || item.title, "Marketplace item").slice(0, 200),
     Quantity: Math.max(1, Number(item.quantity) || 1),
     Weight: Math.max(0.1, Number(item.weightKg ?? item.weight) || fallbackWeightKg),
