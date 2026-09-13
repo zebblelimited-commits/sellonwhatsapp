@@ -304,7 +304,6 @@ function itemsForApi(items: Array<Record<string, unknown>>, fallbackWeightKg: nu
     const itemName = text(item.name || item.title, "Marketplace item").slice(0, 200);
 
     return {
-      ItemType: 0,
       // The item-level GIG schema accepts only Regular (1) or Special (0).
       // Ecommerce (2) is used at the order/ShipmentDetails level below.
       ShipmentType: 1,
