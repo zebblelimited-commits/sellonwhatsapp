@@ -186,24 +186,27 @@ async function authenticatedRequest(path: string, init: RequestInit) {
   }
 }
 
-function locationFieldsForApi(address: GigAddress | undefined) {
+function locationForPriceApi(address: GigAddress | undefined) {
   const latitude = numberOrUndefined(address?.latitude);
   const longitude = numberOrUndefined(address?.longitude);
-  return {
-    City: text(address?.city || address?.lga),
-    LGA: text(address?.lga),
-    State: text(address?.state),
-    Country: "Nigeria",
-    PostalCode: text(address?.postalCode),
-    Latitude: latitude,
-    Longitude: longitude,
-  };
+  if (latitude === undefined || longitude === undefined) {
+    throw new Error("GIG quote requires valid sender and receiver latitude/longitude coordinates.");
+  }
+  // GIG's /price endpoint accepts coordinates in these location objects;
+  // address, city, LGA, and state are rejected by its strict schema.
+  return { Latitude: latitude, Longitude: longitude };
 }
 
 function locationForApi(address: GigAddress | undefined) {
   return {
     Address: text(address?.address || address?.street, "Address not provided"),
-    ...locationFieldsForApi(address),
+    City: text(address?.city || address?.lga),
+    LGA: text(address?.lga),
+    State: text(address?.state),
+    Country: "Nigeria",
+    PostalCode: text(address?.postalCode),
+    Latitude: numberOrUndefined(address?.latitude),
+    Longitude: numberOrUndefined(address?.longitude),
   };
 }
 
@@ -324,8 +327,8 @@ export async function fetchGigDeliveryQuote(params: {
       // GIG's /price endpoint rejects the Address property inside these
       // location objects. Full addresses are still sent when creating the
       // shipment through SenderDetails/ReceiverDetails below.
-      ReceiverLocation: locationFieldsForApi(params.receiver),
-      SenderLocation: locationFieldsForApi(params.sender),
+      ReceiverLocation: locationForPriceApi(params.receiver),
+      SenderLocation: locationForPriceApi(params.sender),
       IsFromAgility: false,
       CustomerCode: customerCode,
       CustomerType: 0,

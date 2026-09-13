@@ -247,16 +247,47 @@ export default function CheckoutPage() {
       const storeDoc = await getDoc(doc(db, "stores", storeId));
       const data = storeDoc.exists() ? storeDoc.data() : {};
       const location = data.location && typeof data.location === "object" ? data.location : {};
+      const addressRecord = data.address && typeof data.address === "object" ? data.address : {};
+      const businessAddressRecord = data.businessAddress && typeof data.businessAddress === "object" ? data.businessAddress : {};
+      const textValue = (...values: unknown[]) => values.find(
+        (value) => typeof value === "string" && value.trim().length > 0,
+      ) as string | undefined;
       return {
         id: storeId,
         storeName: data.storeName || groupedCartItems[storeId]?.storeName || "Seller",
-        address: typeof data.address === "string" ? data.address : data.businessAddress || location.address || location.formattedAddress || "",
-        city: data.city || location.city || "",
-        state: data.state || location.state || "",
-        lga: data.lga || location.lga || "",
+        address: textValue(
+          data.address,
+          data.businessAddress,
+          addressRecord.address,
+          addressRecord.street,
+          addressRecord.formattedAddress,
+          businessAddressRecord.address,
+          businessAddressRecord.street,
+          businessAddressRecord.formattedAddress,
+          location.address,
+          location.formattedAddress,
+        ) || "",
+        city: textValue(
+          data.city,
+          location.city,
+          addressRecord.city,
+          businessAddressRecord.city,
+        ) || "",
+        state: textValue(
+          data.state,
+          location.state,
+          addressRecord.state,
+          businessAddressRecord.state,
+        ) || "",
+        lga: textValue(
+          data.lga,
+          location.lga,
+          addressRecord.lga,
+          businessAddressRecord.lga,
+        ) || "",
         phone: data.phone || data.phoneNumber || data.contactPhone || "",
-        latitude: Number(data.latitude ?? data.lat ?? location.latitude ?? location.lat) || undefined,
-        longitude: Number(data.longitude ?? data.lng ?? location.longitude ?? location.lng) || undefined,
+        latitude: Number(data.latitude ?? data.lat ?? location.latitude ?? location.lat ?? addressRecord.latitude ?? businessAddressRecord.latitude) || undefined,
+        longitude: Number(data.longitude ?? data.lng ?? location.longitude ?? location.lng ?? addressRecord.longitude ?? businessAddressRecord.longitude) || undefined,
       };
     })).then((locations) => {
       if (active) setSellerLocations(locations);
@@ -596,8 +627,11 @@ export default function CheckoutPage() {
                           <p className="font-bold text-sm text-gray-900">{location.storeName}</p>
                           <p className="mt-2 text-xs leading-relaxed text-gray-600">
                             <span className="font-medium text-gray-800">Address:</span>{" "}
-                            {[location.address, location.city, location.lga, location.state].filter(Boolean).join(", ") || "Seller pickup address not provided"}
+                            {location.address || "Seller pickup address not provided"}
                           </p>
+                          {(location.city || location.lga) && <p className="mt-1 text-xs text-gray-600"><span className="font-medium text-gray-800">City/LGA:</span> {location.city || location.lga}</p>}
+                          {location.lga && <p className="mt-1 text-xs text-gray-600"><span className="font-medium text-gray-800">LGA:</span> {location.lga}</p>}
+                          {location.state && <p className="mt-1 text-xs text-gray-600"><span className="font-medium text-gray-800">State:</span> {location.state}</p>}
                           {location.phone && <p className="mt-1 text-xs text-gray-600"><span className="font-medium text-gray-800">Phone:</span> {location.phone}</p>}
                           {(location.latitude !== undefined && location.longitude !== undefined) && (
                             <p className="mt-1 text-[10px] text-gray-400">
