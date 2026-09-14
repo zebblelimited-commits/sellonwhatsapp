@@ -315,11 +315,18 @@ export async function POST(req: NextRequest) {
                     // An empty rate list is a normal coverage result for a
                     // location Topship does not serve. Hide Topship for this
                     // request and keep the other couriers/self-arranged option
-                    // available without showing a noisy provider error.
+                    // available. Keep the reason visible so coverage problems
+                    // can be distinguished from authentication/API failures.
                     if (isTopshipCoverageUnavailable(topshipErr)) {
+                        const reason = topshipErr instanceof Error ? topshipErr.message : String(topshipErr);
                         console.info("[TOPSHIP] No coverage for this route; hiding Topship for this request.", {
                             courierId: doc.id,
-                            error: topshipErr instanceof Error ? topshipErr.message : String(topshipErr),
+                            error: reason,
+                        });
+                        unavailableProviders.push({
+                            id: doc.id,
+                            name: courier.name || "Topship",
+                            reason: `${reason}. Topship was hidden because it returned no usable rate.`,
                         });
                         return;
                     }

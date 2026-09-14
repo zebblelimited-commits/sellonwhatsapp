@@ -95,8 +95,10 @@ export function addressText(address?: ChowdeckAddress | string) {
 function addressPayload(key: "source" | "destination", address?: ChowdeckAddress | string) {
   const value = typeof address === "string" ? { address } : address;
   const coordinates = validCoordinates(value);
-  if (coordinates) return { [`${key}_address`]: coordinates };
-  return { [`${key}_address_string`]: addressText(address) };
+  if (!coordinates) {
+    throw new Error(`Chowdeck requires ${key} pickup coordinates (latitude and longitude).`);
+  }
+  return { [`${key}_address`]: coordinates };
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -106,6 +108,11 @@ async function parseResponse<T>(response: Response): Promise<T> {
     if (/vendor\s+not\s+found/i.test(message)) {
       throw new Error(
         "Chowdeck vendor not found. Verify CHOWDECK_API_KEY and CHOWDECK_MERCHANT_REFERENCE belong to the same Merchant API environment."
+      );
+    }
+    if (/invalid\s+key|invalid\s+token|unauthori[sz]ed/i.test(message)) {
+      throw new Error(
+        "Chowdeck rejected the API key. Set CHOWDECK_API_KEY to the Merchant API secret key from the same sandbox/live environment as CHOWDECK_MERCHANT_REFERENCE; do not use the webhook secret."
       );
     }
     throw new Error(message);
