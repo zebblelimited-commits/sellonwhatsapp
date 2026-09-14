@@ -83,7 +83,14 @@ async function parseResponse<T>(response: Response): Promise<T> {
 function cityOf(address?: TopshipAddress) {
   const state = String(address?.state || "").trim();
   const stateCity = TOPSHIP_STATE_CITIES[state.toLowerCase()];
-  const rawCity = String(address?.city || stateCity || address?.lga || state || "Lagos").trim();
+  const explicitCity = String(address?.city || "").trim();
+  const lga = String(address?.lga || "").trim();
+  const cityIsTheSelectedLga = explicitCity && lga && explicitCity.toLowerCase() === lga.toLowerCase();
+  const rawCity = String(
+    stateCity && (!explicitCity || cityIsTheSelectedLga)
+      ? stateCity
+      : explicitCity || stateCity || lga || state || "Lagos",
+  ).trim();
 
   // Store and buyer profiles commonly save an LGA (for example, "Jos South")
   // instead of a city. Topship's rate API expects the parent city ("Jos"),
