@@ -85,11 +85,8 @@ function cityOf(address?: TopshipAddress) {
   const stateCity = TOPSHIP_STATE_CITIES[state.toLowerCase()];
   const explicitCity = String(address?.city || "").trim();
   const lga = String(address?.lga || "").trim();
-  const cityIsTheSelectedLga = explicitCity && lga && explicitCity.toLowerCase() === lga.toLowerCase();
   const rawCity = String(
-    stateCity && (!explicitCity || cityIsTheSelectedLga)
-      ? stateCity
-      : explicitCity || stateCity || lga || state || "Lagos",
+    explicitCity || lga || stateCity || state || "Lagos",
   ).trim();
 
   // Store and buyer profiles commonly save an LGA (for example, "Jos South")
@@ -117,11 +114,13 @@ function routeLocationCandidates(sender?: TopshipAddress, receiver?: TopshipAddr
     cityOf(sender),
     sender?.city,
     sender?.lga,
+    TOPSHIP_STATE_CITIES[String(sender?.state || "").trim().toLowerCase()],
   ]).slice(0, 2);
   const receiverLocations = uniqueLocationValues([
     cityOf(receiver),
     receiver?.city,
     receiver?.lga,
+    TOPSHIP_STATE_CITIES[String(receiver?.state || "").trim().toLowerCase()],
   ]).slice(0, 2);
   const candidates: Array<[string, string]> = [];
   for (const senderCity of senderLocations) {
