@@ -352,6 +352,16 @@ export async function POST(req: NextRequest) {
                         destination_phone: destinationAddress?.phone,
                         destination_city: destinationAddress?.city || destinationAddress?.lga,
                         destination_street: destinationAddress?.address,
+                        destination_email: destinationAddress?.email,
+                        destination_postal_code: destinationAddress?.postalCode,
+                        destination_latitude: destinationAddress?.latitude,
+                        destination_longitude: destinationAddress?.longitude,
+                        origin_email: pickupAddress?.email,
+                        origin_postal_code: pickupAddress?.postalCode,
+                        origin_latitude: pickupAddress?.latitude,
+                        origin_longitude: pickupAddress?.longitude,
+                        total_value: estimatedOrderAmount,
+                        items,
                         weight: Math.max(1, totalWeightKg),
                     }), "Sendbox");
 

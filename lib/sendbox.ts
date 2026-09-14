@@ -100,6 +100,16 @@ export interface SendboxQuoteRequest {
     destination_phone?: string;
     destination_city?: string;
     destination_street?: string;
+    destination_email?: string;
+    destination_postal_code?: string;
+    destination_latitude?: number | string;
+    destination_longitude?: number | string;
+    origin_email?: string;
+    origin_postal_code?: string;
+    origin_latitude?: number | string;
+    origin_longitude?: number | string;
+    total_value?: number;
+    items?: Array<Record<string, unknown>>;
     weight: number;
 }
 
@@ -131,6 +141,28 @@ export interface SendboxShipment {
 export async function fetchSendboxQuote(params: SendboxQuoteRequest) {
     const authToken = await getSendboxAuthToken();
 
+    const originName = contactName(params.origin_name, "SellOnWhatsApp seller");
+    const destinationName = contactName(params.destination_name, "SellOnWhatsApp customer");
+    const originCountryCode = params.origin_country_code || "NG";
+    const destinationCountryCode = params.destination_country_code || "NG";
+    const weight = Math.max(0.1, Number(params.weight) || 1);
+    const totalValue = Math.max(0, Number(params.total_value) || 0);
+    const items = params.items?.length
+        ? params.items.map((item) => ({
+            name: String(item.name || item.productName || "Marketplace item").slice(0, 120),
+            weight: Math.max(0.1, Number(item.weightKg ?? item.weight) || weight),
+            description: String(item.description || item.name || "Marketplace item").slice(0, 200),
+            quantity: Math.max(1, Math.round(Number(item.quantity) || 1)),
+            value: Math.max(0, Number(item.price ?? item.value) || 0),
+        }))
+        : [{
+            name: "Marketplace item",
+            weight,
+            description: "Marketplace item",
+            quantity: 1,
+            value: totalValue,
+        }];
+
     const response = await sendboxFetch(`${SENDBOX_BASE_URL}/shipment_delivery_quote`, {
         method: "POST",
         headers: {
@@ -138,23 +170,45 @@ export async function fetchSendboxQuote(params: SendboxQuoteRequest) {
             Authorization: authToken,
         },
         body: JSON.stringify({
-            origin_country: params.origin_country || "Nigeria",
-            origin_country_code: params.origin_country_code || "NG",
-            origin_state: params.origin_state || "Lagos",
-            origin_state_code: params.origin_state_code || "LOS",
-            origin_name: params.origin_name || "SellOnWhatsApp seller",
-            origin_phone: phoneText(params.origin_phone),
-            origin_city: params.origin_city || params.origin_state || "Lagos",
-            origin_street: params.origin_street || "Seller pickup address",
-            destination_country: params.destination_country || "Nigeria",
-            destination_country_code: params.destination_country_code || "NG",
-            destination_state: params.destination_state,
-            destination_state_code: params.destination_state_code || "",
-            destination_name: params.destination_name || "SellOnWhatsApp customer",
-            destination_phone: phoneText(params.destination_phone),
-            destination_city: params.destination_city || params.destination_state,
-            destination_street: params.destination_street || "Buyer delivery address",
-            weight: params.weight || 1,
+            origin: {
+                ...originName,
+                street: params.origin_street || "Seller pickup address",
+                street_line_2: "",
+                state: params.origin_state || "Lagos",
+                email: params.origin_email || null,
+                city: params.origin_city || params.origin_state || "Lagos",
+                country: originCountryCode,
+                post_code: params.origin_postal_code || "",
+                phone: phoneText(params.origin_phone),
+                lng: Number(params.origin_longitude) || 0,
+                lat: Number(params.origin_latitude) || 0,
+            },
+            destination: {
+                ...destinationName,
+                street: params.destination_street || "Buyer delivery address",
+                street_line_2: "",
+                state: params.destination_state,
+                email: params.destination_email || null,
+                city: params.destination_city || params.destination_state,
+                country: destinationCountryCode,
+                post_code: params.destination_postal_code || "",
+                phone: phoneText(params.destination_phone),
+                lng: Number(params.destination_longitude) || 0,
+                lat: Number(params.destination_latitude) || 0,
+            },
+            weight,
+            dimension: { length: 1, width: 1, height: 1 },
+            incoming_option: "pickup",
+            region: "NG",
+            service_type: originCountryCode === destinationCountryCode ? "local" : "international",
+            package_type: "general",
+            total_value: totalValue,
+            currency: "NGN",
+            channel_code: "api",
+            pickup_date: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+            items,
+            service_code: "standard",
+            customs_option: "recipient",
         }),
     });
 
@@ -164,7 +218,22 @@ export async function fetchSendboxQuote(params: SendboxQuoteRequest) {
     }
 
     const data = await response.json();
-    return Array.isArray(data) ? data : data.rates || data.quotes || [];
+    return sendboxRates(data);
+}
+
+function sendboxRates(payload: unknown): Array<Record<string, unknown>> {
+    if (Array.isArray(payload)) return payload as Array<Record<string, unknown>>;
+    if (!payload || typeof payload !== "object") return [];
+    const record = payload as Record<string, unknown>;
+    const nested = record.data && typeof record.data === "object"
+        ? record.data as Record<string, unknown>
+        : undefined;
+    const rates = record.rates || record.quotes || nested?.rates || nested?.quotes;
+    if (Array.isArray(rates)) return rates as Array<Record<string, unknown>>;
+    const singleRate = record.rate || nested?.rate;
+    return singleRate && typeof singleRate === "object"
+        ? [singleRate as Record<string, unknown>]
+        : [];
 }
 
 function phoneText(value: unknown) {
