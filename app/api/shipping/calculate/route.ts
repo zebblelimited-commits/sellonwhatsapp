@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { fetchFezDeliveryCost } from "@/lib/fez";
 import { fetchSendboxQuote, sendboxConfigured } from "@/lib/sendbox";
-import { chowdeckConfigured, fetchChowdeckDeliveryFee, type ChowdeckAddress } from "@/lib/chowdeck";
+import { chowdeckConfigured, chowdeckUsesRelay, fetchChowdeckDeliveryFee, type ChowdeckAddress } from "@/lib/chowdeck";
 import { fetchTopshipQuote, type TopshipAddress, type TopshipQuote, topshipConfigured } from "@/lib/topship";
 import { fetchGigDeliveryQuote, gigConfigured, type GigAddress, type GigQuote } from "@/lib/gig";
 
@@ -216,7 +216,9 @@ export async function POST(req: NextRequest) {
                     unavailableProviders.push({
                         id: doc.id,
                         name: courier.name || "Chowdeck",
-                        reason: "Chowdeck is not configured on the server. Add the API key and merchant reference, then redeploy.",
+                        reason: chowdeckUsesRelay()
+                            ? "Chowdeck Relay is not configured on the server. Add CHOWDECK_API_KEY and redeploy."
+                            : "Chowdeck Merchant API is not configured on the server. Add the API key and merchant reference, then redeploy.",
                     });
                 }
                 if (isTopship) {

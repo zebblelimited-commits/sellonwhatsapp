@@ -1,10 +1,20 @@
-// Chowdeck's Merchant API is the reachable integration for this account.
-// Accept both a root API URL and the documented `/merchant` base URL.
+// Relay is selected explicitly with CHOWDECK_API_MODE=relay. Keep the
+// Merchant API configuration available as a fallback, but do not mix the two
+// URL shapes: Relay does not use a merchant reference in its path.
+const CHOWDECK_API_MODE = String(process.env.CHOWDECK_API_MODE || "merchant").trim().toLowerCase();
+const CHOWDECK_RELAY_BASE_URL = (
+  process.env.CHOWDECK_RELAY_API_BASE_URL ||
+  "https://api.relay.chowdeck.com/relay"
+).replace(/\/$/, "");
 const CHOWDECK_MERCHANT_BASE_URL = (
   process.env.CHOWDECK_MERCHANT_API_BASE_URL ||
   process.env.CHOWDECK_API_BASE_URL ||
   "https://api.chowdeck.com"
 ).replace(/\/$/, "").replace(/\/merchant$/, "");
+
+export function chowdeckUsesRelay() {
+  return CHOWDECK_API_MODE === "relay";
+}
 
 export type ChowdeckCoordinates = { latitude: number; longitude: number };
 
@@ -45,11 +55,28 @@ export type ChowdeckDeliveryResponse = {
   };
 };
 
+type ChowdeckRelayWalletResponse = {
+  status?: string;
+  message?: string;
+  data?: {
+    account_name?: string;
+    account_number?: string;
+    bank_code?: string;
+    accountName?: string;
+    accountNumber?: string;
+    bankCode?: string;
+  };
+};
+
 export function chowdeckConfigured() {
-  return Boolean(process.env.CHOWDECK_API_KEY?.trim() && process.env.CHOWDECK_MERCHANT_REFERENCE?.trim());
+  return Boolean(
+    process.env.CHOWDECK_API_KEY?.trim()
+      && (chowdeckUsesRelay() || process.env.CHOWDECK_MERCHANT_REFERENCE?.trim()),
+  );
 }
 
-function merchantUrl(path: string) {
+function chowdeckUrl(path: string) {
+  if (chowdeckUsesRelay()) return `${CHOWDECK_RELAY_BASE_URL}${path}`;
   const merchantReference = process.env.CHOWDECK_MERCHANT_REFERENCE?.trim();
   if (!merchantReference) throw new Error("CHOWDECK_MERCHANT_REFERENCE is missing");
   return `${CHOWDECK_MERCHANT_BASE_URL}/merchant/${encodeURIComponent(merchantReference)}${path}`;
@@ -65,7 +92,7 @@ function headers() {
 }
 
 async function chowdeckFetch(path: string, init: RequestInit) {
-  const url = merchantUrl(path);
+  const url = chowdeckUrl(path);
   try {
     return await fetch(url, init);
   } catch (error) {
@@ -95,17 +122,26 @@ export function addressText(address?: ChowdeckAddress | string) {
 function addressPayload(key: "source" | "destination", address?: ChowdeckAddress | string) {
   const value = typeof address === "string" ? { address } : address;
   const coordinates = validCoordinates(value);
+  if (coordinates) return { [`${key}_address`]: coordinates };
+
+  // Relay accepts either coordinates or a human-readable address string.
+  // Keep the Merchant API path strict because its integration requires the
+  // coordinate form used by the existing implementation.
+  if (chowdeckUsesRelay()) {
+    const text = addressText(address);
+    if (text !== "Address not provided") return { [`${key}_address_string`]: text };
+  }
+
   if (!coordinates) {
     throw new Error(`Chowdeck requires ${key} pickup coordinates (latitude and longitude).`);
   }
-  return { [`${key}_address`]: coordinates };
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => ({}));
   const message = String((payload as { message?: unknown }).message || `Chowdeck request failed (${response.status})`);
   if (!response.ok || String((payload as { status?: unknown }).status || "").toLowerCase() === "failed") {
-    if (/vendor\s+not\s+found/i.test(message)) {
+    if (!chowdeckUsesRelay() && /vendor\s+not\s+found/i.test(message)) {
       throw new Error(
         "Chowdeck vendor not found. Verify CHOWDECK_API_KEY and CHOWDECK_MERCHANT_REFERENCE belong to the same Merchant API environment."
       );
@@ -168,7 +204,9 @@ export async function createChowdeckDelivery(params: {
       destination_contact: params.destinationContact,
       estimated_order_amount: Math.max(0, Math.round(Number(params.estimatedOrderAmountNaira || 0) * 100)),
       customer_delivery_note: params.customerDeliveryNote || "Handle with care",
-      customer_vendor_note: params.vendorNote || "SellOnWhatsApp marketplace order",
+      ...(!chowdeckUsesRelay()
+        ? { customer_vendor_note: params.vendorNote || "SellOnWhatsApp marketplace order" }
+        : {}),
       ...(params.deliveryPin ? { delivery_pin: params.deliveryPin } : {}),
       notification_channels: ["whatsapp", "email"],
     }),
@@ -177,4 +215,30 @@ export async function createChowdeckDelivery(params: {
   const payload = await parseResponse<ChowdeckDeliveryResponse>(response);
   if (!payload.data) throw new Error("Chowdeck returned no delivery data");
   return payload.data;
+}
+
+/** Resolve the bank account used to fund Chowdeck Relay's wallet. */
+export async function getChowdeckRelayWalletAccount(): Promise<{
+  accountName: string;
+  accountNumber: string;
+  bankCode: string;
+}> {
+  if (!chowdeckUsesRelay()) throw new Error("Chowdeck Relay mode is not enabled");
+
+  const response = await chowdeckFetch("/wallet/virtual-account", {
+    method: "GET",
+    headers: headers(),
+    cache: "no-store",
+  });
+  const payload = await parseResponse<ChowdeckRelayWalletResponse>(response);
+  const data = payload.data || {};
+  const accountName = String(data.account_name || data.accountName || "").trim();
+  const accountNumber = String(data.account_number || data.accountNumber || "").replace(/\D/g, "");
+  const bankCode = String(data.bank_code || data.bankCode || "").replace(/\D/g, "");
+
+  if (!accountName || !/^\d{10}$/.test(accountNumber) || !bankCode) {
+    throw new Error("Chowdeck Relay did not return a usable wallet virtual account");
+  }
+
+  return { accountName, accountNumber, bankCode };
 }

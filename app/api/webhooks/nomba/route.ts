@@ -6,6 +6,7 @@ import { inventoryAdjustment } from "@/lib/inventory";
 import { notifyOrderPaymentConfirmed, notifyOrderStatus, notifyPayoutCompleted } from "@/lib/novu-events";
 import { sendSubscriptionConfirmationEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/events";
 import { isNombaWebhookSignatureValid, verifyNombaTransaction, initiateNombaBankTransfer } from "@/lib/payments/nomba/client";
+import { chowdeckUsesRelay, getChowdeckRelayWalletAccount } from "@/lib/chowdeck";
 import { dispatchShipmentForOrder } from "@/lib/shipping-dispatch";
 import { updateExistingStore } from "@/lib/store-sync";
 
@@ -36,17 +37,40 @@ async function triggerNovuNotification(userId: string, title: string, body: stri
   }
 }
 
-async function settleCourierPayout(orderId: string, order: FirebaseFirestore.DocumentData) {
+async function settleCourierPayout(orderId: string, order: FirebaseFirestore.DocumentData): Promise<boolean> {
   const amount = Number(order.shippingCost || 0);
-  if (!Number.isFinite(amount) || amount <= 0 || order.deliveryMode === "self_arranged") return;
-  if (["submitted", "processing", "completed"].includes(String(order.courierPayoutStatus || "").toLowerCase())) return;
-
+  if (!Number.isFinite(amount) || amount <= 0 || order.deliveryMode === "self_arranged") return true;
   const courierId = String(order.courierId || order.shippingMethod || "").trim();
+  const isChowdeckRelay = courierId.toLowerCase() === "chowdeck" && chowdeckUsesRelay();
+  const existingPayoutStatus = String(order.courierPayoutStatus || "").toLowerCase();
+  if (["submitted", "processing", "completed"].includes(existingPayoutStatus)) {
+    return !isChowdeckRelay || existingPayoutStatus === "completed";
+  }
+
   const courierSnap = courierId ? await adminDb.collection("couriers").doc(courierId).get() : null;
   const courier = courierSnap?.data() || {};
   const payout = courier.payoutSettings || courier.bankDetails || courier;
-  const bankCode = String(payout.bankCode || "").trim();
-  const accountNumber = String(payout.accountNumber || "").replace(/\D/g, "");
+  let bankCode = String(payout.bankCode || "").trim();
+  let accountNumber = String(payout.accountNumber || "").replace(/\D/g, "");
+  let accountName = String(payout.accountName || "").trim();
+
+  if (isChowdeckRelay) {
+    try {
+      const wallet = await getChowdeckRelayWalletAccount();
+      bankCode = wallet.bankCode;
+      accountNumber = wallet.accountNumber;
+      accountName = wallet.accountName;
+    } catch (error) {
+      await adminDb.collection("orders").doc(orderId).update({
+        courierPayoutStatus: "pending_configuration",
+        courierPayoutAmount: amount,
+        courierPayoutError: error instanceof Error ? error.message : "Chowdeck Relay wallet account could not be resolved",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.warn(`[COURIER PAYOUT] ${orderId} is awaiting Chowdeck Relay wallet configuration`);
+      return !isChowdeckRelay;
+    }
+  }
 
   if (!bankCode || !/^\d{10}$/.test(accountNumber)) {
     await adminDb.collection("orders").doc(orderId).update({
@@ -56,7 +80,7 @@ async function settleCourierPayout(orderId: string, order: FirebaseFirestore.Doc
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     console.warn(`[COURIER PAYOUT] ${orderId} is awaiting payout settings for ${courierId || "courier"}`);
-    return;
+    return !isChowdeckRelay;
   }
 
   const reference = `COURIER_${orderId}`.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 50);
@@ -64,9 +88,11 @@ async function settleCourierPayout(orderId: string, order: FirebaseFirestore.Doc
     const transfer = await initiateNombaBankTransfer({
       destinationBankCode: bankCode,
       accountNumber,
-      accountName: String(payout.accountName || "").trim() || undefined,
+      accountName: accountName || undefined,
       amount,
-      narration: `Courier settlement for ${orderId}`,
+      narration: isChowdeckRelay
+        ? `Chowdeck Relay wallet funding for ${orderId}`
+        : `Courier settlement for ${orderId}`,
       reference,
       sourceAccountId: process.env.NOMBA_PAYOUT_ACCOUNT_ID?.trim() || undefined,
     });
@@ -78,6 +104,10 @@ async function settleCourierPayout(orderId: string, order: FirebaseFirestore.Doc
       courierPayoutAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+    // Nomba may report an accepted/pending transfer before the bank posts it.
+    // It is safe to continue for the existing courier flow, while Relay is
+    // allowed to continue only when Nomba accepted the wallet funding request.
+    return !isChowdeckRelay || transfer.success;
   } catch (error) {
     await adminDb.collection("orders").doc(orderId).update({
       courierPayoutStatus: "failed",
@@ -86,6 +116,7 @@ async function settleCourierPayout(orderId: string, order: FirebaseFirestore.Doc
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     console.error(`[COURIER PAYOUT] ${orderId} failed`, error);
+    return !isChowdeckRelay;
   }
 }
 
@@ -497,8 +528,16 @@ export async function POST(request: NextRequest) {
             console.log(`✅ [ESCROW] Order ${orderRef} ${holdResult.transitioned ? `reserved ₦${holdResult.amount}` : "was already reserved"}.`);
             if (holdResult.transitioned) {
               await notifyOrderPaymentConfirmed({ id: docSnap.id, ...localData });
-              await settleCourierPayout(docSnap.id, { ...localData, ...holdResult });
-              await dispatchShipmentForOrder(docSnap.id);
+              const courierSettlementReady = await settleCourierPayout(docSnap.id, { ...localData, ...holdResult });
+              if (courierSettlementReady) {
+                await dispatchShipmentForOrder(docSnap.id);
+              } else {
+                await documentRef.update({
+                  deliveryStatus: "PENDING_PICKUP",
+                  courierStatus: "AWAITING_RELAY_WALLET_FUNDING",
+                  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+              }
             }
           } else {
             // Calculate plan expiration
