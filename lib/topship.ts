@@ -174,8 +174,15 @@ function numberOf(value: unknown) {
 
 function ratesFrom(payload: unknown): TopshipRate[] {
   if (Array.isArray(payload)) return payload as TopshipRate[];
-  if (payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown }).data)) {
-    return (payload as { data: TopshipRate[] }).data;
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    // The documented response is a bare array, but some Topship gateways
+    // wrap it in data/results/items. Accept those wrappers without changing
+    // the request contract.
+    for (const key of ["data", "results", "rates", "items"]) {
+      const nestedRates = ratesFrom(record[key]);
+      if (nestedRates.length > 0) return nestedRates;
+    }
   }
   return [];
 }
@@ -198,29 +205,32 @@ export async function fetchTopshipQuote(params: {
   let rates: TopshipRate[] = [];
   let lastRouteError: unknown;
 
-  for (const [senderCity, receiverCity] of routeLocationCandidates(params.sender, params.receiver)) {
-    try {
-      const shipmentDetail = {
-        senderDetails: { cityName: senderCity, countryCode: "NG" },
-        receiverDetails: { cityName: receiverCity, countryCode: "NG" },
-        totalWeight: weight,
-      };
-      const query = new URLSearchParams({ shipmentDetail: JSON.stringify(shipmentDetail) });
-      const rateResponse = await fetch(`${TOPSHIP_BASE_URL}/get-shipment-rate?${query.toString()}`, {
-        method: "GET",
-        headers: headers(),
-        cache: "no-store",
-      });
-      const candidateRates = ratesFrom(await parseResponse<unknown>(rateResponse))
-        .filter((rate) => numberOf(rate.cost) > 0);
-      if (candidateRates.length > 0) {
-        rates = candidateRates;
-        break;
+  const routeResults = await Promise.all(
+    routeLocationCandidates(params.sender, params.receiver).map(async ([senderCity, receiverCity]) => {
+      try {
+        const shipmentDetail = {
+          senderDetails: { cityName: senderCity, countryCode: "NG" },
+          receiverDetails: { cityName: receiverCity, countryCode: "NG" },
+          totalWeight: weight,
+        };
+        const query = new URLSearchParams({ shipmentDetail: JSON.stringify(shipmentDetail) });
+        const rateResponse = await fetch(`${TOPSHIP_BASE_URL}/get-shipment-rate?${query.toString()}`, {
+          method: "GET",
+          headers: headers(),
+          cache: "no-store",
+        });
+        const candidateRates = ratesFrom(await parseResponse<unknown>(rateResponse))
+          .filter((rate) => numberOf(rate.cost) > 0);
+        return { candidateRates, error: undefined };
+      } catch (error) {
+        return { candidateRates: [], error };
       }
-    } catch (error) {
-      lastRouteError = error;
-    }
-  }
+    }),
+  );
+
+  const usableRoute = routeResults.find((result) => result.candidateRates.length > 0);
+  if (usableRoute) rates = usableRoute.candidateRates;
+  else lastRouteError = routeResults.find((result) => result.error)?.error;
 
   const normalizedRates = rates
     .map((rate) => ({
