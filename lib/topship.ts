@@ -1,4 +1,8 @@
 const TOPSHIP_BASE_URL = (process.env.TOPSHIP_API_BASE_URL || "https://topship-staging.africa/api").replace(/\/$/, "");
+const configuredPickupTimeout = Number(process.env.TOPSHIP_PICKUP_TIMEOUT_MS);
+const TOPSHIP_PICKUP_TIMEOUT_MS = Number.isFinite(configuredPickupTimeout) && configuredPickupTimeout > 0
+  ? configuredPickupTimeout
+  : 5000;
 
 export type TopshipAddress = {
   name?: string;
@@ -78,6 +82,16 @@ async function parseResponse<T>(response: Response): Promise<T> {
     throw new Error(`Topship request failed (${response.status}): ${message}`);
   }
   return payload as T;
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function cityOf(address?: TopshipAddress) {
@@ -258,11 +272,11 @@ export async function fetchTopshipQuote(params: {
       pickupDate: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     };
     const pickupQuery = new URLSearchParams({ input: JSON.stringify(pickupInput) });
-    const pickupResponse = await fetch(`${TOPSHIP_BASE_URL}/get-pickup-rates?${pickupQuery.toString()}`, {
+    const pickupResponse = await fetchWithTimeout(`${TOPSHIP_BASE_URL}/get-pickup-rates?${pickupQuery.toString()}`, {
       method: "GET",
       headers: headers(),
       cache: "no-store",
-    });
+    }, TOPSHIP_PICKUP_TIMEOUT_MS);
     const supportedPickupPartners = new Set(["fez", "standard", "dellyman", "sendstack", "messenger"]);
     const pickupRates = pickupRatesFrom(await parseResponse<unknown>(pickupResponse))
       .filter((rate) => numberOf(rate.pickupCharge) >= 0)
@@ -272,7 +286,10 @@ export async function fetchTopshipQuote(params: {
   } catch (error) {
     // A route quote is still useful when Topship has not configured pickup
     // coverage for the sender. Booking will use DropOff in that case.
-    console.warn("[TOPSHIP] Pickup rate unavailable; using route rate only:", error);
+    const detail = error instanceof Error && error.name === "AbortError"
+      ? `timed out after ${TOPSHIP_PICKUP_TIMEOUT_MS}ms`
+      : error;
+    console.warn("[TOPSHIP] Pickup rate unavailable; using route rate only:", detail);
   }
 
   const cost = routeRate.cost;
