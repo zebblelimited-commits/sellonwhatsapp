@@ -1,0 +1,1337 @@
+To begin to use the Chowdeck API:
+
+Create an account - Create a Chowdeck account if you don't have one
+
+Get your API key - Grab your secret key and reference from the settings page of the Chowdeck Dashboard
+
+Update environments - Use the secret key copied from the Chowdeck Dashboard to update the token value
+
+What You Can Do
+With the API, you can:
+
+Sync and manage menus, items, and prices
+Create, retrieve, and track orders
+Create, retrieve, and update discounts
+Access wallet and payment data
+Integrate with third-party logistics or POS systems
+Base URL
+https://api.chowdeck.com/merchant
+
+Format
+All requests and responses use JSON
+Chowdeck API follows standard REST conventions
+Errors are returned in a structured format with helpful messages and codes
+💱 Currency Handling
+All monetary values in this API are represented in the smallest currency unit to avoid floating-point rounding issues.
+
+For example:
+
+₦1.00 (1 Naira) is represented as 100 (in kobo)
+
+$250.50 is represented as 25050
+
+₦0.75 is represented as 75
+
+When sending or receiving currency values:
+
+Multiply by 100 to convert from Naira to Kobo
+
+Divide by 100 to convert from Kobo to Naira (for display)
+
+Introduction
+Authentication
+To securely authenticate your API calls, you must include your secret API key in the Authorization header of every request. The same API key works for both the Chowdeck API and Relay.
+
+Obtaining Your API Key
+Your secret API key is a unique identifier that grants you access to the Chowdeck API. Keep it confidential and do not share it publicly. You can find your API key in your Chowdeck Dashboard under the "API Settings" or "Developers" section.
+
+Merchant Reference
+Your merchantReference is a unique identifier for your store on Chowdeck. It is required in the URL of most API endpoints. You can find it in your Chowdeck Dashboard alongside your API key.
+
+How to Use Your API Key
+Include your secret API key in the Authorization header of your HTTP requests using the Bearer scheme.
+
+Header Format:
+Authorization: Bearer YOUR_SECRET_API_KEY
+
+Replace YOUR_SECRET_API_KEY with your actual secret key obtained from your dashboard.
+
+Example Request
+Here's an example of how you might include your API key in a cURL request:
+
+Bash
+
+curl -X GET \
+  https://api.chowdeck.com/merchant/YOUR_MERCHANT_REFERENCE/orders \
+  -H 'Authorization: Bearer YOUR_SECRET_API_KEY'
+
+Signature Verification
+To ensure webhook authenticity, all webhook requests include a signature header x-chowdeck-signature. You must verify this signature using your webhook secret
+
+
+Security Best Practices
+Keep your API key secret: Never expose your secret API key in client-side code, public repositories, or unsecured channels.
+Use environment variables: Store your API key as an environment variable rather than hardcoding it directly into your application.
+Rotate keys regularly: Periodically generate new API keys and revoke old ones to minimize the risk of compromise.
+Updated 4 months ago
+
+Orders
+Receiving & Managing Orders
+Orders on Chowdeck are created by customers and sent to your store in real time. This guide walks you through how to receive, accept, reject, and fulfil orders using the Chowdeck API.
+
+How orders reach you
+When a customer places and pays for an order, Chowdeck sends a webhook event to your configured webhook URL with the category ORDER_CREATED. This is your trigger to act on the order.
+
+Make sure you have a webhook URL configured on your merchant account. See the Webhooks guide for setup instructions.
+
+The order lifecycle
+Every order moves through the following states:
+
+State	Description
+received	Payment confirmed, order is waiting for your response
+preparing	You have accepted the order and are preparing it
+rejected	You have rejected the order
+awaiting_pickup	Order is prepared and waiting for the rider to collect
+in_transit	Rider has picked up the order and is heading to the customer
+success	Order has been delivered
+Your job as a merchant is to move the order from received → preparing → awaiting_pickup. Chowdeck handles the rest.
+
+If your store manages its own deliveries (vendor-managed delivery) instead of using a Chowdeck rider, marking an order as ready moves it directly to in_transit, skipping the awaiting_pickup stage.
+
+1. Receive the order
+When you receive an ORDER_CREATED webhook, fetch the full order details using your merchantReference and the orderReference from the webhook payload.
+
+Bash
+
+curl --request GET \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/order/{orderReference} \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+A successful response looks like this:
+
+JSON
+
+{
+  "status": "success",
+  "data": {
+    "id": 10234,
+    "reference": "ORD-ABC123",
+    "status": "received",
+    "items": [...],
+    "total_price": 450000,
+    "currency": "NGN"
+  }
+}
+total_price is in the smallest currency unit. Divide by 100 to get the display value (e.g. 450000 = ₦4,500).
+
+2. Accept or reject the order
+Once you've reviewed the order, you must either accept or reject it.
+
+Accept orders early enough — if an order sits without a response, Chowdeck will auto-reject it on your behalf and the customer will be refunded.
+
+Accept
+Bash
+
+curl --request PUT \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/order/{orderReference}/accept \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "preparation_duration": 15
+  }'
+Request body:
+
+Field	Type	Required	Description
+preparation_duration	integer	Recommended	How long (in minutes) the order will take to prepare
+A successful response returns the updated order object with status: "preparing".
+
+Reject
+If you cannot fulfil the order, reject it with a reason. The customer is notified and refunded automatically.
+
+Bash
+
+curl --request PUT \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/order/{orderReference}/reject \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "reason": "Item out of stock"
+  }'
+3. Mark the order as ready
+Once you have prepared the order, mark it as ready for pickup. This notifies the assigned rider to come collect.
+
+Bash
+
+curl --request PUT \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/order/{orderReference}/ready \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+If you mark an order as ready immediately after accepting, the request may be rejected. Allow a brief moment before calling this endpoint.
+
+Handling item substitutions
+If one or more items in an order are unavailable, you can propose substitutions instead of rejecting the whole order. The customer will be notified and asked to approve the change.
+
+Bash
+
+curl --request POST \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/order/{orderReference}/substitution \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "substitutions": [
+      {
+        "item_reference": "MENU-REF-123",
+        "order_item_type": "menu",
+        "quantity_unavailable": 1,
+        "pack_id": 1,
+        "replacements": [
+          {
+            "reference": "MENU-REF-456",
+            "quantity": 1
+          }
+        ]
+      }
+    ]
+  }'
+Substitution object fields:
+
+Field	Type	Required	Description
+item_reference	string	Yes	The reference of the unavailable menu item
+order_item_type	string	Yes	"menu" or "group"
+quantity_unavailable	integer	Yes	How many units are unavailable (min 1)
+pack_id	integer	Yes	The pack this item belongs to within the order
+replacements	array	Yes	List of replacement items (see below)
+replacements[].reference	string	Yes	Reference of the replacement item
+replacements[].quantity	integer	Yes	Quantity of the replacement item
+Error responses
+All failed requests return this shape:
+
+JSON
+
+{
+  "status": "failed",
+  "message": "..."
+}
+Listing orders
+You can fetch a paginated list of all orders for your store, with optional filters.
+
+Bash
+
+curl --request GET \
+  --url 'https://api.chowdeck.com/merchant/{merchantReference}/order?page=1&per_page=50' \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+Supported query parameters:
+
+Parameter	Type	Default	Max	Description
+page	integer	1	—	Page number
+per_page	integer	50	100	Results per page
+start_date	string (ISO 8601)	—	—	Filter from this date
+end_date	string (ISO 8601)	—	—	Filter up to this date
+
+Menu
+Managing your menu
+Your menu is organised into categories and items. Categories group related items together (e.g. Drinks, Mains, Sides). You must create a category before you can add items to it.
+
+The typical setup flow is:
+
+Create your categories
+Add items under each category
+Update availability and pricing as needed
+Managing categories
+Create a category
+Bash
+
+curl --request POST \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/menucategory \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "reference": "cat-drinks-001",
+    "name": "Drinks"
+  }'
+Request body:
+
+Field	Type	Required	Description
+reference	string	Yes	A unique identifier you define
+name	string	Yes	The display name of the category
+rank	integer	No	Display order -- lower numbers appear first
+This endpoint is an upsert. If a category with the same reference already exists, it will be updated instead of creating a duplicate.
+
+Update a category
+Bash
+
+curl --request PUT \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/menucategory/{menuCategoryReference} \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "Cold Drinks",
+    "is_published": true,
+    "rank": 1
+  }'
+Request body:
+
+Field	Type	Required	Description
+name	string	No	Updated category name
+is_published	boolean	No	Whether the category is visible to customers
+rank	integer	No	Display order -- lower numbers appear first
+List categories
+Bash
+
+curl --request GET \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/menucategory \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+Managing items
+Create an item
+Bash
+
+curl --request POST \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/menu \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "reference": "item-chilled-coke-001",
+    "name": "Chilled Coke",
+    "description": "Ice cold Coca-Cola 50cl",
+    "menu_category_id": 12,
+    "price": 120000,
+    "in_stock": true,
+    "images": [{ "path": "https://your-cdn.com/coke.jpg" }]
+  }'
+Request body:
+
+Field	Type	Required	Description
+reference	string	Yes	A unique identifier you define
+name	string	Yes	Display name of the item
+description	string	No	Short description shown to customers
+menu_category_id	integer	Yes	ID of the category this item belongs to
+price	integer	Yes	Price in the smallest currency unit (e.g. kobo)
+in_stock	boolean	No	Whether the item is available for purchase. Defaults to true
+rank	integer	No	Display order within the category
+images	array	No	List of image objects. Each object must have a path key
+price is in the smallest currency unit. For example, ₦1,200 should be sent as 120000.
+
+This endpoint is an upsert. If an item with the same reference already exists, it will be updated instead of creating a duplicate.
+
+Update an item
+Bash
+
+curl --request PUT \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/menu/{menuReference} \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "Chilled Coke",
+    "description": "Ice cold Coca-Cola 50cl",
+    "menu_category_id": 12,
+    "in_stock": false,
+    "price": 150000
+  }'
+Get a single item
+Bash
+
+curl --request GET \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/menu/{menuReference} \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+List all items
+Bash
+
+curl --request GET \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/menu \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+Bulk operations
+Bulk create
+Use this endpoint to sync your entire menu in a single request. Each item includes its category inline -- the API creates or updates the category automatically.
+
+This endpoint performs a full sync. Any item or category that exists on your menu but is not included in this request will be deactivated. Only use this when you intend to replace your entire menu. For partial updates, use the bulk update endpoint instead.
+
+Bash
+
+curl --request POST \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/menu/bulk-upload \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "items": [
+      {
+        "reference": "item-001",
+        "name": "Chilled Coke",
+        "description": "Ice cold Coca-Cola 50cl",
+        "category": {
+          "reference": "cat-drinks-001",
+          "name": "Drinks"
+        },
+        "price": 120000,
+        "in_stock": true,
+        "images": [{ "path": "https://your-cdn.com/coke.jpg" }]
+      },
+      {
+        "reference": "item-002",
+        "name": "Bottled Water",
+        "description": "500ml still water",
+        "category": {
+          "reference": "cat-drinks-001",
+          "name": "Drinks"
+        },
+        "price": 50000,
+        "in_stock": true,
+        "images": []
+      }
+    ]
+  }'
+Multiple items can share the same category reference. The category is created once and reused.
+
+Bulk update
+Use this to update specific fields on existing items without affecting the rest of your menu.
+
+Bash
+
+curl --request PUT \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/menu/bulk-update \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "items": [
+      {
+        "reference": "item-001",
+        "price": 130000,
+        "in_stock": true
+      },
+      {
+        "reference": "item-002",
+        "in_stock": false
+      }
+    ]
+  }'
+Each item in the items array must include its reference so we know which item to update.
+
+Error responses
+All failed requests return this shape:
+
+JSON
+
+{
+  "status": "failed",
+  "message": "..."
+}
+Updated 4 months ago
+
+Receiving & Managing Orders
+
+Deliveries
+Managing Deliveries
+The Chowdeck relay API lets you request on-demand deliveries for your customers. The flow is always two steps -- get a fee quote first, then create the delivery using the returned fee ID.
+
+1. Get a delivery fee
+Before creating a delivery, get a fee quote. Pass the source and destination coordinates and an optional estimated order value.
+
+Bash
+
+curl --request POST \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/delivery/fee \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "source_address": {
+      "latitude": 6.601838,
+      "longitude": 3.351486
+    },
+    "destination_address": {
+      "latitude": 6.455027,
+      "longitude": 3.384082
+    },
+    "estimated_order_amount": 500000
+  }'
+Request body:
+
+Field	Type	Required	Description
+source_address	object	Yes	Coordinates of the pickup location
+source_address.latitude	number	Yes	Latitude of the pickup point
+source_address.longitude	number	Yes	Longitude of the pickup point
+destination_address	object	Yes	Coordinates of the drop-off location
+destination_address.latitude	number	Yes	Latitude of the drop-off point
+destination_address.longitude	number	Yes	Longitude of the drop-off point
+estimated_order_amount	integer	No	Estimated value of the items being delivered, in the smallest currency unit. May affect pricing -- pass 0 if not applicable.
+A successful response looks like this:
+
+JSON
+
+{
+  "status": "success",
+  "data": {
+    "id": 12345,
+    "total_amount": 80000,
+    "delivery_amount": 70000,
+    "service_amount": 50000,
+    "safety_fee": 10000
+  }
+}
+Save the id -- you'll pass it as fee_id in the next step.
+
+All amounts are in the smallest currency unit. Divide by 100 for the display value (e.g. 80000 = ₦800).
+
+Fee quotes are not permanent. Create your delivery promptly after getting a quote.
+
+2. Create the delivery
+Use the id from the fee response as fee_id to initiate the delivery.
+
+Bash
+
+curl --request POST \
+  --url https://api.chowdeck.com/merchant/{merchantReference}/delivery \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "fee_id": 12345,
+    "reference": "my-delivery-ref-001",
+    "item_type": "documents",
+    "user_action": "sending",
+    "source_contact": {
+      "name": "Jane Smith",
+      "phone": "08100000000"
+    },
+    "destination_contact": {
+      "name": "John Doe",
+      "phone": "08100000001"
+    },
+    "customer_delivery_note": "Please handle with care",
+    "delivery_pin": 4821
+  }'
+Request body:
+
+Field	Type	Required	Description
+fee_id	integer	Yes	The id from the Get Delivery Fee response
+item_type	string	Yes	Type of item being delivered (e.g. "documents", "electronics")
+user_action	string	Yes	"sending" or "receiving"
+source_contact	object	Yes	Details of the sender
+source_contact.name	string	Yes	Full name of the sender
+source_contact.phone	string	Yes	Phone number of the sender
+source_contact.email	string	No	Email of the sender
+source_contact.country_code	string	No	Country code (e.g. "NG")
+destination_contact	object	Yes	Details of the recipient
+destination_contact.name	string	Yes	Full name of the recipient
+destination_contact.phone	string	Yes	Phone number of the recipient
+destination_contact.email	string	No	Email of the recipient
+destination_contact.country_code	string	No	Country code (e.g. "NG")
+reference	string	No	Your own unique reference for this delivery
+estimated_order_amount	integer	No	Estimated value of the items, in the smallest currency unit
+customer_delivery_note	string	No	Instructions for the rider (e.g. "Handle with care")
+customer_vendor_note	string	No	Notes about the package contents
+delivery_pin	integer	No	4-digit PIN (1000–9999) the recipient must present to the rider to confirm delivery
+notification_channels	array	No	Channels to notify contacts: "sms", "email", "whatsapp"
+A successful response returns the created delivery:
+
+JSON
+
+{
+  "status": "success",
+  "message": "Delivery created successfully",
+  "data": {
+    "id": 98765,
+    "reference": "my-delivery-ref-001",
+    "delivery_price": 80000,
+    "delivery_pin": 4821,
+    "tracking_url": "https://track.chowdeck.com/...",
+    "status": "preparing"
+  }
+}
+Track a delivery
+Poll this endpoint to get the current status of a delivery.
+
+Bash
+
+curl --request GET \
+  --url https://api.chowdeck.com/merchant/delivery/{reference} \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+Delivery statuses:
+
+Status	Description
+preparing	Delivery created — rider assignment in progress
+awaiting_pickup	Rider assigned and heading to pickup location
+in_transit	Rider has collected the package
+success	Package delivered successfully
+rejected	Delivery was cancelled
+Error responses
+All failed requests return this shape:
+
+JSON
+
+{
+  "status": "failed",
+  "message": "..."
+}
+
+Managing Discounts
+Discounts let you offer price reductions to customers on their orders. You can target all orders or specific menu items, set expiry dates, cap usage, and activate or deactivate them at any time.
+
+Create a discount
+Two discount categories are currently supported. The required fields differ slightly between them.
+
+Apply to all orders
+Bash
+
+curl --request POST \
+  --url https://api.chowdeck.com/merchant/discount \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "reference": "disc-summer-001",
+    "title": "Summer Sale",
+    "description": "10% off all orders this weekend",
+    "type": "percentage_off",
+    "value": 10,
+    "category": "price_slash_off_all_orders",
+    "vendor_references": ["vendor-ref-001"],
+    "expiry_date": "2025-08-31T23:59:59Z",
+    "maximum_usage_times": 500,
+    "minimum_order_amount": 200000,
+    "capped_amount": 100000
+  }'
+Apply to specific menu items
+Bash
+
+curl --request POST \
+  --url https://api.chowdeck.com/merchant/discount \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "reference": "disc-coke-001",
+    "title": "Coke Promo",
+    "description": "₦200 off Chilled Coke",
+    "type": "flat_fee",
+    "value": 20000,
+    "category": "price_slash_off_menu",
+    "vendor_references": ["vendor-ref-001"],
+    "menu_references": ["item-chilled-coke-001"],
+    "expiry_date": "2025-08-31T23:59:59Z",
+    "maximum_usage_times": 200,
+    "minimum_order_amount": 100000
+  }'
+Request body:
+
+Field	Type	Required	Description
+reference	string	Yes	A unique identifier you define for this discount
+title	string	Yes	Display name of the discount
+description	string	Yes	Short description shown to customers
+type	string	Yes	"flat_fee" or "percentage_off"
+value	number	Yes	Discount value. For flat_fee, in the smallest currency unit. For percentage_off, a number between 1–100.
+category	string	Yes	"price_slash_off_all_orders" or "price_slash_off_menu"
+vendor_references	array	Yes	References of the vendors this discount applies to
+expiry_date	string	Yes	ISO 8601 date when the discount expires
+maximum_usage_times	integer	Yes	Total number of times this discount can be used across all customers
+minimum_order_amount	integer	Yes	Minimum order value required to apply the discount, in the smallest currency unit
+capped_amount	integer	Required for price_slash_off_all_orders	Maximum discount value to apply, in the smallest currency unit
+menu_references	array	Required for price_slash_off_menu	References of the menu items this discount applies to
+is_auto_applied	boolean	No	Whether to apply this discount automatically without a customer action
+For flat_fee, value is in the smallest currency unit. ₦500 off → 50000.
+
+capped_amount prevents large discounts on high-value orders. A 20% discount capped at ₦1,000 means customers never get more than ₦1,000 off regardless of order size.
+
+Update a discount
+Bash
+
+curl --request PUT \
+  --url https://api.chowdeck.com/merchant/discount/{reference} \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "title": "Extended Summer Sale",
+    "expiry_date": "2025-09-15T23:59:59Z",
+    "maximum_usage_times": 1000,
+    "minimum_order_amount": 150000
+  }'
+Request body:
+
+Field	Type	Required	Description
+title	string	No	Updated title
+description	string	No	Updated description
+value	number	No	Updated discount value
+minimum_order_amount	integer	No	Updated minimum order amount
+expiry_date	string	No	Updated expiry date (ISO 8601)
+maximum_usage_times	integer	No	Updated usage limit
+is_auto_applied	boolean	No	Updated auto-apply setting
+Activate and deactivate discounts
+Discounts are inactive by default when created. You must explicitly activate them before customers can use them.
+
+Activate
+Bash
+
+curl --request PATCH \
+  --url https://api.chowdeck.com/merchant/discount/activate \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "references": ["disc-summer-001", "disc-summer-002"]
+  }'
+Deactivate
+Bash
+
+curl --request DELETE \
+  --url https://api.chowdeck.com/merchant/discount/deactivate \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "references": ["disc-summer-001"]
+  }'
+Deactivating a discount prevents it from being applied to new orders immediately. It does not affect orders where the discount has already been applied.
+
+Get a discount
+Bash
+
+curl --request GET \
+  --url https://api.chowdeck.com/merchant/discount/{reference} \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+List discounts
+Bash
+
+curl --request GET \
+  --url 'https://api.chowdeck.com/merchant/discount?page=1&per_page=50' \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+Supported query parameters:
+
+Parameter	Type	Default	Description
+page	integer	1	Page number
+per_page	integer	50	Results per page
+references	string	—	Comma-separated discount references to filter by
+is_active	boolean	—	Filter by active or inactive status
+only_unexpired	boolean	—	Return only discounts that have not yet expired
+only_auto_applied	boolean	—	Return only auto-applied discounts
+menu_references	string	—	Comma-separated menu references to filter by
+Error responses
+All failed requests return this shape:
+
+JSON
+
+{
+  "status": "failed",
+  "message": "..."
+}
+
+Relay
+Getting Started
+Chowdeck Relay API lets you create and manage instant, last-mile deliveries across all Chowdeck-covered areas. With the API you can create deliveries, track their status in real time, calculate fees, cancel deliveries, and request redeliveries when needed.
+
+To get started, sign up for a Chowdeck account at https://dashboard.chowdeck.com.
+
+Once signed up, navigate to Settings → Developer Settings to find your API key and configure your webhook URL.
+
+
+Relay
+Creating a Delivery
+Relay lets you request on-demand package deliveries through Chowdeck's rider network. The flow is always two steps -- get a fee quote first, then create the delivery using the returned fee ID.
+
+Step 1 -- Get a delivery fee
+Bash
+
+curl --request POST \
+  --url https://api.relay.chowdeck.com/relay/delivery/fee \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "source_address": {
+      "latitude": 6.601838,
+      "longitude": 3.351486
+    },
+    "destination_address": {
+      "latitude": 6.578997,
+      "longitude": 3.349467
+    },
+    "estimated_order_amount": 500000
+  }'
+Request body:
+
+Field	Type	Required	Description
+source_address	object	Conditional	Coordinates of the pickup location. Required if source_address_string is not provided.
+source_address.latitude	number	—	Latitude of the pickup point
+source_address.longitude	number	—	Longitude of the pickup point
+source_address_string	string	Conditional	Human-readable pickup address. Required if source_address is not provided.
+destination_address	object	Conditional	Coordinates of the drop-off location. Required if destination_address_string is not provided.
+destination_address.latitude	number	—	Latitude of the drop-off point
+destination_address.longitude	number	—	Longitude of the drop-off point
+destination_address_string	string	Conditional	Human-readable drop-off address. Required if destination_address is not provided.
+estimated_order_amount	integer	No	Estimated value of the items being delivered, in the smallest currency unit. May affect pricing — pass 0 or omit if not applicable.
+Provide either coordinates or an address string for each side of the delivery — not both required.
+
+A successful response returns a fee object. Save the id -- you'll pass it as fee_id in the next step.
+
+JSON
+
+{
+  "status": "success",
+  "data": {
+    "id": 12345,
+    "total_amount": 80000,
+    "delivery_amount": 70000,
+    "service_amount": 50000,
+    "safety_fee": 10000
+  }
+}
+All amounts are in the smallest currency unit. Divide by 100 for the display value (e.g. 80000 = ₦800).
+
+Fee quotes are not permanent. Create your delivery promptly after getting a quote.
+
+Step 2 -- Create the delivery
+Bash
+
+curl --request POST \
+  --url https://api.relay.chowdeck.com/relay/delivery \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "fee_id": 12345,
+    "reference": "my-delivery-ref-001",
+    "item_type": "documents",
+    "user_action": "sending",
+    "source_contact": {
+      "name": "Jane Smith",
+      "phone": "08100000000"
+    },
+    "destination_contact": {
+      "name": "John Doe",
+      "phone": "08100000001"
+    },
+    "customer_delivery_note": "Please handle with care",
+    "delivery_pin": 4821
+  }'
+Request body:
+
+Field	Type	Required	Description
+fee_id	integer	Yes	The id from the Get Delivery Fee response
+item_type	string	Yes	Type of item being delivered (e.g. "documents", "electronics")
+user_action	string	Yes	"sending" if the source contact is initiating, "receiving" if the destination contact is
+source_contact	object	Yes	Details of the sender
+source_contact.name	string	Yes	Full name of the sender
+source_contact.phone	string	Yes	Phone number of the sender
+source_contact.email	string	No	Email address of the sender
+source_contact.country_code	string	No	Country code (e.g. "NG")
+destination_contact	object	Yes	Details of the recipient
+destination_contact.name	string	Yes	Full name of the recipient
+destination_contact.phone	string	Yes	Phone number of the recipient
+destination_contact.email	string	No	Email address of the recipient
+destination_contact.country_code	string	No	Country code (e.g. "NG")
+reference	string	No	Your own unique reference for this delivery. Auto-generated if not provided.
+estimated_order_amount	integer	No	Estimated value of the items, in the smallest currency unit
+customer_delivery_note	string	No	Instructions for the rider
+delivery_pin	integer	No	4-digit PIN (1000–9999) the recipient must present to the rider to confirm delivery
+notification_channels	array	No	Channels to notify contacts: "sms", "email", "whatsapp"
+A successful response returns the created delivery:
+
+JSON
+
+{
+  "status": "success",
+  "message": "Delivery created successfully",
+  "data": {
+    "id": 98765,
+    "reference": "my-delivery-ref-001",
+    "delivery_price": 80000,
+    "delivery_pin": 4821,
+    "tracking_url": "https://track.chowdeck.com/...",
+    "status": "preparing"
+  }
+}
+Track a delivery
+Bash
+
+curl --request GET \
+  --url https://api.relay.chowdeck.com/relay/delivery/{reference} \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+Delivery statuses:
+
+Status	Description
+preparing	Delivery created — rider assignment in progress
+awaiting_pickup	Rider assigned and heading to pickup location
+in_transit	Rider has collected the package
+success	Package delivered successfully
+rejected	Delivery was cancelled
+Error responses
+All failed requests return this shape:
+
+JSON
+
+{
+  "status": "failed",
+  "message": "..."
+}
+
+Relay
+Handling Redeliveries
+If a delivery fails or needs to be cancelled, you can cancel it and request a redelivery. Redeliveries follow the same two-step flow as a new delivery -- get a redelivery fee first, then request the redelivery using the returned fee ID. The fee is charged from your relay wallet.
+
+Cancelling a delivery
+To cancel an active delivery, pass the delivery reference and a reason.
+
+Bash
+
+curl --request POST \
+  --url https://api.relay.chowdeck.com/relay/delivery/{reference}/cancel \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "reason": "Customer is no longer available"
+  }'
+Request body:
+
+Field	Type	Required	Description
+reason	string	No	The reason for cancelling the delivery
+A successful response confirms the cancellation and returns the refund amount:
+
+JSON
+
+{
+  "status": "success",
+  "message": "Delivery cancelled successfully",
+  "data": {
+    "id": 98765,
+    "reference": "my-delivery-ref-001",
+    "status": "cancelled",
+    "refund_amount": 80000,
+    "currency": "NGN"
+  }
+}
+refund_amount is in the smallest currency unit and reflects what was returned to your wallet.
+
+Not all deliveries can be cancelled depending on their current status. If a rider has already picked up the package, cancellation may not be possible.
+
+Requesting a redelivery
+Step 1 -- Get a redelivery fee
+Pass the reference of the original delivery to get a fee quote for the redelivery.
+
+Bash
+
+curl --request POST \
+  --url https://api.relay.chowdeck.com/relay/redelivery/fee \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "reference": "my-delivery-ref-001"
+  }'
+A successful response returns a fee ID to use in the next step.
+
+JSON
+
+{
+  "status": "success",
+  "message": "Redelivery fee calculated successfully",
+  "data": {
+    "reference": "my-delivery-ref-001",
+    "fee_id": 9021,
+    "amount": 150000,
+    "currency": "NGN"
+  }
+}
+Step 2 -- Request the redelivery
+Bash
+
+curl --request POST \
+  --url https://api.relay.chowdeck.com/relay/redelivery \
+  --header 'Authorization: Bearer YOUR_API_KEY' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "reference": "my-delivery-ref-001",
+    "fee_id": 9021
+  }'
+Request body:
+
+Field	Type	Required	Description
+reference	string	Yes	Reference of the original delivery
+fee_id	integer	Yes	The fee_id from the Get Redelivery Fee response
+A successful response confirms the redelivery request:
+
+JSON
+
+{
+  "status": "success",
+  "message": "Redelivery requested successfully",
+  "data": {
+    "id": 98765,
+    "reference": "my-delivery-ref-001",
+    "redelivery_amount": 150000,
+    "currency": "NGN"
+  }
+}
+The redelivery fee is deducted directly from your relay wallet. Make sure your wallet has sufficient balance before requesting a redelivery.
+
+Error responses
+All failed requests return this shape:
+
+JSON
+
+{
+  "status": "failed",
+  "message": "..."
+}
+
+
+Relay
+Managing your wallet
+Your relay wallet is the funding source for all deliveries and redeliveries. You fund it by making transfers to your dedicated virtual bank account, and Chowdeck deducts delivery fees from it automatically when you create or request a redelivery.
+
+Get your virtual account
+Retrieve your dedicated virtual bank account details to fund your wallet.
+
+Bash
+
+curl --request GET \
+  --url https://api.relay.chowdeck.com/relay/wallet/virtual-account \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+A successful response returns your account details:
+
+JSON
+
+{
+  "status": "success",
+  "message": "Account found",
+  "data": {
+    "account_name": "YOUR BUSINESS NAME",
+    "account_number": "0123456789",
+    "bank_name": "Paystack-Titan",
+    "bank_code": "629"
+  }
+}
+Transfers to this account are reflected in your wallet balance automatically. Use this account for all wallet top-ups.
+
+Check your balance
+Bash
+
+curl --request GET \
+  --url https://api.relay.chowdeck.com/relay/wallet/balance \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+A successful response returns your current balance:
+
+JSON
+
+{
+  "status": "success",
+  "message": "Balance fetched successfully",
+  "data": {
+    "balance": 150000
+  }
+}
+balance is in the smallest currency unit. Divide by 100 for the display value (e.g. 150000 = ₦1,500).
+
+We recommend checking your balance before creating a delivery or requesting a redelivery to avoid failed requests due to insufficient funds.
+
+View transaction history
+Retrieve a history of all wallet transactions, with optional date range filtering.
+
+Bash
+
+curl --request GET \
+  --url 'https://api.relay.chowdeck.com/relay/wallet/history?start_date=2025-01-01&end_date=2025-12-31' \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+Supported query parameters:
+
+Parameter	Type	Required	Description
+start_date	string (ISO 8601)	No	Filter from this date
+end_date	string (ISO 8601)	No	Filter up to this date
+A successful response returns a list of transactions:
+
+JSON
+
+{
+  "status": "success",
+  "message": "History fetched successfully",
+  "data": {
+    "history": [
+      {
+        "id": 1001,
+        "reference": "my-delivery-ref-001",
+        "category": "relay_redelivery_fee",
+        "reason": "Redelivery charge for relay delivery my-delivery-ref-001",
+        "difference": -80000,
+        "balance": 70000,
+        "currency": "NGN",
+        "created_at": "2025-01-15T10:30:00.000Z",
+        "updated_at": "2025-01-15T10:30:00.000Z"
+      }
+    ]
+  }
+}
+difference is the transaction amount -- negative for deductions, positive for top-ups. balance is your running wallet balance after the transaction.
+
+Error responses
+All failed requests return this shape:
+
+JSON
+
+{
+  "status": "failed",
+  "message": "..."
+}
+
+Webhooks
+Overview
+Webhooks let you receive real-time notifications when events occur on your Chowdeck orders. Instead of polling for updates, Chowdeck sends an HTTP POST request to your configured endpoint whenever a relevant event takes place.
+
+Setting up your webhook URL
+Configure your webhook URL in the Chowdeck Dashboard:
+
+https://dashboard.chowdeck.com/settings/developers
+
+All webhook events are sent as HTTP POST requests to this URL with a JSON body.
+
+Payload structure
+Every webhook event shares the same top-level structure:
+
+JSON
+
+{
+  "category": "ORDER_CREATED",
+  "description": "New order",
+  "payload": { ... }
+}
+Field	Type	Description
+category	string	The event type (e.g. ORDER_CREATED)
+description	string	A human-readable description of the event
+payload	object	The order object at the time the event fired. See Webhook Events for the full payload reference.
+Verifying webhook signatures
+All webhook requests include an x-chowdeck-signature header. You must verify this signature to confirm the request genuinely came from Chowdeck and has not been tampered with.
+
+Verification steps:
+
+Retrieve the x-chowdeck-signature header from the request
+Compute an HMAC SHA-256 digest of the raw request body using your webhook secret
+Compare the computed digest with the received signature
+Reject the request if they do not match
+Example (Node.js):
+
+JavaScript
+
+const crypto = require('crypto');
+
+function verifySignature(payload, signature, secret) {
+  const computed = crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
+
+  return crypto.timingSafeEqual(
+    Buffer.from(computed, 'utf8'),
+    Buffer.from(signature, 'utf8')
+  );
+}
+Always use crypto.timingSafeEqual for signature comparison. Standard string equality (===) is vulnerable to timing attacks.
+
+Responding to webhooks
+Your endpoint must return a 200 OK response as quickly as possible to acknowledge receipt. If your processing logic takes time, acknowledge first and handle the event asynchronously.
+
+If your endpoint does not return a 200 OK, Chowdeck will retry the delivery using an exponential backoff strategy. Design your handler to be idempotent -- processing the same event more than once should produce the same result.
+
+Security best practices
+Verify every signature -- never process a webhook without first verifying the x-chowdeck-signature header
+Use HTTPS -- always use an HTTPS endpoint to encrypt webhook traffic
+Handle retries -- design your endpoint to be idempotent since events may be delivered more than once
+Use environment variables -- store your webhook secret as an environment variable, never hardcode it
+
+
+Webhooks
+Events
+All webhook events share the same payload structure -- the top-level category field tells you what event fired, and the payload object contains the order at the time of the event. The key field to watch is payload.status, which reflects the order's current state.
+
+Events reference
+Event	payload.status	Description
+ORDER_CREATED	preparing	A new order has been placed and payment confirmed
+ORDER_ASSIGNED	preparing	A rider has been assigned to collect the order
+ORDER_AWAITING_PICKUP	awaiting_pickup	The rider has arrived at your location and is waiting to collect
+ORDER_PICKED_UP	picked	The rider has collected the order and is heading to the customer
+ORDER_ARRIVED_AT_CUSTOMER_LOCATION	arrived	The rider has arrived at the customer's location
+ORDER_COMPLETE	completed	The order has been successfully delivered
+ORDER_ITEMS_UPDATED	accepted	An item was unavailable and the customer has confirmed the vendor's suggested replacement
+Item substitutions
+When a vendor marks an item as unavailable and suggests a replacement, and the customer confirms the replacement, Chowdeck sends an ORDER_ITEMS_UPDATED event to your webhook URL.
+
+The payload has the same structure as ORDER_CREATED. The items array reflects the current state of the order after substitution -- replaced items appear in the list, the original unavailable items do not.
+
+There is no explicit flag on individual items to indicate they were substituted. To determine what changed, compare the items array against the original ORDER_CREATED payload, or inspect the timeline array for entries with action: "REPLACED_AN_ITEM".
+
+JSON
+
+{
+  "category": "ORDER_ITEMS_UPDATED",
+  "description": "The customer replaced some items",
+  "payload": {
+    "id": 1453,
+    "reference": "testing119312",
+    "status": "accepted",
+    "items": [
+      {
+        "id": 2409,
+        "item_id": 109,
+        "name": "Chicken Suya",
+        "description": "Grilled chicken suya",
+        "reference": "menu-ref-xyz",
+        "type": "item",
+        "pack_id": 1,
+        "quantity": 40,
+        "price_per_quantity": 52000
+      }
+    ],
+    "timeline": [
+      {
+        "action": "REPLACED_AN_ITEM",
+        "description": "Vendor replaced an unavailable item",
+        "created_at": "2022-11-25T17:10:00.000Z"
+      }
+    ]
+  }
+}
+Payload field reference
+Every event delivers the same order object in the payload field. Here's what each field means:
+
+Order fields:
+
+Field	Type	Description
+id	integer	Internal order ID
+reference	string	Your order reference
+status	string	Current order status — use this to track order progress
+summary	string	Short text summary of the order items
+total_price	integer	Total order amount in the smallest currency unit
+delivery_price	integer	Delivery fee in the smallest currency unit
+currency	string	Currency code (e.g. NGN)
+source	string	How the order was placed (e.g. api)
+class	string	Order type (e.g. delivery)
+created_at	string	ISO 8601 timestamp when the order was created
+updated_at	string	ISO 8601 timestamp of the last update
+time_payment_confirmed	string	ISO 8601 timestamp when payment was confirmed
+time_customer_received_order	string	ISO 8601 timestamp when the customer received the order. null until delivered.
+actual_delivery_time	string	Actual delivery duration. null until delivered.
+driver	object	Assigned rider details. Empty object until a rider is assigned.
+Customer fields (customer):
+
+Field	Type	Description
+id	integer	Internal customer ID
+first_name	string	Customer's first name
+last_name	string	Customer's last name
+email	string	Customer's email address
+phone	string	Customer's phone number
+country_code	string	Customer's country code
+Items array (items[]):
+
+Field	Type	Description
+id	integer	Menu item ID
+item_id	integer	Internal item identifier
+name	string	Item name
+description	string	Item description
+reference	string	Menu or menu group reference
+type	string	item for standard items, group for variant/combo items
+pack_id	integer	Pack this item belongs to
+quantity	integer	Number of units ordered
+price_per_quantity	integer	Price per unit in the smallest currency unit
+variant_id	integer	Variant ID — only present when type is group
+variant_reference	string	Variant reference — only present when type is group
+variant_name	string	Variant name — only present when type is group
+Timeline array (timeline[]):
+
+Field	Type	Description
+action	string	The timeline action (e.g. ORDER_CREATED)
+description	string	Human-readable description of the action
+created_at	string	ISO 8601 timestamp of when the action occurred
+Address fields (customer_address, vendor_address):
+
+Field	Type	Description
+id	integer	Internal address ID
+street	string	Full street address
+pretty_name	string	Display-friendly address string
+city	string	City
+state	string	State
+country	string	Country
+coordinate.x	number	Longitude
+coordinate.y	number	Latitude
+Vendor fields (vendor_information):
+
+Field	Type	Description
+name	string	Vendor store name
+reference	string	Vendor reference
+webhook_url	string	Configured webhook URL for the vendor
+
+Sample payload
+Here is a complete example of an ORDER_CREATED webhook:
+
+{
+  "category": "ORDER_CREATED",
+  "description": "New order",
+  "payload": {
+    "id": 1453,
+    "reference": "testing119312",
+    "status": "preparing",
+    "summary": "40 portions of Beef.",
+    "total_price": 2130000,
+    "delivery_price": 80000,
+    "currency": "NGN",
+    "source": "api",
+    "class": "delivery",
+    "created_at": "2022-11-25T17:03:40.000Z",
+    "updated_at": "2022-11-25T17:03:55.000Z",
+    "time_payment_confirmed": "2022-11-25T17:03:43.000Z",
+    "time_customer_received_order": null,
+    "actual_delivery_time": null,
+    "driver": {},
+    "customer": {
+      "id": 70,
+      "first_name": "Dave",
+      "last_name": "Aluks",
+      "email": "dave@example.com",
+      "phone": "08142272922",
+      "country_code": null
+    },
+    "items": [
+      {
+        "id": 2408,
+        "item_id": 108,
+        "name": "Beef Suya",
+        "description": "Pure beef meat",
+        "reference": "menu-ref-abc",
+        "type": "item",
+        "pack_id": 1,
+        "quantity": 40,
+        "price_per_quantity": 50000
+      }
+    ],
+    "timeline": [
+      {
+        "action": "ORDER_CREATED",
+        "description": "Order created",
+        "created_at": "2022-11-25T17:03:40.000Z"
+      },
+      {
+        "action": "MADE_PAYMENT",
+        "description": "Made payment using none",
+        "created_at": "2022-11-25T17:03:42.000Z"
+      },
+      {
+        "action": "VENDOR_ACCEPTED_ORDER",
+        "description": "Vendor accepted the order",
+        "created_at": "2022-11-25T17:03:46.000Z"
+      }
+    ],
+    "customer_address": {
+      "id": 531,
+      "street": "33 Adisa Coker St, Ojodu, Lagos",
+      "pretty_name": "33 Adisa Coker St, Ojodu, Lagos",
+      "city": "Ojodu",
+      "state": "Lagos",
+      "country": "NG",
+      "coordinate": {
+        "x": 3.3393804,
+        "y": 6.6568331
+      }
+    },
+    "vendor_address": {
+      "id": 531,
+      "street": "33 Adisa Coker St, Ojodu, Lagos",
+      "pretty_name": "33 Adisa Coker St, Ojodu, Lagos",
+      "city": "Ojodu",
+      "state": "Lagos",
+      "country": "NG",
+      "coordinate": {
+        "x": 3.3393804,
+        "y": 6.6568331
+      }
+    },
+    "vendor_information": {
+      "name": "Suya Spots",
+      "reference": "vendor-ref-001",
+      "webhook_url": "https://your-server.com/webhooks/chowdeck"
+    }
+  }
+}
+

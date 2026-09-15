@@ -13,6 +13,10 @@ const configuredShippingTimeout = Number(process.env.SHIPPING_PROVIDER_TIMEOUT_M
 const SHIPPING_PROVIDER_TIMEOUT_MS = Number.isFinite(configuredShippingTimeout) && configuredShippingTimeout > 0
     ? Math.max(3_000, configuredShippingTimeout)
     : 8_000;
+const configuredTopshipTimeout = Number(process.env.TOPSHIP_QUOTE_TIMEOUT_MS);
+const TOPSHIP_QUOTE_TIMEOUT_MS = Number.isFinite(configuredTopshipTimeout) && configuredTopshipTimeout > 0
+    ? Math.max(5_000, configuredTopshipTimeout)
+    : 20_000;
 
 interface ShippingRequest {
     destinationState: string;
@@ -54,15 +58,15 @@ function isTopshipCoverageUnavailable(error: unknown) {
     return error instanceof Error && /Topship returned no delivery rates for/i.test(error.message);
 }
 
-async function withProviderTimeout<T>(promise: Promise<T>, providerName: string): Promise<T> {
+async function withProviderTimeout<T>(promise: Promise<T>, providerName: string, timeoutMs = SHIPPING_PROVIDER_TIMEOUT_MS): Promise<T> {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
         return await Promise.race([
             promise,
             new Promise<T>((_, reject) => {
                 timeoutId = setTimeout(() => {
-                    reject(new Error(`${providerName} did not return a quote within ${Math.round(SHIPPING_PROVIDER_TIMEOUT_MS / 1000)} seconds.`));
-                }, SHIPPING_PROVIDER_TIMEOUT_MS);
+                    reject(new Error(`${providerName} did not return a quote within ${Math.round(timeoutMs / 1000)} seconds.`));
+                }, timeoutMs);
             }),
         ]);
     } finally {
@@ -310,7 +314,7 @@ export async function POST(req: NextRequest) {
                         sender: pickupAddress as TopshipAddress || {},
                         receiver: destinationAddress as TopshipAddress || {},
                         totalWeightKg: Math.max(1, totalWeightKg),
-                    }), "Topship");
+                    }), "Topship", TOPSHIP_QUOTE_TIMEOUT_MS);
                     finalFee = topShipQuote.totalCost / 100;
                     providerQuote = topShipQuote;
                 } catch (topshipErr) {

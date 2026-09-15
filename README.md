@@ -62,6 +62,8 @@ NEXT_PUBLIC_APP_URL=https://your-domain.example
 https://sellonwhatsapp.com/payment/success?reference=175743566&orderId=ea260d25-c8b3-426a-aa9e-aeb747db868c&orderReference=175743566
 # Optional: maximum wait for each live courier quote (default: 8000 ms)
 SHIPPING_PROVIDER_TIMEOUT_MS=8000
+# Topship staging can require longer because it may try route and pickup-rate lookups.
+TOPSHIP_QUOTE_TIMEOUT_MS=20000
 ```
 
 The checkout uses Nomba's `splitRequest` with exact amounts. Seller net product
