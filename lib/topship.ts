@@ -14,6 +14,8 @@ export type TopshipAddress = {
   state?: string;
   lga?: string;
   postalCode?: string;
+  latitude?: number | string;
+  longitude?: number | string;
 };
 
 export type TopshipQuote = {
@@ -186,6 +188,16 @@ function numberOf(value: unknown) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+function coordinatesOf(address: TopshipAddress | undefined, label: "sender" | "receiver") {
+  const latitude = Number(address?.latitude);
+  const longitude = Number(address?.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)
+    || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    throw new Error(`Topship quote requires valid ${label} latitude and longitude coordinates.`);
+  }
+  return { latitude, longitude };
+}
+
 function ratesFrom(payload: unknown): TopshipRate[] {
   if (Array.isArray(payload)) return payload as TopshipRate[];
   if (payload && typeof payload === "object") {
@@ -216,6 +228,8 @@ export async function fetchTopshipQuote(params: {
   totalWeightKg: number;
 }): Promise<TopshipQuote> {
   const weight = Math.max(1, Number(params.totalWeightKg) || 1);
+  const senderCoordinates = coordinatesOf(params.sender, "sender");
+  const receiverCoordinates = coordinatesOf(params.receiver, "receiver");
   let rates: TopshipRate[] = [];
   let lastRouteError: unknown;
 
@@ -223,8 +237,16 @@ export async function fetchTopshipQuote(params: {
     routeLocationCandidates(params.sender, params.receiver).map(async ([senderCity, receiverCity]) => {
       try {
         const shipmentDetail = {
-          senderDetails: { cityName: senderCity, countryCode: "NG" },
-          receiverDetails: { cityName: receiverCity, countryCode: "NG" },
+          senderDetails: {
+            cityName: senderCity,
+            countryCode: "NG",
+            ...senderCoordinates,
+          },
+          receiverDetails: {
+            cityName: receiverCity,
+            countryCode: "NG",
+            ...receiverCoordinates,
+          },
           totalWeight: weight,
         };
         const query = new URLSearchParams({ shipmentDetail: JSON.stringify(shipmentDetail) });
