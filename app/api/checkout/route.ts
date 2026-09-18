@@ -258,11 +258,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             const isSelfArranged = courierId === "self_arranged" || shippingMethod === "self_arranged";
             const shippingCost = isSelfArranged ? 0 : rawShippingCost;
 
+            const selectedCourierSnapshot = await adminDb.collection("couriers").doc(courierId).get();
+            if (selectedCourierSnapshot.exists && selectedCourierSnapshot.data()?.isActive === false) {
+                return NextResponse.json(
+                    { error: `${courierName || "This delivery option"} is currently disabled. Please choose another shipping option.` },
+                    { status: 400 },
+                );
+            }
+
             // The quote endpoint only exposes dispatch-ready providers, but
             // keep this server-side guard so an old or tampered client cannot
             // create a paid order that the platform cannot dispatch.
             if (!isSelfArranged) {
-                const courierSnap = await adminDb.collection("couriers").doc(courierId).get();
+                const courierSnap = selectedCourierSnapshot;
                 const courier = courierSnap.data() || {};
                 const courierCode = String(courier.code || courierId || "").toLowerCase();
                 const isTopship = courierCode === "topship" || courierId === "topship";

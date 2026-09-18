@@ -123,7 +123,13 @@ export async function POST(req: NextRequest) {
         ];
 
         for (const courier of couriers) {
-            await adminDb.collection("couriers").doc(courier.id).set(courier, { merge: true });
+            const courierRef = adminDb.collection("couriers").doc(courier.id);
+            const existing = await courierRef.get();
+            const existingData = existing.data() || {};
+            await courierRef.set({
+                ...courier,
+                ...(typeof existingData.isActive === "boolean" ? { isActive: existingData.isActive } : {}),
+            }, { merge: true });
         }
 
         return NextResponse.json({ success: true, message: "Couriers seeded successfully!" });

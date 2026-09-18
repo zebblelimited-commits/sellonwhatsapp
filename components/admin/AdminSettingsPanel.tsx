@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Save, ShieldCheck } from "lucide-react";
+import { Loader2, Save, ShieldCheck, Truck } from "lucide-react";
 import { EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail, updatePassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { adminMutation } from "@/components/admin/adminApi";
 import AdminHeroSlidesPanel from "@/components/admin/AdminHeroSlidesPanel";
 import AdminSponsoredStoresPanel from "@/components/admin/AdminSponsoredStoresPanel";
+import Image from "next/image";
 
 const permissionGroups = [
   ["users", ["read", "write", "delete"]], ["stores", ["read", "write", "delete", "ban"]],
@@ -17,6 +18,7 @@ const permissionGroups = [
 
 type Profile = { uid?: string; email?: string; displayName?: string; phoneNumber?: string; timezone?: string; role?: string; isActive?: boolean; lastLogin?: unknown; createdAt?: unknown };
 type ManagedAdmin = Profile & { uid: string; permissions?: Record<string, Record<string, boolean>> };
+type ManagedCourier = { id: string; name: string; logo: string; estimatedDays: string; isActive: boolean };
 
 function authErrorMessage(error: unknown, fallback: string) {
   const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
@@ -34,12 +36,15 @@ export default function AdminSettingsPanel() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [timezone, setTimezone] = useState("Africa/Lagos");
   const [admins, setAdmins] = useState<ManagedAdmin[]>([]);
+  const [couriers, setCouriers] = useState<ManagedCourier[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [securityLoading, setSecurityLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [adminsError, setAdminsError] = useState("");
+  const [couriersError, setCouriersError] = useState("");
+  const [courierSaving, setCourierSaving] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -49,6 +54,7 @@ export default function AdminSettingsPanel() {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     setAdminsError("");
+    setCouriersError("");
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) throw new Error("Your admin session has expired.");
@@ -65,6 +71,11 @@ export default function AdminSettingsPanel() {
       } else {
         setAdmins([]);
       }
+
+      const couriersResponse = await fetch("/api/admin/couriers", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const couriersPayload = await couriersResponse.json().catch(() => ({}));
+      if (!couriersResponse.ok) setCouriersError(couriersPayload.error || "Courier settings could not be loaded.");
+      else setCouriers(couriersPayload.couriers || []);
     } catch (loadError) { setError(loadError instanceof Error ? loadError.message : "Settings could not be loaded"); }
     finally { setLoading(false); }
   }, []);
@@ -127,6 +138,19 @@ export default function AdminSettingsPanel() {
     void updateManagedAdmin(admin, { permissions: nextPermissions });
   }
 
+  async function toggleCourier(courier: ManagedCourier) {
+    setCourierSaving(courier.id); setError(""); setCouriersError("");
+    try {
+      await adminMutation("/api/admin/couriers", { id: courier.id, isActive: !courier.isActive });
+      setCouriers((current) => current.map((item) => item.id === courier.id ? { ...item, isActive: !courier.isActive } : item));
+      setMessage(`${courier.name} ${courier.isActive ? "disabled" : "enabled"}.`);
+    } catch (updateError) {
+      setCouriersError(updateError instanceof Error ? updateError.message : "Courier setting could not be updated");
+    } finally {
+      setCourierSaving(null);
+    }
+  }
+
   const initials = useMemo(() => (displayName || profile.email || "A").slice(0, 1).toUpperCase(), [displayName, profile.email]);
 
   if (loading) return <div className="p-10 text-center"><Loader2 className="mx-auto animate-spin text-green-600" size={30} /></div>;
@@ -154,6 +178,14 @@ export default function AdminSettingsPanel() {
     </div>
     <AdminHeroSlidesPanel />
     <AdminSponsoredStoresPanel />
+    <section className="space-y-4 rounded-[28px] border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><Truck size={19} /></div>
+        <div><h3 className="font-bold text-gray-900">Courier availability</h3><p className="text-xs text-gray-500">Control which shipping options are shown to buyers at checkout. Changes apply to new shipping quotes immediately.</p></div>
+      </div>
+      {couriersError && <div className="rounded-2xl bg-red-50 p-4 text-xs font-medium text-red-700">{couriersError}</div>}
+      {couriers.length === 0 && !couriersError ? <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-500">Loading courier options...</div> : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{couriers.map((courier) => <div key={courier.id} className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 p-3"><div className="flex min-w-0 items-center gap-3"><div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-gray-50"><Image src={courier.logo} alt="" fill sizes="40px" className="object-contain p-1" /></div><div className="min-w-0"><p className="truncate text-sm font-bold text-gray-900">{courier.name}</p><p className="truncate text-[10px] text-gray-400">{courier.estimatedDays}</p></div></div><button type="button" aria-pressed={courier.isActive} aria-label={`${courier.isActive ? "Disable" : "Enable"} ${courier.name}`} disabled={courierSaving === courier.id} onClick={() => void toggleCourier(courier)} className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-wait disabled:opacity-60 ${courier.isActive ? "bg-green-600" : "bg-gray-300"}`}><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${courier.isActive ? "translate-x-5" : "translate-x-0.5"}`} /></button></div>)}</div>}
+    </section>
     {isSuperAdmin && <section className="space-y-4 rounded-[28px] border border-gray-100 bg-white p-6 shadow-sm"><div><h3 className="font-bold text-gray-900">Admin roles and permissions</h3><p className="text-xs text-gray-500">Only super admins can change access. Changes are written through the protected admin API and audited.</p></div>{adminsError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{adminsError}</div>}{admins.length === 0 && !adminsError && <p className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-500">No additional admin accounts found.</p>}{admins.map((admin) => <div key={admin.uid} className="rounded-2xl border border-gray-100 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-bold text-sm text-gray-900">{admin.displayName || admin.email || admin.uid}</p><p className="text-xs text-gray-400">{admin.email || admin.uid}</p></div><div className="flex items-center gap-2"><select value={admin.role || "admin"} onChange={(event) => void updateManagedAdmin(admin, { role: event.target.value })} className="rounded-xl border border-gray-200 px-3 py-2 text-xs font-bold"><option value="super_admin">Super admin</option><option value="admin">Admin</option><option value="support">Support</option><option value="finance">Finance</option><option value="moderator">Moderator</option></select><button onClick={() => void updateManagedAdmin(admin, { isActive: admin.isActive === false })} className={`rounded-xl px-3 py-2 text-xs font-bold ${admin.isActive === false ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{admin.isActive === false ? "Inactive" : "Active"}</button></div></div><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{permissionGroups.map(([group, permissions]) => <div key={group} className="rounded-xl bg-gray-50 p-3"><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500">{group}</p>{permissions.map((permission) => <label key={permission} className="flex items-center gap-2 text-xs text-gray-700"><input type="checkbox" checked={admin.permissions?.[group]?.[permission] === true} onChange={() => togglePermission(admin, group, permission)} /><span>{permission}</span></label>)}</div>)}</div></div>)}</section>}
   </div>;
 }

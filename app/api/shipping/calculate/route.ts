@@ -106,36 +106,44 @@ export async function POST(req: NextRequest) {
         }
 
         // 1. Fetch active couriers from Firestore
-        const couriersSnap = await adminDb
-            .collection("couriers")
-            .where("isActive", "==", true)
-            .get();
+        const couriersSnap = await adminDb.collection("couriers").get();
 
         const shippingOptions: CourierOption[] = [];
         const unavailableProviders: UnavailableProvider[] = [];
 
         // Chowdeck coverage must come from its live quote API. Do not require
         // the admin seed route to have been run before showing the provider.
-        const courierEntries: Array<{ id: string; data: () => any }> = couriersSnap.docs.map((doc) => ({
+        const allCourierEntries: Array<{ id: string; data: () => any }> = couriersSnap.docs.map((doc) => ({
             id: doc.id,
             data: () => doc.data(),
         }));
-        const hasChowdeckRecord = courierEntries.some(({ data }) => {
+        const courierEntries = allCourierEntries.filter(({ id, data }) => {
+            const courier = data();
+            const code = String(courier.code || "").toLowerCase();
+            return courier.isActive !== false && id !== "self_arranged" && code !== "self_arranged";
+        });
+        const hasChowdeckRecord = allCourierEntries.some(({ data }) => {
             const courier = data();
             return courier.code?.toLowerCase() === "chowdeck" || courier.name?.toLowerCase().includes("chowdeck");
         });
-        const hasTopshipRecord = courierEntries.some(({ data }) => {
+        const hasTopshipRecord = allCourierEntries.some(({ data }) => {
             const courier = data();
             return courier.code?.toLowerCase() === "topship" || courier.name?.toLowerCase().includes("topship");
         });
-        const hasSendboxRecord = courierEntries.some(({ data }) => {
+        const hasSendboxRecord = allCourierEntries.some(({ data }) => {
             const courier = data();
             return courier.code?.toLowerCase() === "sendbox" || courier.name?.toLowerCase().includes("sendbox");
         });
-        const hasGigRecord = courierEntries.some(({ data }) => {
+        const hasGigRecord = allCourierEntries.some(({ data }) => {
             const courier = data();
             return courier.code?.toLowerCase() === "gig" || courier.name?.toLowerCase().includes("gig logistics");
         });
+
+        const selfArrangedRecord = allCourierEntries.find(({ id, data }) => {
+            const courier = data();
+            return id === "self_arranged" || String(courier.code || "").toLowerCase() === "self_arranged";
+        });
+        const selfArrangedEnabled = !selfArrangedRecord || selfArrangedRecord.data().isActive !== false;
 
         if (chowdeckConfigured() && !hasChowdeckRecord) {
             courierEntries.push({
@@ -183,14 +191,6 @@ export async function POST(req: NextRequest) {
                     estimatedDays: "2-4 Business Days",
                     integrationStatus: "ready",
                 }),
-            });
-        }
-
-        if (courierEntries.length === 0) {
-            return NextResponse.json({
-                success: true,
-                options: [],
-                message: "No active shipping couriers available."
             });
         }
 
@@ -475,6 +475,7 @@ export async function POST(req: NextRequest) {
             destinationState,
             totalWeightKg,
             options: shippingOptions,
+            selfArrangedEnabled,
             unavailableProviders,
         });
     } catch (error: unknown) {

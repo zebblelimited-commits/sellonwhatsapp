@@ -127,8 +127,10 @@ export default function ShippingSelector({
                 const data = await response.json();
 
                 let fetchedCouriers: ShippingOption[] = [];
+                let selfArrangedEnabled = true;
                 if (response.ok && data.success && Array.isArray(data.options)) {
                     fetchedCouriers = data.options;
+                    selfArrangedEnabled = data.selfArrangedEnabled !== false;
                 }
 
                 const unavailable = Array.isArray(data.unavailableProviders)
@@ -143,7 +145,10 @@ export default function ShippingSelector({
                 );
 
                 // Place SELF_ARRANGED_OPTION as the last option
-                const combinedOptions = [...fetchedCouriers, SELF_ARRANGED_OPTION];
+                const combinedOptions = [
+                    ...fetchedCouriers,
+                    ...(selfArrangedEnabled ? [SELF_ARRANGED_OPTION] : []),
+                ];
                 setOptions(combinedOptions);
 
                 // Auto-select valid option (defaults to the first real courier instead of self-arranged)
