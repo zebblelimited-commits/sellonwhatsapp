@@ -37,6 +37,10 @@ const RESET_COLLECTIONS = [
 const BASIC_CONFIRMATION = "DELETE TEST DATA";
 const AUTH_CONFIRMATION = "DELETE TEST DATA AND AUTH USERS";
 
+function isSuperAdminRole(role: unknown) {
+  return ["super_admin", "superadmin"].includes(String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_"));
+}
+
 type CollectionPreview = {
   name: string;
   count: number;
@@ -88,7 +92,7 @@ async function getPreview() {
 async function requireSuperAdmin(request: NextRequest) {
   const access = await requireAdmin(request);
   if (!("admin" in access)) return access;
-  if (access.admin.role !== "super_admin") {
+  if (!isSuperAdminRole(access.admin.role)) {
     return NextResponse.json({ error: "Only a super admin can reset test data." }, { status: 403 });
   }
   return access;

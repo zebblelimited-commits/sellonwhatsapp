@@ -21,6 +21,10 @@ type ManagedAdmin = Profile & { uid: string; permissions?: Record<string, Record
 type ManagedCourier = { id: string; name: string; logo: string; estimatedDays: string; isActive: boolean };
 type ResetPreview = { collections: Array<{ name: string; count: number }>; totalDocuments: number; authUsers: number; protectedAdminIds: number };
 
+function isSuperAdminRole(role: unknown) {
+  return ["super_admin", "superadmin"].includes(String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_"));
+}
+
 function authErrorMessage(error: unknown, fallback: string) {
   const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
   if (code === "auth/wrong-password" || code === "auth/invalid-credential") return "The current password is incorrect.";
@@ -55,7 +59,7 @@ export default function AdminSettingsPanel() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const isSuperAdmin = profile.role === "super_admin";
+  const isSuperAdmin = isSuperAdminRole(profile.role);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -69,7 +73,7 @@ export default function AdminSettingsPanel() {
       if (!profileResponse.ok) throw new Error(profilePayload.error || "Profile could not be loaded");
       const nextProfile = profilePayload.profile || {};
       setProfile(nextProfile); setDisplayName(nextProfile.displayName || ""); setPhoneNumber(nextProfile.phoneNumber || ""); setTimezone(nextProfile.timezone || "Africa/Lagos");
-      if (nextProfile.role === "super_admin") {
+      if (isSuperAdminRole(nextProfile.role)) {
         const adminsResponse = await fetch("/api/admin/admins", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
         const adminsPayload = await adminsResponse.json().catch(() => ({}));
         if (!adminsResponse.ok) setAdminsError(adminsPayload.error || "Admin accounts could not be loaded.");
@@ -226,6 +230,10 @@ export default function AdminSettingsPanel() {
     </div>
     <AdminHeroSlidesPanel />
     <AdminSponsoredStoresPanel />
+    {!isSuperAdmin && <section className="space-y-3 rounded-[28px] border border-amber-200 bg-amber-50 p-6 shadow-sm">
+      <div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700"><ShieldCheck size={19} /></div><div><h3 className="font-bold text-amber-950">Reset test data</h3><p className="mt-1 text-xs text-amber-800">This tool is available only to super admins because it permanently deletes marketplace records. Ask a super admin to open Settings and run the reset.</p></div></div>
+      <p className="text-xs font-bold text-amber-900">Current account role: <span className="rounded bg-amber-100 px-1.5 py-0.5">{profile.role || "not set"}</span></p>
+    </section>}
     {isSuperAdmin && <section className="space-y-4 rounded-[28px] border border-red-200 bg-red-50/40 p-6 shadow-sm">
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-700"><Database size={19} /></div>
