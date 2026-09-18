@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Save, ShieldCheck, Truck } from "lucide-react";
+import { AlertTriangle, Database, Loader2, RefreshCw, Save, ShieldCheck, Trash2, Truck } from "lucide-react";
 import { EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail, updatePassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { adminMutation } from "@/components/admin/adminApi";
@@ -19,6 +19,7 @@ const permissionGroups = [
 type Profile = { uid?: string; email?: string; displayName?: string; phoneNumber?: string; timezone?: string; role?: string; isActive?: boolean; lastLogin?: unknown; createdAt?: unknown };
 type ManagedAdmin = Profile & { uid: string; permissions?: Record<string, Record<string, boolean>> };
 type ManagedCourier = { id: string; name: string; logo: string; estimatedDays: string; isActive: boolean };
+type ResetPreview = { collections: Array<{ name: string; count: number }>; totalDocuments: number; authUsers: number; protectedAdminIds: number };
 
 function authErrorMessage(error: unknown, fallback: string) {
   const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
@@ -45,6 +46,11 @@ export default function AdminSettingsPanel() {
   const [adminsError, setAdminsError] = useState("");
   const [couriersError, setCouriersError] = useState("");
   const [courierSaving, setCourierSaving] = useState<string | null>(null);
+  const [resetPreview, setResetPreview] = useState<ResetPreview | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const [resetConfirmation, setResetConfirmation] = useState("");
+  const [deleteAuthUsers, setDeleteAuthUsers] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -151,6 +157,48 @@ export default function AdminSettingsPanel() {
     }
   }
 
+  async function loadResetPreview() {
+    setResetLoading(true); setResetError(""); setResetPreview(null);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error("Your admin session has expired.");
+      const response = await fetch("/api/admin/reset-test-data", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Test-data preview could not be loaded.");
+      setResetPreview(payload as ResetPreview);
+    } catch (previewError) {
+      setResetError(previewError instanceof Error ? previewError.message : "Test-data preview could not be loaded.");
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  async function resetTestData() {
+    const expectedConfirmation = deleteAuthUsers ? "DELETE TEST DATA AND AUTH USERS" : "DELETE TEST DATA";
+    if (resetConfirmation !== expectedConfirmation) {
+      setResetError(`Type ${expectedConfirmation} exactly to continue.`);
+      return;
+    }
+    setResetLoading(true); setResetError("");
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error("Your admin session has expired.");
+      const response = await fetch("/api/admin/reset-test-data", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: resetConfirmation, deleteAuthUsers }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "The test-data reset could not be completed.");
+      setResetConfirmation(""); setResetPreview(null); setDeleteAuthUsers(false);
+      setMessage(payload.message || "Test data reset completed.");
+    } catch (resetActionError) {
+      setResetError(resetActionError instanceof Error ? resetActionError.message : "The test-data reset could not be completed.");
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
   const initials = useMemo(() => (displayName || profile.email || "A").slice(0, 1).toUpperCase(), [displayName, profile.email]);
 
   if (loading) return <div className="p-10 text-center"><Loader2 className="mx-auto animate-spin text-green-600" size={30} /></div>;
@@ -178,6 +226,21 @@ export default function AdminSettingsPanel() {
     </div>
     <AdminHeroSlidesPanel />
     <AdminSponsoredStoresPanel />
+    {isSuperAdmin && <section className="space-y-4 rounded-[28px] border border-red-200 bg-red-50/40 p-6 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-700"><Database size={19} /></div>
+        <div><h3 className="font-bold text-red-950">Reset test data</h3><p className="text-xs text-red-800">Preview and remove marketplace test records before onboarding real buyers and sellers. Admins, couriers, plans, platform content, and audit logs are preserved.</p></div>
+      </div>
+      {resetError && <div className="rounded-2xl bg-red-100 p-4 text-xs font-medium text-red-800">{resetError}</div>}
+      <button type="button" onClick={() => void loadResetPreview()} disabled={resetLoading} className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-bold text-red-700 shadow-sm ring-1 ring-red-200 disabled:cursor-wait disabled:opacity-60"><RefreshCw size={15} className={resetLoading ? "animate-spin" : ""} />{resetLoading ? "Loading preview..." : "Preview test data"}</button>
+      {resetPreview && <div className="space-y-4 rounded-2xl border border-red-200 bg-white p-4">
+        <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-red-50 p-3"><p className="text-[10px] font-black uppercase tracking-wider text-red-600">Firestore documents</p><p className="mt-1 text-xl font-black text-red-950">{resetPreview.totalDocuments.toLocaleString()}</p></div><div className="rounded-xl bg-red-50 p-3"><p className="text-[10px] font-black uppercase tracking-wider text-red-600">Auth users</p><p className="mt-1 text-xl font-black text-red-950">{resetPreview.authUsers.toLocaleString()}</p></div><div className="rounded-xl bg-green-50 p-3"><p className="text-[10px] font-black uppercase tracking-wider text-green-700">Protected admins</p><p className="mt-1 text-xl font-black text-green-950">{resetPreview.protectedAdminIds.toLocaleString()}</p></div></div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{resetPreview.collections.filter((item) => item.count > 0).map((item) => <div key={item.name} className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2 text-xs"><span className="font-bold text-gray-700">{item.name}</span><span className="font-black text-red-700">{item.count.toLocaleString()}</span></div>)}</div>
+        <label className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-900"><input type="checkbox" checked={deleteAuthUsers} onChange={(event) => { setDeleteAuthUsers(event.target.checked); setResetConfirmation(""); }} className="mt-0.5" /><span><strong>Also delete non-admin Firebase Authentication users.</strong> This removes their ability to sign in and cannot be undone.</span></label>
+        <div className="space-y-2 border-t border-red-100 pt-4"><label className="block text-xs font-bold text-red-900">Type <code className="rounded bg-red-100 px-1.5 py-0.5">{deleteAuthUsers ? "DELETE TEST DATA AND AUTH USERS" : "DELETE TEST DATA"}</code> to confirm<input value={resetConfirmation} onChange={(event) => setResetConfirmation(event.target.value)} placeholder={deleteAuthUsers ? "DELETE TEST DATA AND AUTH USERS" : "DELETE TEST DATA"} className="mt-2 w-full rounded-xl border border-red-200 bg-white p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-red-500" /></label><button type="button" onClick={() => void resetTestData()} disabled={resetLoading || resetConfirmation !== (deleteAuthUsers ? "DELETE TEST DATA AND AUTH USERS" : "DELETE TEST DATA")} className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"><Trash2 size={15} />{resetLoading ? "Resetting..." : "Permanently reset test data"}</button></div>
+      </div>}
+      <div className="flex items-start gap-2 text-[11px] font-medium text-red-800"><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span>This does not delete Nomba, courier-provider, Firebase Storage, or external dashboard history.</span></div>
+    </section>}
     <section className="space-y-4 rounded-[28px] border border-gray-100 bg-white p-6 shadow-sm">
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><Truck size={19} /></div>
