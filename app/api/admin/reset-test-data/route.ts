@@ -41,6 +41,13 @@ function isSuperAdminRole(role: unknown) {
   return ["super_admin", "superadmin"].includes(String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_"));
 }
 
+function selectedCollectionNames(value: unknown) {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const requested = new Set(value.filter((item): item is string => typeof item === "string"));
+  if ([...requested].some((name) => !RESET_COLLECTIONS.includes(name as (typeof RESET_COLLECTIONS)[number]))) return null;
+  return RESET_COLLECTIONS.filter((name) => requested.has(name));
+}
+
 type CollectionPreview = {
   name: string;
   count: number;
@@ -114,7 +121,7 @@ export async function POST(request: NextRequest) {
   const access = await requireSuperAdmin(request);
   if (!("admin" in access)) return access;
 
-  let body: { confirmation?: unknown; deleteAuthUsers?: unknown };
+  let body: { confirmation?: unknown; deleteAuthUsers?: unknown; collections?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -122,6 +129,13 @@ export async function POST(request: NextRequest) {
   }
 
   const deleteAuthUsers = body.deleteAuthUsers === true;
+  const selectedCollections = selectedCollectionNames(body.collections);
+  if (!selectedCollections) {
+    return NextResponse.json({ error: "Select at least one data collection to reset." }, { status: 400 });
+  }
+  if (deleteAuthUsers && !selectedCollections.includes("users")) {
+    return NextResponse.json({ error: "Select the users collection before deleting Authentication users." }, { status: 400 });
+  }
   const expectedConfirmation = deleteAuthUsers ? AUTH_CONFIRMATION : BASIC_CONFIRMATION;
   if (body.confirmation !== expectedConfirmation) {
     return NextResponse.json({ error: `Type ${expectedConfirmation} exactly to continue.` }, { status: 400 });
@@ -131,7 +145,7 @@ export async function POST(request: NextRequest) {
     const protectedAdminIds = await getProtectedAdminIds();
     const deletedCollections: CollectionPreview[] = [];
 
-    for (const name of RESET_COLLECTIONS) {
+    for (const name of selectedCollections) {
       const collectionRef = adminDb.collection(name);
       if (name === "users") {
         const snapshot = await collectionRef.get();
@@ -166,6 +180,7 @@ export async function POST(request: NextRequest) {
       actorUid: access.admin.uid,
       actorEmail: access.admin.email,
       deletedCollections,
+      selectedCollections,
       deletedAuthUsers,
       createdAt: FieldValue.serverTimestamp(),
     });
