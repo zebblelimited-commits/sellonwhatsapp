@@ -19,7 +19,7 @@ import {
 import {
   Eye, MousePointer2, Users, Package,
   Store, ExternalLink, ShoppingBag, TrendingUp, Share2, ShieldCheck, Loader2,
-  MessageCircle, Crown, ShoppingCart
+  MessageCircle, Crown, ShoppingCart, Star, Heart, Bookmark
 } from "lucide-react";
 
 const compactNumber = (num: number) => {
@@ -166,6 +166,9 @@ export default function OverviewTab({
           <StatCard label="WhatsApp Clicks" value={stats.whatsappClicks.toLocaleString()} icon={<MessageCircle size={18} />} color="text-green-600" bg="bg-green-50" subtitle="Premium Metric" isLocked={!hasProAccess} />
           <StatCard label="Add to Cart" value={stats.addToCartClicks.toLocaleString()} icon={<ShoppingCart size={18} />} color="text-amber-600" bg="bg-amber-50" subtitle="Cart additions" />
           <StatCard label="Conversion" value={stats.views > 0 ? `${((stats.buyNowClicks / stats.views) * 100).toFixed(1)}%` : "0%"} icon={<TrendingUp size={18} />} color="text-emerald-600" bg="bg-emerald-50" subtitle="Buy Now / Views" />
+          <StatCard label="Reviews" value="—" icon={<Star size={18} />} color="text-yellow-600" bg="bg-yellow-50" subtitle="Coming soon" comingSoon />
+          <StatCard label="Likes" value="—" icon={<Heart size={18} />} color="text-rose-600" bg="bg-rose-50" subtitle="Coming soon" comingSoon />
+          <StatCard label="Wishlist" value="—" icon={<Bookmark size={18} />} color="text-violet-600" bg="bg-violet-50" subtitle="Coming soon" comingSoon />
         </div>
 
         <div className="hidden lg:grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -178,6 +181,9 @@ export default function OverviewTab({
           <StatCard label="WhatsApp Clicks" value={stats.whatsappClicks.toLocaleString()} icon={<MessageCircle size={18} />} color="text-green-600" bg="bg-green-50" subtitle="Premium Metric" isLocked={!hasProAccess} />
           <StatCard label="Add to Cart" value={stats.addToCartClicks.toLocaleString()} icon={<ShoppingCart size={18} />} color="text-amber-600" bg="bg-amber-50" subtitle="Cart additions" />
           <StatCard label="Conversion" value={stats.views > 0 ? `${((stats.buyNowClicks / stats.views) * 100).toFixed(1)}%` : "0%"} icon={<TrendingUp size={18} />} color="text-emerald-600" bg="bg-emerald-50" subtitle="Buy Now / Views" />
+          <StatCard label="Reviews" value="—" icon={<Star size={18} />} color="text-yellow-600" bg="bg-yellow-50" subtitle="Coming soon" comingSoon />
+          <StatCard label="Likes" value="—" icon={<Heart size={18} />} color="text-rose-600" bg="bg-rose-50" subtitle="Coming soon" comingSoon />
+          <StatCard label="Wishlist" value="—" icon={<Bookmark size={18} />} color="text-violet-600" bg="bg-violet-50" subtitle="Coming soon" comingSoon />
         </div>
       </div>
 
@@ -329,12 +335,17 @@ function SourceRow({ label, color, value }: any) {
   );
 }
 
-function StatCard({ label, value, icon, color, bg, subtitle, isPrice = false, isLocked = false }: any) {
+function StatCard({ label, value, icon, color, bg, subtitle, isPrice = false, isLocked = false, comingSoon = false }: any) {
   return (
     <div className={`bg-white p-4 rounded-2xl border border-gray-100 shadow-sm transition-all hover:shadow-md flex items-center gap-4 h-full relative overflow-hidden ${isLocked ? 'opacity-90' : ''}`}>
       {isLocked && (
         <div className="absolute top-2 right-2 bg-amber-100 text-amber-700 text-[9px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 z-10 shadow-sm">
           <Crown size={10} className="fill-amber-400" /> PRO
+        </div>
+      )}
+      {comingSoon && (
+        <div className="absolute top-2 right-2 bg-slate-100 text-slate-500 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide z-10">
+          Coming soon
         </div>
       )}
       <div className={`w-10 h-10 ${bg} ${color} rounded-xl flex items-center justify-center shrink-0 ${isLocked ? 'blur-[2px]' : ''}`}>

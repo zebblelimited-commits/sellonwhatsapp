@@ -10,6 +10,9 @@ import {
   Percent,
   ShieldCheck,
   ShoppingBag,
+  Star,
+  Heart,
+  Bookmark,
   TrendingUp,
 } from "lucide-react";
 import { collection, getDocs, query, Timestamp, where } from "firebase/firestore";
@@ -347,6 +350,9 @@ export default function AnalyticsTab({ orders = [], stats = {}, storeId }: Analy
         <AnalyticsCard label="Conversion" value={`${realStats.conversionRate}%`} icon={<Percent size={18} />} iconColor="text-emerald-600" iconBg="bg-emerald-50" subtitle="Buy Now / Views" />
         <AnalyticsCard label="Total Events" value={realStats.totalEvents.toLocaleString()} icon={<Activity size={18} />} iconColor="text-slate-600" iconBg="bg-slate-50" subtitle="Tracked actions" />
         <AnalyticsCard label="Lifetime Sales" value={money(amountOf(stats.totalSales))} icon={<TrendingUp size={18} />} iconColor="text-green-700" iconBg="bg-green-50" subtitle="Seller ledger total" />
+        <AnalyticsCard label="Reviews" value="—" icon={<Star size={18} />} iconColor="text-yellow-600" iconBg="bg-yellow-50" subtitle="Coming soon" comingSoon />
+        <AnalyticsCard label="Likes" value="—" icon={<Heart size={18} />} iconColor="text-rose-600" iconBg="bg-rose-50" subtitle="Coming soon" comingSoon />
+        <AnalyticsCard label="Wishlist" value="—" icon={<Bookmark size={18} />} iconColor="text-violet-600" iconBg="bg-violet-50" subtitle="Coming soon" comingSoon />
       </div>
 
       <div className="flex items-center gap-2 overflow-x-auto py-2">
@@ -404,8 +410,8 @@ function ChartPanel({ title, subtitle, icon, className = "", children }: { title
   return <section className={`min-w-0 max-w-full overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:rounded-[32px] sm:p-8 ${className}`}><div className="mb-5 flex min-w-0 items-start gap-2 sm:mb-6"><div className="shrink-0">{icon}</div><div className="min-w-0"><h3 className="truncate text-[11px] font-black uppercase tracking-tight text-slate-900">{title}</h3><p className="mt-1 truncate text-[9px] font-bold uppercase tracking-widest text-slate-500">{subtitle}</p></div></div><div className="h-52 w-full min-w-0 sm:h-64">{children}</div></section>;
 }
 
-function AnalyticsCard({ label, value, icon, iconColor, iconBg, subtitle }: { label: string; value: string; icon: React.ReactNode; iconColor: string; iconBg: string; subtitle: string }) {
-  return <div className="flex h-full items-center gap-4 overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:shadow-md"><div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconBg} ${iconColor}`}>{icon}</div><div className="min-w-0 flex-1"><p className="truncate text-[9px] font-black uppercase tracking-widest text-gray-400">{label}</p><h3 className="truncate text-lg font-black tracking-tight text-gray-900">{value}</h3><p className="truncate text-[9px] font-extrabold uppercase text-green-500">{subtitle}</p></div></div>;
+function AnalyticsCard({ label, value, icon, iconColor, iconBg, subtitle, comingSoon = false }: { label: string; value: string; icon: React.ReactNode; iconColor: string; iconBg: string; subtitle: string; comingSoon?: boolean }) {
+  return <div className="relative flex h-full items-center gap-4 overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:shadow-md"><div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconBg} ${iconColor}`}>{icon}</div><div className="min-w-0 flex-1"><p className="truncate text-[9px] font-black uppercase tracking-widest text-gray-400">{label}</p><h3 className="truncate text-lg font-black tracking-tight text-gray-900">{value}</h3><p className={`truncate text-[9px] font-extrabold uppercase ${comingSoon ? "text-slate-500" : "text-green-500"}`}>{subtitle}</p></div>{comingSoon && <span className="absolute right-2 top-2 rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-slate-500">Coming soon</span>}</div>;
 }
 
 function StatusBadge({ status }: { status: string }) {
