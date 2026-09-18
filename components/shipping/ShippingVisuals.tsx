@@ -60,7 +60,7 @@ export function CourierLogo({ courierId, courierName, logo, size = "md" }: { cou
   const courier = courierEntry(courierId, courierName);
   const logoSource = logo || courier?.logo;
   return (
-    <div className={`relative flex ${logoSizes[size]} shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm`} title={courierName || courier?.name || "Courier"}>
+    <div className={`relative flex ${logoSizes[size]} shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 text-gray-600`} title={courierName || courier?.name || "Courier"}>
       {logoSource ? <Image src={logoSource} alt={`${courierName || courier?.name || "Courier"} logo`} fill sizes="64px" className="object-cover scale-90" /> : <Truck size={size === "lg" ? 24 : 18} className="text-slate-400" />}
     </div>
   );
