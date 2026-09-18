@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { requireAdmin } from "@/lib/admin-auth";
+import { deleteStoreData } from "@/lib/admin-delete-seller-data";
 
-const STORE_ACTIONS = ["approve", "reject", "suspend", "verify", "restore"] as const;
+const STORE_ACTIONS = ["approve", "reject", "suspend", "verify", "restore", "delete"] as const;
 type StoreAction = (typeof STORE_ACTIONS)[number];
+
+function isSuperAdminRole(role: unknown) {
+  return ["super_admin", "superadmin"].includes(String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_"));
+}
 
 export async function GET(
   request: NextRequest,
@@ -38,6 +43,25 @@ export async function PATCH(
     }
 
     const storeRef = adminDb.collection("stores").doc(id);
+    if (action === "delete") {
+      if (!isSuperAdminRole(access.admin.role)) return NextResponse.json({ error: "Only a super admin can permanently delete a store" }, { status: 403 });
+      const storeSnapshot = await storeRef.get();
+      if (!storeSnapshot.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
+      const store = storeSnapshot.data() || {};
+      const ownerId = typeof store.vendorId === "string" ? store.vendorId : typeof store.ownerId === "string" ? store.ownerId : typeof store.uid === "string" ? store.uid : id;
+      const deleted = await deleteStoreData([storeRef], ownerId);
+      await adminDb.collection("auditLogs").add({
+        action: "store_delete",
+        targetType: "store",
+        targetId: id,
+        performedBy: access.admin.uid,
+        performedByEmail: access.admin.email || "",
+        details: { reason, ownerId, ...deleted },
+        timestamp: FieldValue.serverTimestamp(),
+      });
+      return NextResponse.json({ success: true, action, storeId: id, deleted });
+    }
+
     let storeData: Record<string, unknown> | undefined;
     await adminDb.runTransaction(async (transaction) => {
       const storeSnap = await transaction.get(storeRef);

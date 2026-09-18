@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { requireAdmin } from "@/lib/admin-auth";
+import { deleteSellerData } from "@/lib/admin-delete-seller-data";
 
-const USER_ACTIONS = ["ban", "suspend", "verify", "restore"] as const;
+const USER_ACTIONS = ["ban", "suspend", "verify", "restore", "delete"] as const;
 type UserAction = (typeof USER_ACTIONS)[number];
+
+function isSuperAdminRole(role: unknown) {
+  return ["super_admin", "superadmin"].includes(String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_"));
+}
 
 function jsonError(error: unknown, status = 500) {
   return NextResponse.json(
@@ -61,6 +66,25 @@ export async function PATCH(
     if (!USER_ACTIONS.includes(action)) return jsonError(new Error("Invalid user action"), 400);
     if (["ban", "suspend"].includes(action) && !reason) {
       return jsonError(new Error("A reason is required for this action"), 400);
+    }
+
+    if (action === "delete") {
+      if (!isSuperAdminRole(access.admin.role)) return jsonError(new Error("Only a super admin can permanently delete a user"), 403);
+      if (id === access.admin.uid) return jsonError(new Error("You cannot delete your own admin account"), 400);
+      const targetAdmin = await adminDb.collection("admins").doc(id).get();
+      if (targetAdmin.exists) return jsonError(new Error("Admin accounts cannot be deleted from User Management"), 400);
+
+      const deleted = await deleteSellerData(id);
+      await adminDb.collection("auditLogs").add({
+        action: "user_delete",
+        targetType: "user",
+        targetId: id,
+        performedBy: access.admin.uid,
+        performedByEmail: access.admin.email || "",
+        details: { reason, ...deleted },
+        timestamp: FieldValue.serverTimestamp(),
+      });
+      return NextResponse.json({ success: true, action, userId: id, deleted });
     }
 
     const userRef = adminDb.collection("users").doc(id);
