@@ -2,10 +2,12 @@
 import React, { useState } from "react";
 import { db } from "@/lib/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { Mail, MessageCircle, Bell, Save, Loader2, CheckCircle2, AlertCircle, ShoppingCart, Banknote } from "lucide-react";
+import { Mail, MessageCircle, Bell, Save, Loader2, CheckCircle2, AlertCircle, ShoppingCart, Banknote, Send, ExternalLink } from "lucide-react";
+import { auth } from "@/lib/firebase";
 
 export default function NotificationsSettings({ storeId, initialSettings }: { storeId: string; initialSettings: any }) {
   const [saving, setSaving] = useState(false);
+  const [connectingTelegram, setConnectingTelegram] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [prefs, setPrefs] = useState(() => ({
     email: { orders: initialSettings?.notifications?.email?.orders ?? true, payouts: initialSettings?.notifications?.email?.payouts ?? true, disputes: initialSettings?.notifications?.email?.disputes ?? true, marketing: initialSettings?.notifications?.email?.marketing ?? false },
@@ -20,6 +22,35 @@ export default function NotificationsSettings({ storeId, initialSettings }: { st
       setMessage({ type: "success", text: "Notification preferences updated" });
     } catch (error) { setMessage({ type: "error", text: "Failed to save changes" }); } 
     finally { setSaving(false); }
+  };
+
+  const connectTelegram = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      setMessage({ type: "error", text: "Please sign in again before connecting Telegram" });
+      return;
+    }
+
+    setConnectingTelegram(true);
+    setMessage(null);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/notifications/channels/telegram", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || typeof data.url !== "string") {
+        throw new Error(data.error || "Telegram connection could not be created");
+      }
+
+      window.location.assign(data.url);
+      setMessage({ type: "success", text: "Telegram opened. Tap Start to connect your account." });
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Telegram connection failed" });
+    } finally {
+      setConnectingTelegram(false);
+    }
   };
 
   const ToggleRow = ({ icon, label, desc, checked, onChange }: any) => (
@@ -58,6 +89,21 @@ export default function NotificationsSettings({ storeId, initialSettings }: { st
           <ToggleRow icon={<ShoppingCart size={16} />} label="New Orders" desc="Instant WhatsApp alert for new orders" checked={prefs.whatsapp.orders} onChange={(v: boolean) => setPrefs(p => ({ ...p, whatsapp: { ...p.whatsapp, orders: v } }))} />
           <ToggleRow icon={<Banknote size={16} />} label="Payout Confirmations" desc="Get notified when payouts are processed" checked={prefs.whatsapp.payouts} onChange={(v: boolean) => setPrefs(p => ({ ...p, whatsapp: { ...p.whatsapp, payouts: v } }))} />
           <ToggleRow icon={<AlertCircle size={16} />} label="Urgent Disputes" desc="Critical alerts for active disputes" checked={prefs.whatsapp.disputes} onChange={(v: boolean) => setPrefs(p => ({ ...p, whatsapp: { ...p.whatsapp, disputes: v } }))} />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[32px] border border-gray-100 p-6 shadow-sm">
+        <h3 className="font-bold text-lg mb-2 flex items-center gap-2"><Send size={18} className="text-[#229ED9]" /> Chat connections</h3>
+        <p className="text-xs text-gray-500 mb-4">Connect Telegram once so Novu can deliver your workflow notifications there. WhatsApp uses the phone number saved on your account.</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-sky-50 p-4">
+          <div>
+            <p className="text-sm font-bold text-gray-900">Telegram</p>
+            <p className="text-[10px] text-gray-500">Open Telegram and tap Start to link this account.</p>
+          </div>
+          <button onClick={connectTelegram} disabled={connectingTelegram} className="inline-flex items-center gap-2 rounded-xl bg-[#229ED9] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#168ac2] disabled:cursor-not-allowed disabled:opacity-60">
+            {connectingTelegram ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
+            {connectingTelegram ? "Opening..." : "Connect Telegram"}
+          </button>
         </div>
       </div>
 

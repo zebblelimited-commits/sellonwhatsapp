@@ -111,6 +111,33 @@ Leave **Attach a client certificate to Webhook requests** disabled unless you
 have separately configured mutual TLS at your hosting provider. A normal HTTPS
 deployment with the app-secret signature check is sufficient for this route.
 
+## Novu Telegram and WhatsApp chat notifications
+
+The server triggers Novu workflows with each recipient's Novu subscriber ID.
+WhatsApp recipients also receive their normalized E.164 phone number. Telegram
+recipients link their chat once from **Dashboard → Settings → Notifications →
+Connect Telegram**; the button calls `/api/notifications/channels/telegram`
+and opens Novu's short-lived Telegram connection link.
+
+Configure the providers in the Novu dashboard before testing:
+
+- Telegram: create a bot with BotFather, then add the bot token under the
+  Telegram Chat integration.
+- WhatsApp Business: add the Meta phone-number ID and access token, then add
+  the approved WhatsApp template to the Novu Chat workflow.
+
+Optional server-side WhatsApp template overrides:
+
+```text
+NOVU_WHATSAPP_TEMPLATE_NAME=your_approved_template_name
+NOVU_WHATSAPP_TEMPLATE_LANGUAGE=en_US
+```
+
+WhatsApp sandbox credentials are temporary and only work with Meta's built-in
+test template. Production messaging requires a permanent Meta token and an
+approved WhatsApp template. See the [Novu Telegram guide](https://docs.novu.co/platform/integrations/chat/telegram)
+and [Novu WhatsApp guide](https://docs.novu.co/platform/integrations/chat/whats-app).
+
 
 
 rules_version = '2';

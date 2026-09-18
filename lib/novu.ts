@@ -12,6 +12,11 @@ export type WhatsAppNotificationParams = {
   payload: NovuPayload;
 };
 
+export type TelegramConnectionUrl = {
+  url: string;
+  providerMetadata?: Record<string, unknown>;
+};
+
 const secretKey = process.env.NOVU_SECRET_KEY?.trim();
 const novu = secretKey ? new Novu({ secretKey }) : null;
 
@@ -68,6 +73,29 @@ export function getNovuWorkflowId(eventType: string): string {
     process.env.NOVU_WORKFLOW_ID?.trim() ||
     ""
   );
+}
+
+/**
+ * Create Novu's short-lived Telegram deep link for an authenticated
+ * subscriber. The subscriber must open the URL and tap Start in Telegram
+ * before Novu can deliver workflow chat notifications to them.
+ */
+export async function createTelegramConnectionUrl(subscriberId: string): Promise<TelegramConnectionUrl> {
+  if (!secretKey || !novu) throw new Error("NOVU_SECRET_KEY is not configured");
+  const normalizedSubscriberId = subscriberId.trim();
+  if (!normalizedSubscriberId) throw new Error("Subscriber ID is missing");
+
+  const response = await novu.integrations.linkChannelEndpoint({
+    integrationIdentifier: "telegram",
+    subscriberId: normalizedSubscriberId,
+  });
+  const url = response.result?.url?.trim();
+  if (!url) throw new Error("Novu did not return a Telegram connection URL");
+
+  return {
+    url,
+    ...(response.result.providerMetadata ? { providerMetadata: response.result.providerMetadata } : {}),
+  };
 }
 
 function safeNovuError(error: unknown) {
@@ -129,6 +157,20 @@ export async function sendWhatsAppNotification({
         phone: normalizedPhone,
       },
       payload: workflowPayload,
+      ...(process.env.NOVU_WHATSAPP_TEMPLATE_NAME?.trim()
+        ? {
+            overrides: {
+              chat: {
+                template: {
+                  name: process.env.NOVU_WHATSAPP_TEMPLATE_NAME.trim(),
+                  language: {
+                    code: process.env.NOVU_WHATSAPP_TEMPLATE_LANGUAGE?.trim() || "en_US",
+                  },
+                },
+              },
+            },
+          }
+        : {}),
       ...(transactionId ? { transactionId } : {}),
     });
     console.log(`[NOVU WHATSAPP] Sent '${eventType}' to ${normalizedPhone}`);
