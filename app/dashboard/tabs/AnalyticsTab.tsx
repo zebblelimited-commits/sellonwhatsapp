@@ -350,9 +350,9 @@ export default function AnalyticsTab({ orders = [], stats = {}, storeId }: Analy
         <AnalyticsCard label="Conversion" value={`${realStats.conversionRate}%`} icon={<Percent size={18} />} iconColor="text-emerald-600" iconBg="bg-emerald-50" subtitle="Buy Now / Views" />
         <AnalyticsCard label="Total Events" value={realStats.totalEvents.toLocaleString()} icon={<Activity size={18} />} iconColor="text-slate-600" iconBg="bg-slate-50" subtitle="Tracked actions" />
         <AnalyticsCard label="Lifetime Sales" value={money(amountOf(stats.totalSales))} icon={<TrendingUp size={18} />} iconColor="text-green-700" iconBg="bg-green-50" subtitle="Seller ledger total" />
-        <AnalyticsCard label="Reviews" value="—" icon={<Star size={18} />} iconColor="text-yellow-600" iconBg="bg-yellow-50" subtitle="Coming soon" comingSoon />
-        <AnalyticsCard label="Likes" value="—" icon={<Heart size={18} />} iconColor="text-rose-600" iconBg="bg-rose-50" subtitle="Coming soon" comingSoon />
-        <AnalyticsCard label="Wishlist" value="—" icon={<Bookmark size={18} />} iconColor="text-violet-600" iconBg="bg-violet-50" subtitle="Coming soon" comingSoon />
+        <AnalyticsCard label="Reviews" value="0" icon={<Star size={18} />} iconColor="text-yellow-600" iconBg="bg-yellow-50" subtitle="Coming soon" comingSoon />
+        <AnalyticsCard label="Likes" value="0" icon={<Heart size={18} />} iconColor="text-rose-600" iconBg="bg-rose-50" subtitle="Coming soon" comingSoon />
+        <AnalyticsCard label="Wishlist" value="0" icon={<Bookmark size={18} />} iconColor="text-violet-600" iconBg="bg-violet-50" subtitle="Coming soon" comingSoon />
       </div>
 
       <div className="flex items-center gap-2 overflow-x-auto py-2">
@@ -411,7 +411,7 @@ function ChartPanel({ title, subtitle, icon, className = "", children }: { title
 }
 
 function AnalyticsCard({ label, value, icon, iconColor, iconBg, subtitle, comingSoon = false }: { label: string; value: string; icon: React.ReactNode; iconColor: string; iconBg: string; subtitle: string; comingSoon?: boolean }) {
-  return <div className="relative flex h-full items-center gap-4 overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:shadow-md"><div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconBg} ${iconColor}`}>{icon}</div><div className="min-w-0 flex-1"><p className="truncate text-[9px] font-black uppercase tracking-widest text-gray-400">{label}</p><h3 className="truncate text-lg font-black tracking-tight text-gray-900">{value}</h3><p className={`truncate text-[9px] font-extrabold uppercase ${comingSoon ? "text-slate-500" : "text-green-500"}`}>{subtitle}</p></div>{comingSoon && <span className="absolute right-2 top-2 rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-slate-500">Coming soon</span>}</div>;
+  return <div className="relative flex h-full items-center gap-4 overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:shadow-md"><div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconBg} ${iconColor}`}>{icon}</div><div className="min-w-0 flex-1"><p className="truncate text-[9px] font-black uppercase tracking-widest text-gray-400">{label}</p><h3 className="truncate text-lg font-black tracking-tight text-gray-900">{value}</h3><p className={`truncate text-[9px] font-extrabold uppercase ${comingSoon ? "text-slate-500" : "text-green-500"}`}>{subtitle}</p></div>{comingSoon && <div className="absolute inset-0 z-[5] bg-white/55 backdrop-blur-[3px] pointer-events-none" />}{comingSoon && <span className="absolute right-2 top-2 z-10 rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-slate-600 shadow-sm">Coming Soon</span>}</div>;
 }
 
 function StatusBadge({ status }: { status: string }) {
