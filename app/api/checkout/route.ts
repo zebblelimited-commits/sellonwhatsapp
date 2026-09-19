@@ -506,6 +506,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // NOMBA PAYMENT INITIALIZATION
         // ---------------------------------------------------------
 
+        const allowedPaymentMethods = paymentMethod === "card"
+            ? ["Card"]
+            : paymentMethod === "ussd"
+                ? ["USSD"]
+                : paymentMethod === "nomba_qr"
+                    ? ["Nomba QR"]
+                    : ["Transfer"];
+
         await createEscrowRecord({
             externalReference: checkoutReference,
             amount: calculatedGrandTotal,
@@ -523,9 +531,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             callbackUrl: `${appUrl}/payment/success?reference=${encodeURIComponent(checkoutReference)}`,
             customerEmail: String(customerEmail).trim(),
             customerId: buyerId,
-            // Do not restrict this list. Nomba will show every method enabled
-            // for the live merchant account, including Nomba QR and any
-            // account-specific method such as Pay with OPay.
+            allowedPaymentMethods,
             orderMetaData: {
                 checkoutReference,
                 orderIds: createdOrderIds.join(","),

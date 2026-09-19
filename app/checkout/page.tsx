@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  MapPin, Truck, CreditCard, ShieldCheck,
+  MapPin, Truck, CreditCard, ShieldCheck, Smartphone, QrCode,
   Edit3, Package, Building2, AlertCircle,
   Store, X, Save, Loader2, ChevronDown, PlusCircle
 } from "lucide-react";
@@ -420,10 +420,8 @@ export default function CheckoutPage() {
 
   // 5. Submit Order Payload
   const handleCheckout = async () => {
-    // Nomba Checkout now displays every payment method enabled on the
-    // merchant account. The customer may therefore choose Card or USSD
-    // inside Nomba even when Bank Transfer was the preference selected here.
-    if (!cardSettlementAcknowledged) {
+    const settlesNextDay = paymentMethod === "card" || paymentMethod === "ussd";
+    if (settlesNextDay && !cardSettlementAcknowledged) {
       setShowCardSettlementNotice(true);
       return;
     }
@@ -852,38 +850,37 @@ export default function CheckoutPage() {
                     <CreditCard size={20} className="text-[#00a63e]" /> Payment Preference
                   </h2>
                   <div className="grid grid-cols-2 gap-3">
-                    {["transfer", "card"].map((method: string) => (
+                    {[
+                      { id: "transfer", label: "Bank Transfer", detail: "Instant settlement", icon: Building2 },
+                      { id: "card", label: "Card", detail: "Next-day settlement", icon: CreditCard },
+                      { id: "ussd", label: "USSD", detail: "Next-day settlement", icon: Smartphone },
+                      { id: "nomba_qr", label: "Nomba QR", detail: "Instant settlement", icon: QrCode },
+                    ].map(({ id, label, detail, icon: PaymentIcon }) => (
                       <button
-                        key={method}
+                        key={id}
                         onClick={() => {
-                          if (method === "card") {
-                            setPaymentMethod("card");
-                            setCardSettlementAcknowledged(false);
-                            setShowCardSettlementNotice(true);
-                          } else {
-                            setPaymentMethod("transfer");
-                            setCardSettlementAcknowledged(false);
-                            setShowCardSettlementNotice(false);
-                          }
+                          setPaymentMethod(id);
+                          setCardSettlementAcknowledged(false);
+                          setShowCardSettlementNotice(id === "card" || id === "ussd");
                         }}
-                        className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1.5 transition-all ${paymentMethod === method ? "border-[#00a63e] bg-green-50/30" : "border-gray-100 hover:border-gray-200"
+                        className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center gap-1.5 transition-all ${paymentMethod === id ? "border-[#00a63e] bg-green-50/30" : "border-gray-100 hover:border-gray-200"
                           }`}
                       >
-                        {method === "card" ? <CreditCard size={20} /> : <Building2 size={20} />}
-                        <span className="text-[10px] font-bold text-gray-700">
-                          {method === "transfer" ? "Bank Transfer" : "Card"}
-                        </span>
+                        <PaymentIcon size={20} />
+                        <span className="text-[10px] font-bold text-gray-700">{label}</span>
+                        <span className="text-[9px] text-gray-500">{detail}</span>
                       </button>
                     ))}
                   </div>
-                  {paymentMethod === "transfer" && (
-                    <p className="mt-3 text-[10px] leading-relaxed text-emerald-700">
-                      Bank transfer settles instantly and allows courier funds to be settled immediately after payment confirmation.
+                  {paymentMethod === "card" || paymentMethod === "ussd" ? (
+                    <p className="mt-3 rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-[10px] leading-relaxed text-amber-900">
+                      {paymentMethod === "card" ? "Card" : "USSD"} payments settle the next day. Courier settlement and dispatch will proceed after payment settlement is confirmed.
+                    </p>
+                  ) : (
+                    <p className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 text-[10px] leading-relaxed text-emerald-800">
+                      This payment method settles immediately after Nomba confirms the payment.
                     </p>
                   )}
-                  <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-[10px] leading-relaxed text-amber-900">
-                    Nomba Checkout will show Bank Transfer, Card, USSD, Nomba QR, and Pay with OPay when enabled on your account. Bank Transfer, Nomba QR, and Pay with OPay settle immediately; Card and USSD settle the next day.
-                  </div>
                 </div>
 
                 <button
@@ -922,9 +919,9 @@ export default function CheckoutPage() {
                 <AlertCircle size={22} />
               </div>
               <div>
-                <h2 className="text-lg font-black text-gray-900">Nomba settlement notice</h2>
+                <h2 className="text-lg font-black text-gray-900">Next-day settlement notice</h2>
                 <p className="mt-2 text-sm leading-relaxed text-gray-600">
-                  Bank Transfer, Nomba QR, and Pay with OPay settle immediately. Card and USSD payments settle the next day, so courier funds may also be settled the next day for those methods.
+                  {paymentMethod === "ussd" ? "USSD" : "Card"} payments settle the next day. Courier settlement and dispatch will proceed after Nomba confirms settlement.
                 </p>
               </div>
             </div>
@@ -956,7 +953,7 @@ export default function CheckoutPage() {
                 onClick={() => setShowCardSettlementNotice(false)}
                 className="flex-1 rounded-xl bg-[#00a63e] px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
               >
-                I understand — continue
+                Continue with {paymentMethod === "ussd" ? "USSD" : "Card"}
               </button>
             </div>
           </div>
