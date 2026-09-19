@@ -50,7 +50,6 @@ export async function POST(request: NextRequest) {
       customerEmail: userEmail,
       customerId: storeId,
       callbackUrl,
-      allowedPaymentMethods: ["Card", "Transfer"],
       orderMetaData: {
         type: "partner_subscription",
         storeId,

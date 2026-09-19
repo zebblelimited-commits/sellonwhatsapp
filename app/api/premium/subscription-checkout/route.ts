@@ -167,7 +167,6 @@ export async function POST(req: NextRequest) {
       callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/payment/subscription-success?reference=${encodeURIComponent(orderReference)}`,
       customerEmail: userEmail || decoded.email || "",
       customerId: userId,
-      allowedPaymentMethods: ["Card", "Transfer"],
       orderMetaData: {
         userId: String(userId),
         planId: String(planId),

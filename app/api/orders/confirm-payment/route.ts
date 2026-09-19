@@ -95,6 +95,13 @@ export async function POST(request: NextRequest) {
                     if (verification.confirmed) break;
                 }
                 if (verification?.confirmed) {
+                    const expectedAmount = amountOf(escrow.amount);
+                    if (!Number.isFinite(verification.amount) || Math.abs(Number(verification.amount) - expectedAmount) > 0.01) {
+                        throw new PaymentConfirmationError("Nomba payment amount does not match the order total", 409);
+                    }
+                    if (verification.currency && verification.currency !== "NGN") {
+                        throw new PaymentConfirmationError("Nomba payment currency is not supported for this order", 409);
+                    }
                     await fundEscrowAndOrders({
                         eventId: `confirmation:${orderReference}:${verification.transactionId || orderReference}`,
                         externalReference: orderReference,

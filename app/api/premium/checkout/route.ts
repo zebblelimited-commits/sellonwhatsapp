@@ -41,7 +41,6 @@ export async function POST(req: NextRequest) {
       callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?tab=partner&reference=${encodeURIComponent(orderReference)}`,
       customerEmail: decoded.email || "",
       customerId: userId,
-      allowedPaymentMethods: ["Card", "Transfer"],
       orderMetaData: {
         userId,
         planId,

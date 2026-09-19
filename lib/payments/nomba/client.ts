@@ -18,7 +18,12 @@ export interface NombaCheckoutOrder {
   customerId: string;
   /** Nomba requires this only when routing checkout funds to a subaccount. */
   accountId?: string;
-  allowedPaymentMethods: string[];
+  /**
+   * Omit this field to let Nomba display every payment method enabled for the
+   * merchant account, including account-specific methods such as Pay with
+   * OPay. Explicitly restricting the list can hide dashboard-enabled methods.
+   */
+  allowedPaymentMethods?: string[];
   orderMetaData: Record<string, string>;
   splitRequest?: {
     splitType: "AMOUNT" | "PERCENTAGE";
@@ -44,6 +49,7 @@ export interface NombaTransactionResult {
   status: string;
   transactionId?: string;
   amount?: number;
+  currency?: string;
   rawResponse?: unknown;
 }
 
@@ -190,6 +196,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
           status: "SUCCESS",
           transactionId: String(details.paymentReference || details.transactionId || "") || undefined,
           amount: Number.isFinite(Number(order.amount)) ? Number(order.amount) : undefined,
+          currency: String(order.currency || details.currency || data.currency || "").trim().toUpperCase() || undefined,
           rawResponse: result,
         };
       }
@@ -215,6 +222,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
         status,
         transactionId: String(data.id || data.transactionId || "") || undefined,
         amount: Number.isFinite(Number(data.amount)) ? Number(data.amount) : undefined,
+        currency: String(data.currency || data.transactionCurrency || "").trim().toUpperCase() || undefined,
         rawResponse: result,
       };
     } catch (error) {
@@ -252,6 +260,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
         status,
         transactionId: String(data.id || details.paymentReference || details.transactionId || "") || undefined,
         amount: Number.isFinite(Number(order.amount || data.amount)) ? Number(order.amount || data.amount) : undefined,
+        currency: String(order.currency || details.currency || data.currency || "").trim().toUpperCase() || undefined,
         rawResponse: result,
       };
     } catch (error) {

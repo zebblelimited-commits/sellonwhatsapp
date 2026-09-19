@@ -283,6 +283,7 @@ export async function POST(request: NextRequest) {
     const escrowRef = ledgerReference ? adminDb.collection("escrow_transactions").doc(ledgerReference) : null;
     const escrowSnap = escrowRef ? await escrowRef.get() : null;
     let verifiedPaymentAmount = Number(transaction?.transactionAmount || transaction?.amount || payload?.data?.order?.amount || 0);
+    let verifiedPaymentCurrency = String(transaction?.currency || payload?.data?.order?.currency || payload?.data?.currency || "").trim().toUpperCase();
 
     if (eventType === "PAYMENT_SUCCESS" && collectionName === "orders" && !escrowSnap?.exists) {
       console.error(`[NOMBA WEBHOOK] No escrow ledger exists for ${ledgerReference || orderRef}`);
@@ -301,6 +302,7 @@ export async function POST(request: NextRequest) {
         if (verification.confirmed) {
           verified = true;
           if (Number.isFinite(verification.amount) && Number(verification.amount) > 0) verifiedPaymentAmount = Number(verification.amount);
+          if (verification.currency) verifiedPaymentCurrency = verification.currency;
           break;
         }
       }
@@ -312,8 +314,12 @@ export async function POST(request: NextRequest) {
 
     if (eventType === "PAYMENT_SUCCESS" && collectionName === "orders" && escrowSnap?.exists) {
       const expectedAmount = Number(escrowSnap.data()?.amount || 0);
-      if (!Number.isFinite(expectedAmount) || expectedAmount <= 0 || !Number.isFinite(verifiedPaymentAmount) || verifiedPaymentAmount < expectedAmount) {
-        console.error(`[NOMBA WEBHOOK] Payment amount does not cover escrow ${ledgerReference}: ${verifiedPaymentAmount}/${expectedAmount}`);
+      if (!Number.isFinite(expectedAmount) || expectedAmount <= 0 || !Number.isFinite(verifiedPaymentAmount) || Math.abs(verifiedPaymentAmount - expectedAmount) > 0.01) {
+        console.error(`[NOMBA WEBHOOK] Payment amount does not exactly match escrow ${ledgerReference}: ${verifiedPaymentAmount}/${expectedAmount}`);
+        return NextResponse.json({ received: false, retryable: true }, { status: 202 });
+      }
+      if (verifiedPaymentCurrency && verifiedPaymentCurrency !== "NGN") {
+        console.error(`[NOMBA WEBHOOK] Unsupported payment currency for ${ledgerReference}: ${verifiedPaymentCurrency}`);
         return NextResponse.json({ received: false, retryable: true }, { status: 202 });
       }
     }

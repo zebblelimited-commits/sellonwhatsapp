@@ -77,7 +77,6 @@ export async function POST(request: NextRequest) {
       callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/payment/boost-success?reference=${encodeURIComponent(uniqueOrderRef)}`,
       customerEmail: decodedToken.email || "billing@zebble.io",
       customerId: decodedToken.uid,
-      allowedPaymentMethods: ["Card", "Transfer"],
       orderMetaData: {
         storeId: resolvedStoreId,
         userId: decodedToken.uid,

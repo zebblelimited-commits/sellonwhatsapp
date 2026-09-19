@@ -420,7 +420,10 @@ export default function CheckoutPage() {
 
   // 5. Submit Order Payload
   const handleCheckout = async () => {
-    if (paymentMethod === "card" && !cardSettlementAcknowledged) {
+    // Nomba Checkout now displays every payment method enabled on the
+    // merchant account. The customer may therefore choose Card or USSD
+    // inside Nomba even when Bank Transfer was the preference selected here.
+    if (!cardSettlementAcknowledged) {
       setShowCardSettlementNotice(true);
       return;
     }
@@ -846,7 +849,7 @@ export default function CheckoutPage() {
 
                 <div>
                   <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
-                    <CreditCard size={20} className="text-[#00a63e]" /> Payment Method
+                    <CreditCard size={20} className="text-[#00a63e]" /> Payment Preference
                   </h2>
                   <div className="grid grid-cols-2 gap-3">
                     {["transfer", "card"].map((method: string) => (
@@ -878,6 +881,9 @@ export default function CheckoutPage() {
                       Bank transfer settles instantly and allows courier funds to be settled immediately after payment confirmation.
                     </p>
                   )}
+                  <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-[10px] leading-relaxed text-amber-900">
+                    Nomba Checkout will show Bank Transfer, Card, USSD, Nomba QR, and Pay with OPay when enabled on your account. Bank Transfer, Nomba QR, and Pay with OPay settle immediately; Card and USSD settle the next day.
+                  </div>
                 </div>
 
                 <button
@@ -908,7 +914,6 @@ export default function CheckoutPage() {
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => {
               setShowCardSettlementNotice(false);
-              if (!cardSettlementAcknowledged) setPaymentMethod("transfer");
             }}
           />
           <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
@@ -917,9 +922,9 @@ export default function CheckoutPage() {
                 <AlertCircle size={22} />
               </div>
               <div>
-                <h2 className="text-lg font-black text-gray-900">Card settlement notice</h2>
+                <h2 className="text-lg font-black text-gray-900">Nomba settlement notice</h2>
                 <p className="mt-2 text-sm leading-relaxed text-gray-600">
-                  Card payments settle on the next day. Courier funds cannot be settled until that payment settlement is received.
+                  Bank Transfer, Nomba QR, and Pay with OPay settle immediately. Card and USSD payments settle the next day, so courier funds may also be settled the next day for those methods.
                 </p>
               </div>
             </div>
@@ -931,7 +936,7 @@ export default function CheckoutPage() {
                 onChange={(event) => setCardSettlementAcknowledged(event.target.checked)}
                 className="mt-0.5 h-4 w-4 accent-amber-600"
               />
-              <span>I understand and agree that courier settlement will be processed the next day when I pay by card.</span>
+              <span>I understand that Card and USSD payments settle the next day and agree that courier settlement will follow the payment settlement.</span>
             </label>
 
             <div className="mt-5 flex gap-3">
@@ -940,11 +945,10 @@ export default function CheckoutPage() {
                 onClick={() => {
                   setShowCardSettlementNotice(false);
                   setCardSettlementAcknowledged(false);
-                  setPaymentMethod("transfer");
                 }}
                 className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-xs font-bold text-gray-600 hover:bg-gray-50"
               >
-                Use bank transfer
+                Go back
               </button>
               <button
                 type="button"
@@ -952,7 +956,7 @@ export default function CheckoutPage() {
                 onClick={() => setShowCardSettlementNotice(false)}
                 className="flex-1 rounded-xl bg-[#00a63e] px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
               >
-                Continue with card
+                I understand — continue
               </button>
             </div>
           </div>
