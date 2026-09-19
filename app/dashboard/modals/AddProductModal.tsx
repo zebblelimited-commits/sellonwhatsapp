@@ -124,7 +124,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         discountPrice: initialData.discountPrice || '',
         mainCategory: initialData.mainCategory || '',
         subCategory: initialData.subCategory || '',
-        stockCount: initialData.stockCount || '1',
+        stockCount: String(initialData.stockCount ?? initialData.stock ?? '1'),
         deliveryType: initialData.deliveryType || 'state',
         duration: initialData.duration || '1 Hour',
         metricType: initialData.metricType || 'flat',
@@ -246,6 +246,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         })
       );
 
+      const availableStock = Math.max(0, parseInt(formData.stockCount, 10) || 0);
       const payload = {
         name: formData.name,
         description: formData.description,
@@ -261,11 +262,13 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         variants: variants.filter(v => v.value.trim() !== ""),
         storeId: user.uid,
         updatedAt: serverTimestamp(),
-        stockCount: parseInt(formData.stockCount) || 0,
+        stockCount: availableStock,
         ...(productType === 'utility' && { metricType: formData.metricType, unitLabel: formData.unitLabel }),
         ...(productType === 'physical' && {
           deliveryType: formData.deliveryType,
-          stockCount: parseInt(formData.stockCount),
+          stockCount: availableStock,
+          stock: availableStock,
+          availability: availableStock > 0 ? 'in_stock' : 'out_of_stock',
           shipping: {
             weightKg: parseFloat(formData.shipping.weightKg),
             lengthCm: parseFloat(formData.shipping.lengthCm),

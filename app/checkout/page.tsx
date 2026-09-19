@@ -419,9 +419,9 @@ export default function CheckoutPage() {
   };
 
   // 5. Submit Order Payload
-  const handleCheckout = async () => {
+  const handleCheckout = async (settlementAcknowledged = cardSettlementAcknowledged) => {
     const settlesNextDay = paymentMethod === "card" || paymentMethod === "ussd";
-    if (settlesNextDay && !cardSettlementAcknowledged) {
+    if (settlesNextDay && !settlementAcknowledged) {
       setShowCardSettlementNotice(true);
       return;
     }
@@ -884,7 +884,7 @@ export default function CheckoutPage() {
                 </div>
 
                 <button
-                  onClick={handleCheckout}
+                  onClick={() => void handleCheckout()}
                   disabled={isProcessing}
                   className="w-full bg-[#00a63e] hover:bg-[#008c34] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg shadow-green-100"
                 >
@@ -949,11 +949,15 @@ export default function CheckoutPage() {
               </button>
               <button
                 type="button"
-                disabled={!cardSettlementAcknowledged}
-                onClick={() => setShowCardSettlementNotice(false)}
+                disabled={!cardSettlementAcknowledged || isProcessing}
+                onClick={() => {
+                  setCardSettlementAcknowledged(true);
+                  setShowCardSettlementNotice(false);
+                  void handleCheckout(true);
+                }}
                 className="flex-1 rounded-xl bg-[#00a63e] px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
               >
-                Continue with {paymentMethod === "ussd" ? "USSD" : "Card"}
+                {isProcessing ? "Opening checkout..." : `Continue with ${paymentMethod === "ussd" ? "USSD" : "Card"}`}
               </button>
             </div>
           </div>

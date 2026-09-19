@@ -113,7 +113,7 @@ export async function fundEscrowAndOrders(input: FundingInput) {
 
         // Firestore requires all reads to happen before the first write in a
         // transaction. Build every update first, then commit them below.
-        const writes: Array<{ orderRef: FirebaseFirestore.DocumentReference; order: DocumentData; storeRef: FirebaseFirestore.DocumentReference; store: DocumentData; productRef?: FirebaseFirestore.DocumentReference; productUpdate?: DocumentData; orderUpdate?: DocumentData }> = [];
+        const writes: Array<{ orderRef: FirebaseFirestore.DocumentReference; order: DocumentData; storeRef: FirebaseFirestore.DocumentReference; store: DocumentData; productWrites: Array<{ ref: FirebaseFirestore.DocumentReference; update: DocumentData }>; orderUpdate?: DocumentData }> = [];
         for (const orderSnap of orders) {
             if (!orderSnap.exists) continue;
             const order = orderSnap.data() || {};
@@ -137,27 +137,44 @@ export async function fundEscrowAndOrders(input: FundingInput) {
             const escrowBalance = finiteAmount(store.escrowBalance);
             if (escrowBalance < 0) throw new Error(`Seller escrow ledger is invalid for order ${orderRef.id}`);
 
-            let productRef: FirebaseFirestore.DocumentReference | undefined;
-            let productUpdate: DocumentData | undefined;
+            const productWrites: Array<{ ref: FirebaseFirestore.DocumentReference; update: DocumentData }> = [];
             let orderUpdate: DocumentData | undefined;
-            const productId = String(order.productId || "").trim();
-            if (productId) {
-                productRef = adminDb.collection("products").doc(productId);
+            const items = Array.isArray(order.items) ? order.items : [];
+            const inventoryItems = items.length > 0
+                ? items
+                : [{ productId: order.productId, quantity: order.quantity || 1 }];
+            let adjustedQuantity = 0;
+
+            for (const item of inventoryItems) {
+                const productId = String(item?.productId || "").trim();
+                if (!productId) continue;
+                const productRef = adminDb.collection("products").doc(productId);
                 const productSnap = await transaction.get(productRef);
-                if (productSnap.exists) {
-                    const inventory = inventoryAdjustment(productSnap.data() || {}, order, now, input.externalReference);
-                    if (inventory.error) throw new Error(inventory.error);
-                    if (inventory.tracked) productUpdate = inventory.productUpdate;
-                    orderUpdate = inventory.orderUpdate;
+                if (!productSnap.exists) throw new Error(`Product ${productId} not found`);
+
+                const inventory = inventoryAdjustment(productSnap.data() || {}, { ...order, quantity: item.quantity || 1 }, now, input.externalReference);
+                if (inventory.error) throw new Error(inventory.error);
+                if (inventory.tracked) {
+                    productWrites.push({ ref: productRef, update: inventory.productUpdate });
+                    adjustedQuantity += inventory.quantity;
                 }
             }
 
-            writes.push({ orderRef, order, storeRef, store: { ...store, escrowBalance: escrowBalance + orderAmount }, productRef, productUpdate, orderUpdate });
+            if (adjustedQuantity > 0) {
+                orderUpdate = {
+                    inventoryAdjusted: true,
+                    inventoryAdjustedQuantity: adjustedQuantity,
+                    inventoryAdjustmentId: `inventory_${input.externalReference}_${orderRef.id}`,
+                    inventoryAdjustedAt: now,
+                };
+            }
+
+            writes.push({ orderRef, order, storeRef, store: { ...store, escrowBalance: escrowBalance + orderAmount }, productWrites, orderUpdate });
             fundedOrderIds.push(orderRef.id);
         }
 
         for (const write of writes) {
-            if (write.productRef && write.productUpdate) transaction.update(write.productRef, write.productUpdate);
+            for (const productWrite of write.productWrites) transaction.update(productWrite.ref, productWrite.update);
             transaction.update(write.storeRef, { escrowBalance: write.store.escrowBalance, updatedAt: now });
             transaction.update(write.orderRef, {
                 ...(write.orderUpdate || {}),

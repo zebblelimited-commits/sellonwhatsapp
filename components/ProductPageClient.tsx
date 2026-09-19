@@ -312,7 +312,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
                 <div className="flex items-center border border-gray-100 bg-white rounded-xl overflow-hidden shadow-sm">
                   <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="p-3 hover:bg-gray-50 text-gray-500 active:scale-95 transition-all"><Minus size={14} /></button>
                   <span className="px-5 font-bold text-sm text-gray-800 w-12 text-center">{quantity}</span>
-                  <button onClick={() => setQuantity(quantity + 1)} className="p-3 hover:bg-gray-50 text-gray-500 active:scale-95 transition-all"><Plus size={14} /></button>
+                  <button onClick={() => setQuantity(Math.min(stockCount, quantity + 1))} disabled={quantity >= stockCount} className="p-3 hover:bg-gray-50 text-gray-500 active:scale-95 transition-all disabled:cursor-not-allowed disabled:opacity-40"><Plus size={14} /></button>
                 </div>
               </div>
             )}
@@ -333,6 +333,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
                         productId,
                         name: product?.name || "Product",
                         price: productPrice,
+                        quantity: activeQuantity,
                         image: product?.images?.[0] || product?.image || "/placeholder.png",
                         storeId,
                         storeName: store?.storeName || "Store",

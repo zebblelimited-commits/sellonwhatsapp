@@ -219,6 +219,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 return NextResponse.json({ error: "One or more checkout item totals are invalid. Please refresh your cart." }, { status: 400 });
             }
 
+            // Validate the live product quantity before creating a paid
+            // checkout. The webhook performs the same check atomically when
+            // payment is confirmed, but this gives the buyer an immediate
+            // and clear response when a seller has reduced stock meanwhile.
+            for (const item of items) {
+                const productId = String(item?.productId || "").trim();
+                if (!productId) continue;
+                const productSnap = await adminDb.collection("products").doc(productId).get();
+                if (!productSnap.exists) return NextResponse.json({ error: "One or more products are no longer available." }, { status: 409 });
+                const product = productSnap.data() || {};
+                const productType = String(product.productType || "physical").trim().toLowerCase();
+                const tracksInventory = product.trackInventory !== false && !["service", "utility", "booking"].includes(productType);
+                if (!tracksInventory) continue;
+                const availableStock = Number(product.stockCount ?? product.stock ?? 0);
+                const requestedQuantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+                if (!Number.isFinite(availableStock) || availableStock < requestedQuantity) {
+                    return NextResponse.json({ error: `${String(item.name || "This product")} has only ${Math.max(0, availableStock || 0)} item${availableStock === 1 ? "" : "s"} remaining.` }, { status: 409 });
+                }
+            }
+
             if (!storeId || storeId === "unknown") {
                 console.error("❌ [CHECKOUT API] Invalid storeId detected:", storeId);
                 return NextResponse.json(

@@ -25,6 +25,8 @@ export type CartItem = {
   lengthCm?: number;
   widthCm?: number;
   heightCm?: number;
+  stockCount?: number;
+  stock?: number;
 };
 
 type CartContextType = {
@@ -33,7 +35,7 @@ type CartContextType = {
   cartCount: number;
   cartTotal: number;
   toggleCart: () => void;
-  addToCart: (item: Omit<CartItem, "quantity">) => void;
+  addToCart: (item: Omit<CartItem, "quantity"> & { quantity?: number }) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
@@ -61,15 +63,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
           if (!item || typeof item !== "object" || !item.productId) return item;
           try {
             const productSnapshot = await getDoc(doc(db, "products", String(item.productId)));
-            return productSnapshot.exists()
-              ? { ...item, ...productCheckoutAttributes(productSnapshot.data()) }
-              : item;
+            if (!productSnapshot.exists()) return item;
+            const product = productSnapshot.data() || {};
+            const productType = String(product.productType || item.productType || "physical").toLowerCase();
+            const tracksInventory = !["service", "utility", "booking"].includes(productType);
+            const stockCount = Number(product.stockCount ?? product.stock);
+            const quantity = tracksInventory && Number.isFinite(stockCount)
+              ? Math.min(Number(item.quantity) || 1, Math.max(0, stockCount))
+              : Number(item.quantity) || 1;
+            return quantity > 0
+              ? { ...item, ...productCheckoutAttributes(product), productType, stockCount, stock: stockCount, quantity }
+              : null;
           } catch {
             return item;
           }
         }));
 
-        if (active) setItems(hydrated);
+        if (active) setItems(hydrated.filter(Boolean) as CartItem[]);
       } catch (error) {
         console.error("Failed to parse cart", error);
       }
@@ -98,17 +108,46 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const toggleCart = () => setIsOpen((prev) => !prev);
 
-  const addToCart = (newItem: Omit<CartItem, "quantity">) => {
+  const addToCart = async (newItem: Omit<CartItem, "quantity"> & { quantity?: number }) => {
+    const requestedQuantity = Math.max(1, Math.floor(Number(newItem.quantity) || 1));
+    const itemWithoutQuantity = { ...newItem };
+    delete itemWithoutQuantity.quantity;
+    // Refresh inventory before increasing the cart so a stale product page
+    // cannot keep adding units after a seller changes the stock count.
+    let latestItem = itemWithoutQuantity;
+    try {
+      const productSnapshot = await getDoc(doc(db, "products", String(newItem.productId)));
+      if (productSnapshot.exists()) {
+        const product = productSnapshot.data() || {};
+        const stockCount = Number(product.stockCount ?? product.stock);
+        latestItem = {
+          ...itemWithoutQuantity,
+          ...(Number.isFinite(stockCount) ? { stockCount, stock: stockCount } : {}),
+          ...(typeof product.productType === "string" ? { productType: product.productType } : {}),
+        };
+      }
+    } catch (error) {
+      console.warn("Could not refresh product inventory before adding to cart", error);
+    }
+
     setItems((prev) => {
-      const existing = prev.find((item) => item.productId === newItem.productId);
+      const existing = prev.find((item) => item.productId === latestItem.productId);
+      const productType = String(latestItem.productType || "physical").toLowerCase();
+      const tracksInventory = !["service", "utility", "booking"].includes(productType);
+      const latestStock = Number(latestItem.stockCount ?? latestItem.stock);
+      if (tracksInventory && Number.isFinite(latestStock) && latestStock <= 0) return prev;
+
       if (existing) {
+        const existingStock = Number(existing.stockCount ?? existing.stock);
+        if (tracksInventory && (!Number.isFinite(existingStock) || existing.quantity + requestedQuantity > existingStock)) return prev;
         return prev.map((item) =>
-          item.productId === newItem.productId
-            ? { ...item, quantity: item.quantity + 1 }
+          item.productId === latestItem.productId
+            ? { ...item, ...latestItem, quantity: item.quantity + requestedQuantity }
             : item
         );
       }
-      return [...prev, { ...newItem, quantity: 1 }];
+      if (tracksInventory && Number.isFinite(latestStock) && requestedQuantity > latestStock) return prev;
+      return [...prev, { ...latestItem, quantity: requestedQuantity }];
     });
     setIsOpen(true); // Auto-open cart when item is added
   };
@@ -122,11 +161,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
       removeFromCart(productId);
       return;
     }
-    setItems((prev) =>
-      prev.map((item) =>
-        item.productId === productId ? { ...item, quantity } : item
-      )
-    );
+    setItems((prev) => prev.flatMap((item) => {
+      if (item.productId !== productId) return [item];
+      const productType = String(item.productType || "physical").toLowerCase();
+      const tracksInventory = !["service", "utility", "booking"].includes(productType);
+      const stockCount = Number(item.stockCount ?? item.stock);
+      const cappedQuantity = tracksInventory && Number.isFinite(stockCount)
+        ? Math.min(quantity, Math.max(0, stockCount))
+        : quantity;
+      return cappedQuantity > 0 ? [{ ...item, quantity: cappedQuantity }] : [];
+    }));
   };
 
   const clearCart = () => setItems([]);
