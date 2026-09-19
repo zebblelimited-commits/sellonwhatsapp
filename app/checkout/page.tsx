@@ -874,7 +874,9 @@ export default function CheckoutPage() {
                   </div>
                   {paymentMethod === "card" || paymentMethod === "ussd" ? (
                     <p className="mt-3 rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-[10px] leading-relaxed text-amber-900">
-                      {paymentMethod === "card" ? "Card" : "USSD"} payments settle the next day. Courier settlement and dispatch will proceed after payment settlement is confirmed.
+                      {paymentMethod === "card"
+                        ? "Card payments settle the next day. Courier settlement and dispatch will proceed after payment settlement is confirmed."
+                        : "USSD payments settle the next day. Nomba will display the supported banks and USSD codes on the checkout page. Courier settlement and dispatch will proceed after payment settlement is confirmed."}
                     </p>
                   ) : (
                     <p className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 text-[10px] leading-relaxed text-emerald-800">

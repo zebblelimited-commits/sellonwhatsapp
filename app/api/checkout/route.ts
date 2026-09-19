@@ -526,12 +526,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // NOMBA PAYMENT INITIALIZATION
         // ---------------------------------------------------------
 
+        // Nomba owns the USSD bank selector. Some hosted-checkout orders fail
+        // with a generic error when USSD is the only explicitly allowed method,
+        // even though USSD is enabled on the merchant account. Omitting the
+        // filter lets Nomba render its account-configured methods and the bank
+        // selector. We intentionally do not maintain a stale local bank list.
         const allowedPaymentMethods = paymentMethod === "card"
             ? ["Card"]
-            : paymentMethod === "ussd"
-                ? ["USSD"]
-                : paymentMethod === "nomba_qr"
-                    ? ["Nomba QR"]
+            : paymentMethod === "nomba_qr"
+                ? ["Nomba QR"]
+                : paymentMethod === "ussd"
+                    ? undefined
                     : ["Transfer"];
 
         await createEscrowRecord({
@@ -551,7 +556,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             callbackUrl: `${appUrl}/payment/success?reference=${encodeURIComponent(checkoutReference)}`,
             customerEmail: String(customerEmail).trim(),
             customerId: buyerId,
-            allowedPaymentMethods,
+            ...(allowedPaymentMethods ? { allowedPaymentMethods } : {}),
             orderMetaData: {
                 checkoutReference,
                 orderIds: createdOrderIds.join(","),
