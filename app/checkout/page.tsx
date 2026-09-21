@@ -80,6 +80,7 @@ export default function CheckoutPage() {
   const [editForm, setEditForm] = useState({
     address: "",
     city: "",
+    lga: "",
     state: "",
     postalCode: "",
     phone: "",
@@ -91,6 +92,7 @@ export default function CheckoutPage() {
     name: "",
     phone: "",
     address: "",
+    city: "",
     state: "",
     lga: "",
     latitude: "",
@@ -187,6 +189,7 @@ export default function CheckoutPage() {
         setEditForm({
           address: profileAddress,
           city: currentCity,
+          lga: data.lga || shippingAddress.lga || savedLocation.lga || "",
           state: currentState,
           postalCode: data.postalCode || "",
           phone: data.phone || data.phoneNumber || user.phoneNumber || "",
@@ -338,6 +341,10 @@ export default function CheckoutPage() {
     try {
       const latitude = Number(editForm.latitude);
       const longitude = Number(editForm.longitude);
+      if (!editForm.city.trim() || !editForm.lga.trim() || !editForm.state.trim()) {
+        alert("Please enter the delivery city, LGA, and state.");
+        return;
+      }
       if (!hasSavedCoordinates({ latitude: editForm.latitude, longitude: editForm.longitude })) {
         alert("Please enter both valid latitude and longitude coordinates. Coordinates are required for delivery.");
         return;
@@ -356,10 +363,10 @@ export default function CheckoutPage() {
         id: "default_addr",
         label: "Default Address",
         name: addresses.find(a => a.id === "default_addr")?.name || buyerData?.displayName || auth.currentUser?.displayName || "Buyer",
-        address: [editForm.address, editForm.city, editForm.state, editForm.postalCode].filter(Boolean).join(", "),
+        address: [editForm.address, editForm.city, editForm.lga, editForm.state, editForm.postalCode].filter(Boolean).join(", "),
         city: editForm.city,
         state: editForm.state,
-        lga: addresses.find(a => a.id === "default_addr")?.lga || "",
+        lga: editForm.lga,
         postalCode: editForm.postalCode,
         phone: editForm.phone,
         isDefault: true,
@@ -382,8 +389,8 @@ export default function CheckoutPage() {
   // Add Custom "Ship to another location" Address
   const handleAddCustomAddress = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customAddressForm.name || !customAddressForm.phone || !customAddressForm.address || !customAddressForm.state || !customAddressForm.lga) {
-      alert("Please complete all required fields for the new shipping address.");
+    if (!customAddressForm.name || !customAddressForm.phone || !customAddressForm.address || !customAddressForm.city || !customAddressForm.state || !customAddressForm.lga) {
+      alert("Please complete the recipient, address, city, LGA, state, and phone fields.");
       return;
     }
 
@@ -400,7 +407,7 @@ export default function CheckoutPage() {
       name: customAddressForm.name,
       phone: customAddressForm.phone,
       address: customAddressForm.address,
-      city: "",
+      city: customAddressForm.city,
       state: customAddressForm.state,
       lga: customAddressForm.lga,
       postalCode: "",
@@ -415,7 +422,7 @@ export default function CheckoutPage() {
     setIsCustomAddressModalOpen(false);
 
     // Reset Form
-    setCustomAddressForm({ name: "", phone: "", address: "", state: "", lga: "", latitude: "", longitude: "" });
+    setCustomAddressForm({ name: "", phone: "", address: "", city: "", state: "", lga: "", latitude: "", longitude: "" });
   };
 
   // 5. Submit Order Payload
@@ -471,7 +478,7 @@ export default function CheckoutPage() {
           name: selectedBuyerAddress.name,
           phone: selectedBuyerAddress.phone,
           address: selectedBuyerAddress.address,
-          city: selectedBuyerAddress.city || "Jos",
+          city: selectedBuyerAddress.city || selectedBuyerAddress.lga || selectedState,
           state: selectedBuyerAddress.state || selectedState,
           lga: selectedBuyerAddress.lga || "",
           postalCode: selectedBuyerAddress.postalCode || "100232",
@@ -682,8 +689,9 @@ export default function CheckoutPage() {
                             </span>
                             <p className="font-bold text-sm text-gray-900">{addr.name || "Buyer"}</p>
                             <p className="text-gray-500 leading-relaxed"><span className="font-medium text-gray-700">Address:</span> {addr.address || "Not provided"}</p>
-                            {addr.state && <p className="text-gray-500"><span className="font-medium text-gray-700">State:</span> {addr.state}</p>}
+                            {(addr.city || addr.lga) && <p className="text-gray-500"><span className="font-medium text-gray-700">City/LGA:</span> {addr.city || addr.lga}</p>}
                             {addr.lga && <p className="text-gray-500"><span className="font-medium text-gray-700">LGA:</span> {addr.lga}</p>}
+                            {addr.state && <p className="text-gray-500"><span className="font-medium text-gray-700">State:</span> {addr.state}</p>}
                             {addr.phone && <p className="text-gray-500"><span className="font-medium text-gray-700">Phone:</span> {addr.phone}</p>}
                             {(addr.latitude !== undefined && addr.longitude !== undefined) && (
                               <p className="text-[10px] text-gray-400">Coordinates: {addr.latitude}, {addr.longitude}</p>
@@ -978,20 +986,21 @@ export default function CheckoutPage() {
             <div className="space-y-4">
               <input type="text" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="Street Address" />
               <div className="grid grid-cols-2 gap-3">
-                <input type="text" value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="City" />
-                <select
-                  value={editForm.state}
-                  onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
-                  className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"
-                >
-                  <option value="">Select state</option>
-                  {NIGERIAN_STATES.map((state) => (
-                    <option key={state} value={state}>
-                      {state}
-                    </option>
-                  ))}
-                </select>
+                <input type="text" required value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="City e.g. Jos" />
+                <input type="text" required value={editForm.lga} onChange={(e) => setEditForm({ ...editForm, lga: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="LGA e.g. Jos North" />
               </div>
+              <select
+                value={editForm.state}
+                onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"
+              >
+                <option value="">Select state</option>
+                {NIGERIAN_STATES.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+              </select>
               <input type="text" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]" placeholder="Phone Number" />
               <div>
                 <p className="text-xs font-bold text-gray-700 mb-1">Map Coordinates <span className="font-normal text-gray-400">(required for delivery)</span></p>
@@ -1072,6 +1081,17 @@ export default function CheckoutPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">City *</label>
+                  <input
+                    type="text"
+                    required
+                    value={customAddressForm.city}
+                    onChange={(e) => setCustomAddressForm({ ...customAddressForm, city: e.target.value })}
+                    className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-[#00a63e]"
+                    placeholder="e.g. Jos"
+                  />
+                </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">State *</label>
                   <select

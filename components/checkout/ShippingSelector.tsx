@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Truck, Check, Loader2, AlertCircle, Store } from "lucide-react";
+import { showToast } from "@/lib/toast";
 
 export interface ShippingOption {
     id: string;
@@ -79,7 +80,6 @@ export default function ShippingSelector({
 }: ShippingSelectorProps) {
     const [options, setOptions] = useState<ShippingOption[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
-    const [providerMessage, setProviderMessage] = useState<string | null>(null);
     const pickupAddressKey = addressKey(pickupAddress);
     const destinationAddressKey = addressKey(destinationAddress);
     const itemsKey = items.map((item) => [
@@ -108,7 +108,6 @@ export default function ShippingSelector({
 
         const fetchShippingRates = async () => {
             setLoading(true);
-            setProviderMessage(null);
             try {
                 const response = await fetch("/api/shipping/calculate", {
                     method: "POST",
@@ -138,11 +137,17 @@ export default function ShippingSelector({
                         `${provider.name || "Courier"}: ${provider.reason || "temporarily unavailable."}`
                     )
                     : [];
-                setProviderMessage(
-                    unavailable.length > 0
-                        ? unavailable.join(" ")
-                        : (typeof data.message === "string" ? data.message : null),
-                );
+                if (unavailable.length > 0) {
+                    console.info("[SHIPPING] Some courier options are unavailable for this route:", unavailable);
+                    showToast(
+                        "info",
+                        unavailable.some((message: string) => message.toLowerCase().startsWith("topship:"))
+                            ? "Topship is unavailable for this route and was hidden. Other delivery options remain available."
+                            : "Some courier options are unavailable for this route. Other delivery options remain available.",
+                    );
+                } else if (typeof data.message === "string" && data.message.trim()) {
+                    showToast("info", data.message);
+                }
 
                 // Place SELF_ARRANGED_OPTION as the last option
                 const combinedOptions = [
@@ -160,7 +165,7 @@ export default function ShippingSelector({
                 // request. That is expected and should not show as an error.
                 if (isAbortError(err)) return;
                 console.error("Error fetching shipping rates:", err);
-                setProviderMessage("Courier rates are temporarily unavailable. Self-arranged delivery is still available.");
+                showToast("error", "Courier rates are temporarily unavailable. Self-arranged delivery is still available.");
                 const fallbackOptions = [SELF_ARRANGED_OPTION];
                 setOptions(fallbackOptions);
                 onSelectRef.current(SELF_ARRANGED_OPTION);
@@ -202,12 +207,6 @@ export default function ShippingSelector({
             <label className="block text-sm font-bold text-gray-900">
                 Select Shipping Option
             </label>
-            {providerMessage && (
-                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
-                    <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
-                    <span>{providerMessage}</span>
-                </div>
-            )}
             <div className="grid grid-cols-1 gap-3">
                 {options.map((option) => {
                     const isSelected = selectedOptionId === option.id;
