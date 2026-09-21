@@ -269,6 +269,7 @@ export async function POST(req: NextRequest) {
                 try {
                     const fezRate = await withProviderTimeout(fetchFezDeliveryCost({
                         state: destinationState,
+                        pickUpState: pickupAddress?.state,
                         weight: Math.max(1, totalWeightKg),
                     }), "FEZ");
                     finalFee = fezRate.totalCost;
