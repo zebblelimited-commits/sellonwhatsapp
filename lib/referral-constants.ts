@@ -1,0 +1,1 @@
+export const MINIMUM_REFERRAL_WITHDRAWAL = 5_000;

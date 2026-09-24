@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import GlobalToast from "@/components/ui/GlobalToast";
 import OffCanvasCart from "@/components/cart/OffCanvasCart"; // ✅ Import it here
+import ReferralCapture from "@/components/referrals/ReferralCapture";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -38,6 +39,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${plusJakarta.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col font-sans" suppressHydrationWarning>
+        <div className="site-scale min-h-full flex flex-col">
         <AuthProvider>
           <CartProvider>
             <GlobalToast />
@@ -46,12 +48,14 @@ export default function RootLayout({
                 <div className="w-6 h-6 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
               </div>
             }>
+              <ReferralCapture />
               {children}
             </Suspense>
             {/* ✅ Add OffCanvasCart here so it's globally available */}
             <OffCanvasCart />
           </CartProvider>
         </AuthProvider>
+        </div>
       </body>
     </html>
   );

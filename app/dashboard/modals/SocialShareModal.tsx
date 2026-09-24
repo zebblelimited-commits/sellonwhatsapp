@@ -12,7 +12,8 @@ export default function SocialShareModal({ isOpen, onClose, title, url }: { isOp
   if (!isOpen) return null;
 
   const encodedUrl = encodeURIComponent(url);
-  const encodedText = encodeURIComponent(`Check out ${title} on SellOnWhatsApp! 🚀`);
+  const shareMessage = `🛍️ Check out my store on SellOnWhatsApp!\n\nI've just launched my online store where you can browse my products and order directly.\n\n👇 Shop here:\n${url}\n\nIf you're looking to buy, I'd love for you to check it out.`;
+  const encodedText = encodeURIComponent(shareMessage);
 
   const handleCopy = async () => {
     try {
@@ -24,7 +25,7 @@ export default function SocialShareModal({ isOpen, onClose, title, url }: { isOp
 
   // Logic: Some platforms have direct share links, others are for copy-paste reference
   const socialPlatforms = [
-    { name: "WhatsApp", icon: <WhatsAppIcon size={24}/>, color: "bg-[#25D366]", link: `https://wa.me/?text=${encodedText}%20${encodedUrl}` },
+    { name: "WhatsApp", icon: <WhatsAppIcon size={24}/>, color: "bg-[#25D366]", link: `https://wa.me/?text=${encodedText}` },
     { name: "Twitter", icon: <TwitterIcon size={24}/>, color: "bg-black", link: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}` },
     { name: "Facebook", icon: <FacebookIcon size={24}/>, color: "bg-[#1877F2]", link: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}` },
     { name: "Instagram", icon: <InstagramIcon size={24}/>, color: "bg-[#E4405F]", isCopyOnly: true },

@@ -82,6 +82,26 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.site-scale {
+  --site-scale: 0.7;
+  zoom: var(--site-scale);
+}
+
+.auth-shell {
+  min-height: calc(100vh / var(--site-scale));
+}
+
+.dashboard-sidebar {
+  height: calc(100vh / var(--site-scale));
+}
+
+@media (max-width: 768px) {
+  .site-scale {
+    --site-scale: 1;
+    zoom: var(--site-scale);
+  }
+}
+
 .price-range-slider {
   appearance: none;
   height: 2px;

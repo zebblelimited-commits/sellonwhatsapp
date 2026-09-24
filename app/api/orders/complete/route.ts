@@ -4,6 +4,7 @@ import admin from "firebase-admin";
 import { notifyFundsReleased, notifyOrderStatus } from "@/lib/novu-events";
 import { ESCROW_COLLECTION } from "@/lib/escrow/types";
 import { initiateNombaBankTransfer } from "@/lib/payments/nomba/client";
+import { recordSuccessfulOrder } from "@/lib/referrals";
 
 class CompletionError extends Error {
   status: number;
@@ -196,6 +197,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (!result.alreadyCompleted && result.notificationOrder) {
+      try {
+        await recordSuccessfulOrder(
+          orderId,
+          String((result.notificationOrder as Record<string, any>).buyerId || "") || undefined,
+          String((result.notificationOrder as Record<string, any>).storeId || (result.notificationOrder as Record<string, any>).vendorId || "") || undefined,
+        );
+      } catch (referralError) {
+        console.error("Referral order reward could not be recorded:", referralError);
+      }
       try {
         await Promise.allSettled([
           notifyOrderStatus(result.notificationOrder, "order-delivered"),

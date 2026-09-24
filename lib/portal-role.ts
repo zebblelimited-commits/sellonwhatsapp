@@ -19,9 +19,9 @@ function normalizedRole(value: unknown): PortalRole | "" {
 }
 
 /**
- * Resolves the portal from explicit role data first. A store document alone is
- * only a legacy vendor fallback; payment syncs must not turn buyers into
- * vendors merely by creating a partial store document.
+ * Resolves the portal from explicit role data and profile ownership. Seller
+ * profiles are checked before shared buyer/user data so a stale shared profile
+ * cannot send a seller to the buyer dashboard.
  */
 export function resolvePortalRole(input: PortalRoleInput): PortalRole {
   if (input.admin.exists) return "admin";
@@ -29,11 +29,11 @@ export function resolvePortalRole(input: PortalRoleInput): PortalRole {
   const vendorRole = normalizedRole(input.vendor.role) || normalizedRole(input.store.role) || normalizedRole(input.user.role);
   const buyerRole = normalizedRole(input.buyer.role) || normalizedRole(input.user.role);
 
-  if (input.vendor.exists || vendorRole === "vendor") return "vendor";
+  // A vendor/store profile is the strongest seller signal. This also repairs
+  // older accounts whose shared users document was incorrectly left as buyer.
+  if (input.vendor.exists || input.store.exists || vendorRole === "vendor") return "vendor";
   if (input.buyer.exists || buyerRole === "buyer") return "buyer";
 
-  // Preserve support for older vendor accounts that only have a stores doc.
-  if (input.store.exists) return "vendor";
   if (input.user.exists) return "buyer";
 
   const tokenRole = normalizedRole(input.tokenRole);

@@ -1,5 +1,11 @@
 import crypto from "crypto";
+import { setDefaultResultOrder } from "node:dns";
+
 import type { PayoutRequest, PayoutResponse, PaymentProvider, VirtualAccountRequest, VirtualAccountResponse } from "@/lib/payments/provider";
+
+// Some local/server network environments advertise an unreachable IPv6 route to Nomba.
+// Prefer IPv4 so Node fetch does not fail with AggregateError/ETIMEDOUT before the request reaches Nomba.
+setDefaultResultOrder("ipv4first");
 
 type JsonObject = Record<string, any>;
 

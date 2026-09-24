@@ -337,7 +337,7 @@ export default function BuyerDashboard() {
         <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-black/30 p-2 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
           <aside className="flex h-auto min-h-0 max-h-[calc(100dvh-1rem)] w-[min(18rem,calc(100vw-1rem))] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
-              <img src="/icons/sowa.png" alt="Sowa Logo" className="h-10 w-auto object-contain" />
+              <Link href="/" aria-label="Go to homepage" className="inline-flex"><img src="/icons/sowa.png" alt="Sowa Logo" className="h-10 w-auto object-contain" /></Link>
               <button type="button" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>
             </div>
             <nav className="space-y-1 overflow-y-auto no-scrollbar">
@@ -361,9 +361,9 @@ export default function BuyerDashboard() {
       )}
 
       {/* Sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
+      <aside className="dashboard-sidebar sticky top-0 hidden w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
         <div className="flex items-center px-2 py-2 mb-6">
-          <img src="/icons/sowa.png" alt="Sowa Logo" className="h-11 w-auto object-contain" />
+          <Link href="/" aria-label="Go to homepage" className="inline-flex"><img src="/icons/sowa.png" alt="Sowa Logo" className="h-11 w-auto object-contain" /></Link>
         </div>
 
         <nav className="space-y-1 overflow-y-auto no-scrollbar">
@@ -412,7 +412,7 @@ export default function BuyerDashboard() {
 
       {/* Main Content */}
       <main className="flex min-h-0 min-w-0 flex-1 flex-col self-start">
-        <div className="p-4 no-scrollbar md:p-10">
+        <div className="flex min-h-screen flex-col p-4 no-scrollbar md:p-10">
           <header className="mb-6 flex flex-col justify-between gap-4 md:mb-10 md:flex-row md:items-center">
             <div className="flex items-center gap-3">
               <button type="button" aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((open) => !open)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 shadow-sm md:hidden">
@@ -466,7 +466,7 @@ export default function BuyerDashboard() {
             </div>
           </header>
 
-          <div className="animate-in fade-in duration-500 pb-10">
+          <div className="animate-in fade-in duration-500 pb-20">
             {activeTab === "home" && (
               <BuyerHome
                 userData={userData}
@@ -515,7 +515,7 @@ export default function BuyerDashboard() {
           {/* ✅ NEW: Off-Canvas Cart Component */}
           <OffCanvasCart />
 
-          <Footer />
+          <div className="mt-auto w-full"><Footer /></div>
         </div>
       </main>
       {showCoordinatesNotice && (

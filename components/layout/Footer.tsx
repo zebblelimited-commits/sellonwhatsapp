@@ -85,6 +85,7 @@ export default function Footer() {
               <li><Link href="/verified-stores" className="hover:text-green-600 transition-colors">Verified Stores</Link></li>
               <li><Link href="/sponsored-stores" className="hover:text-green-600 transition-colors">Sponsored Stores</Link></li>
               <li><Link href="/sponsored-products" className="hover:text-green-600 transition-colors">Sponsored Products</Link></li>
+              <li><Link href="/referrals" className="hover:text-green-600 transition-colors">Referral Leaderboard</Link></li>
               <li><Link href="/how-it-works" className="hover:text-green-600 transition-colors">How it works</Link></li>
               <li><Link href="/pricing" className="hover:text-green-600 transition-colors">Pricing</Link></li>
               <li><Link href="/boost-store" className="hover:text-green-600 transition-colors">Boost Store</Link></li>

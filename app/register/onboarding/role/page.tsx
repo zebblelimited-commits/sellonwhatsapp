@@ -12,6 +12,7 @@ import { auth, db, googleProvider } from "@/lib/firebase";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { setUserRole } from "@/lib/auth-actions";
 import { triggerWelcomeNotifications } from "@/lib/client-welcome";
+import { REFERRAL_STORAGE_KEY } from "@/components/referrals/ReferralCapture";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -94,6 +95,9 @@ export default function RoleSelectionPage() {
             verificationTier: null
           }, { merge: true }),
 
+          // Keep a shared profile for referral wallet data.
+          setDoc(doc(db, "users", user.uid), userData, { merge: true }),
+
           // Claim username
           setDoc(doc(db, "usernames", username.toLowerCase().trim()), {
             uid: user.uid,
@@ -104,6 +108,18 @@ export default function RoleSelectionPage() {
         // Write to 'users' (Matches AuthProvider & BuyerProfile)
         await setDoc(doc(db, "users", user.uid), userData, { merge: true });
       }
+
+      const referralResponse = await fetch("/api/referrals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + await user.getIdToken() },
+        body: JSON.stringify({
+          action: "attribute",
+          role,
+          referralCode: localStorage.getItem(REFERRAL_STORAGE_KEY) || "",
+          displayName: user.displayName || user.email || user.uid,
+        }),
+      });
+      if (referralResponse.ok) localStorage.removeItem(REFERRAL_STORAGE_KEY);
 
       // 3. Set Custom Claims & Bake Cookie
       await setUserRole(user.uid, role as 'vendor' | 'buyer');
@@ -138,9 +154,9 @@ export default function RoleSelectionPage() {
   };
 
   return (
-    <main className={`${font.className} flex h-screen bg-white overflow-hidden`}>
+    <main className={`${font.className} auth-shell flex min-h-screen bg-white overflow-hidden`}>
       {/* LEFT SIDEBAR (Desktop) */}
-      <div className="hidden lg:flex lg:w-1/3 relative overflow-hidden bg-green-900">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-green-900">
         <Image src="/images/login1.jpg" alt="Join Zebble" fill className="object-cover opacity-60" />
         <div className="absolute inset-0 bg-gradient-to-t from-green-900 via-transparent to-transparent" />
         <div className="absolute bottom-12 left-10 right-10 z-20 text-white font-bold text-2xl whitespace-pre-line">
@@ -149,7 +165,7 @@ export default function RoleSelectionPage() {
       </div>
 
       {/* RIGHT FORM SECTION */}
-      <div className="w-full lg:w-2/3 flex flex-col justify-center px-6 md:px-12 lg:px-20 py-12 overflow-y-auto">
+      <div className="w-full lg:w-1/2 flex flex-col justify-center px-6 md:px-12 lg:px-20 py-12 overflow-y-auto">
         <div className="max-w-md w-full mx-auto">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Create your account</h1>

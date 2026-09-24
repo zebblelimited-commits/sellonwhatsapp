@@ -1,6 +1,8 @@
 // app/dashboard/page.tsx
 "use client";
 import React, { useState, useEffect, Suspense } from "react";
+import Footer from "@/components/layout/Dashboardfooter";
+import Link from "next/link";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
@@ -50,6 +52,10 @@ import CoordinatesRequiredModal, { hasSavedCoordinates } from "@/components/loca
 import { resolvePortalRole } from "@/lib/portal-role";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
 
 type ProFeature = "chat" | "analytics" | "advanced_withdraw" | "priority_support";
 
@@ -161,8 +167,9 @@ function Dashboard() {
       activeListeners = [];
     };
 
-    const unsubAuth = onAuthStateChanged(auth, async (user) => {
-      clearActiveListeners();
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      void (async () => {
+        clearActiveListeners();
       
       if (user) {
         const [adminSnap, storeSnap, vendorSnap, buyerSnap, userSnap] = await Promise.all([
@@ -408,6 +415,11 @@ function Dashboard() {
         setLoading(false);
         router.push("/login");
       }
+      })().catch((error) => {
+        if (!isAbortError(error)) {
+          console.error("Dashboard auth initialization failed:", error);
+        }
+      });
     });
 
     return () => {
@@ -577,7 +589,7 @@ function Dashboard() {
         <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-black/30 p-2 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
           <aside className="flex h-auto min-h-0 max-h-[calc(100dvh-1rem)] w-[min(18rem,calc(100vw-1rem))] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
-              <div className="flex items-center gap-2"><img src="/icons/sowa.png" alt="Sowa Logo" className="h-10 w-auto object-contain" /><span className="text-xs font-black text-gray-900">Seller Dashboard</span></div>
+              <div className="flex items-center gap-2"><Link href="/" aria-label="Go to homepage" className="inline-flex"><img src="/icons/sowa.png" alt="Sowa Logo" className="h-10 w-auto object-contain" /></Link><span className="text-xs font-black text-gray-900">Seller Dashboard</span></div>
               <button type="button" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>
             </div>
             <nav className="space-y-1 overflow-y-auto no-scrollbar">
@@ -623,9 +635,9 @@ function Dashboard() {
         onSubmit={submitDisputeResponse}
       />
 
-      <aside className="sticky top-0 hidden h-screen w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
+      <aside className="dashboard-sidebar fixed inset-y-0 left-0 z-40 hidden w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
         <div className="flex items-center px-2 py-2 mb-6">
-          <img src="/icons/sowa.png" alt="Sowa Logo" className="h-11 w-auto object-contain" />
+          <Link href="/" aria-label="Go to homepage" className="inline-flex"><img src="/icons/sowa.png" alt="Sowa Logo" className="h-11 w-auto object-contain" /></Link>
         </div>
         <nav className="space-y-1">
           <NavItem icon={<LayoutDashboard size={18} />} label="Overview" active={activeTab === "overview"} onClick={() => setActiveTab("overview")} />
@@ -674,8 +686,8 @@ function Dashboard() {
         </div>
       </aside>
 
-      <main className="flex min-h-screen min-w-0 flex-1 flex-col self-start">
-          <div className="w-full min-w-0 flex-1 p-4 md:p-10">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col self-start md:pl-64">
+          <div className="flex min-h-screen flex-col p-4 no-scrollbar md:p-10">
           <header className="mb-6 flex flex-col justify-between gap-4 md:mb-10 md:flex-row md:items-center">
             <div className="flex items-center gap-3">
               <button type="button" aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((open) => !open)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 shadow-sm md:hidden">
@@ -698,15 +710,16 @@ function Dashboard() {
               >
                 <RotateCw size={18} className={isSyncing ? "animate-spin" : ""} />
               </button>
-              <button onClick={() => openShare(storeData?.storeName || "My Store", storeUrl)} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-2xl text-xs font-bold hover:bg-gray-50 transition-all shadow-sm">
-                <Share2 size={16} /> Share Link
-              </button>
-              <a href={storeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-2xl text-xs font-bold hover:bg-green-700 transition-all shadow-lg shadow-green-100">
+              <a href={storeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-2.5 text-xs font-bold text-gray-700 shadow-sm transition-all hover:border-green-200 hover:bg-green-50 hover:text-green-700">
                 <ExternalLink size={16} /> Visit Store
               </a>
+              <button onClick={() => openShare(storeData?.storeName || "My Store", storeUrl)} className="flex items-center gap-2 rounded-2xl bg-green-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-green-100 transition-all hover:bg-green-700">
+                <Share2 size={16} /> Share Store
+              </button>
             </div>
           </header>
 
+          <div className="animate-in fade-in duration-500 pb-20">
           {/* 🌟 UPDATED OVERVIEW TAB RENDERING WITH LIVE ANALYTICS */}
           {activeTab === "overview" && (
             <OverviewTab 
@@ -775,12 +788,9 @@ function Dashboard() {
           )}
           {activeTab === "payouts" && currentUser && (<PayoutsTab payoutHistory={payoutHistory} />)}
           {activeTab === "settings" && currentUser && <SettingsTab storeId={currentUser.uid} />}
+          </div>
+        <div className="mt-auto w-full"><Footer /></div>
         </div>
-        <footer className="mt-auto w-full border-t border-gray-100 p-4 text-center md:p-8">
-          <p className="break-words text-[8px] font-black uppercase leading-relaxed tracking-[0.16em] text-gray-600 sm:text-[9px] sm:tracking-[0.3em]">
-            Powered by Zebble Quantum Technologies LTD
-          </p>
-        </footer>
       </main>
 
       {showSyncSuccess && (

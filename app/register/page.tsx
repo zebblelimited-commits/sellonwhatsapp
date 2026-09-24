@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -18,6 +18,7 @@ import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 // Import the Server Action to set Custom Claims
 import { setUserRole } from "@/lib/auth-actions";
 import { triggerWelcomeNotifications } from "@/lib/client-welcome";
+import { REFERRAL_STORAGE_KEY } from "@/components/referrals/ReferralCapture";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
@@ -33,12 +34,23 @@ export default function RegisterPage() {
   // Form Data
   const [formData, setFormData] = useState({
     firstName: "", lastName: "", email: "", password: "", 
-    storeName: "", username: "", address: ""
+    storeName: "", username: "", address: "", referralCode: ""
   });
+
+  useEffect(() => {
+    const queryReferral = new URLSearchParams(window.location.search).get("ref") || "";
+    const storedReferral = localStorage.getItem(REFERRAL_STORAGE_KEY) || "";
+    const referralCode = (queryReferral || storedReferral).trim().toUpperCase();
+    if (referralCode) setFormData((previous) => ({ ...previous, referralCode }));
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setError("");
     const { name, value } = e.target;
+    if (name === "referralCode") {
+      setFormData((previous) => ({ ...previous, referralCode: value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase() }));
+      return;
+    }
     if (name === "username") {
       const cleanValue = value.replace(/[@\s!#$%^&*()_+={}|;:'"<>,.?/|`~\[\]\\]/g, "").toLowerCase();
       setFormData((prev) => ({ ...prev, [name]: cleanValue }));
@@ -114,17 +126,30 @@ export default function RegisterPage() {
             storeName: formData.storeName, 
             username: formData.username
           }),
+          setDoc(doc(db, "users", user.uid), userData, { merge: true }),
           setDoc(doc(db, "usernames", formData.username.toLowerCase()), { 
             uid: user.uid,
             claimedAt: serverTimestamp()
           })
         ]);
       } else {
-        await setDoc(doc(db, "buyers", user.uid), { 
-          ...userData, 
-          address: formData.address 
-        });
+        await Promise.all([
+          setDoc(doc(db, "buyers", user.uid), { ...userData, address: formData.address }),
+          setDoc(doc(db, "users", user.uid), { ...userData, address: formData.address }, { merge: true }),
+        ]);
       }
+
+      const referralResponse = await fetch("/api/referrals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + await user.getIdToken() },
+        body: JSON.stringify({
+          action: "attribute",
+          role,
+          referralCode: formData.referralCode || localStorage.getItem(REFERRAL_STORAGE_KEY) || new URLSearchParams(window.location.search).get("ref") || "",
+          displayName: formData.firstName + " " + formData.lastName,
+        }),
+      });
+      if (referralResponse.ok) localStorage.removeItem(REFERRAL_STORAGE_KEY);
 
       // ✅ Set Custom Claims so Middleware knows their role
       await setUserRole(user.uid, role as "buyer" | "vendor");
@@ -167,6 +192,7 @@ export default function RegisterPage() {
     // ✅ UPDATED: Handle Google Sign-Up for Seller/Buyer
   const handleGoogleSignUp = async () => {
     setIsSaving(true);
+    if (formData.referralCode) localStorage.setItem(REFERRAL_STORAGE_KEY, formData.referralCode);
     setError("");
     try {
       const result = await signInWithPopup(auth, googleProvider);
@@ -197,9 +223,9 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className={`${font.className} flex h-screen bg-white overflow-hidden`}>
+    <main className={`${font.className} auth-shell flex min-h-screen bg-white overflow-hidden`}>
       {/* LEFT SIDEBAR */}
-      <div className="hidden lg:flex lg:w-1/3 relative overflow-hidden bg-green-900">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-green-900">
         <Image src="/images/login1.jpg" alt="Register" fill className="object-cover opacity-60" />
         <div className="absolute inset-0 bg-gradient-to-t from-green-900 via-transparent to-transparent" />
         <div className="absolute bottom-12 left-10 right-10 z-20 text-white font-bold text-2xl whitespace-pre-line">
@@ -208,7 +234,7 @@ export default function RegisterPage() {
       </div>
 
       {/* RIGHT FORM SECTION */}
-      <div className="w-full lg:w-2/3 flex flex-col px-6 md:px-12 lg:px-20 py-8 overflow-y-auto">
+      <div className="w-full lg:w-1/2 flex flex-col px-6 md:px-12 lg:px-20 py-8 overflow-y-auto">
         <div className="max-w-md w-full mx-auto">
           
           {/* Back Button */}
@@ -315,6 +341,11 @@ export default function RegisterPage() {
                 </div>
                 )}
                 
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-700">Referral Code <span className="font-medium text-gray-400">(optional)</span></label>
+                  <input name="referralCode" value={formData.referralCode} onChange={handleChange} placeholder="Enter referral code" className="form-input-compact uppercase" autoCapitalize="characters" />
+                </div>
+
                 <button 
                   type="submit" 
                   disabled={isSaving} 
@@ -352,7 +383,7 @@ export default function RegisterPage() {
             </section>
           )}
 
-          <p className="mt-8 text-center text-xs text-gray-500 font-medium">Already have an account? <Link href="/login" className="text-green-600 font-bold hover:underline">Login</Link></p>
+          <p className="mt-8 w-full text-left text-xs text-gray-500 font-medium"><span>Already have an account?&nbsp;</span><Link href="/login" className="text-green-600 font-bold hover:underline">Login</Link></p>
         </div>
       </div>
 

@@ -269,6 +269,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
             <Link href="/search" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Search</Link>
             <Link href="/pricing" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Pricing</Link>
             <Link href="/boost-store" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Boost Store</Link>
+            <Link href="/referrals" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">Refer &amp; Earn</Link>
             <Link href="/faq" onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-green-50 hover:text-green-700">FAQ</Link>
             {user && vendorUsername && <Link href={`/${vendorUsername}`} onClick={() => setIsMobileMenuOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-green-700 hover:bg-green-50">Visit Store</Link>}
             {user ? (
@@ -364,6 +365,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
           <Link href="/search" className="hover:text-green-600 transition-colors whitespace-nowrap">Search</Link>
           <Link href="/pricing" className="hover:text-green-600 transition-colors whitespace-nowrap">Pricing</Link>
           <Link href="/boost-store" className="hover:text-green-600 transition-colors whitespace-nowrap">Boost Store</Link>
+          <Link href="/referrals" className="hover:text-green-600 transition-colors whitespace-nowrap">Refer &amp; Earn</Link>
           <Link href="/faq" className="hover:text-green-600 transition-colors whitespace-nowrap">FAQ</Link>
         </nav>
 

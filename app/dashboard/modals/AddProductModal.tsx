@@ -293,6 +293,12 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         await updateDoc(storeRef, {
           productCount: increment(1)
         });
+        const referralToken = await user.getIdToken();
+        await fetch("/api/referrals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + referralToken },
+          body: JSON.stringify({ action: "sync" }),
+        });
       }
 
       if (productType === 'booking') {

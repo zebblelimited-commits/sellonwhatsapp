@@ -40,9 +40,9 @@ export default function Footer() {
 
   return (
     <>
-      {/* ✅ UPDATED: Added mx-4 mb-4 and rounded-[13px] for a modern floating footer look */}
-      <footer className={`${font.className} mx-4 mb-4 rounded-[13px] border border-gray-200 bg-white px-6 py-12 text-sm text-gray-600`}>
-        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-10">
+      {/* ✅ UPDATED: Added mb-4 and rounded-[13px] for a modern floating footer look */}
+      <footer className={`${font.className} mb-4 rounded-[13px] border border-gray-200 bg-white px-6 py-12 text-sm text-gray-600`}>
+        <div className="w-full grid grid-cols-1 md:grid-cols-4 gap-10">
 
           {/* Section 1: Logo & About */}
           <div className="flex flex-col gap-4">
@@ -86,6 +86,7 @@ export default function Footer() {
               <li><Link href="/verified-stores" className="hover:text-green-600 transition-colors">Verified Stores</Link></li>
               <li><Link href="/sponsored-stores" className="hover:text-green-600 transition-colors">Sponsored Stores</Link></li>
               <li><Link href="/sponsored-products" className="hover:text-green-600 transition-colors">Sponsored Products</Link></li>
+              <li><Link href="/referrals" className="hover:text-green-600 transition-colors">Referral Leaderboard</Link></li>
               <li><Link href="/how-it-works" className="hover:text-green-600 transition-colors">How it works</Link></li>
               <li><Link href="/pricing" className="hover:text-green-600 transition-colors">Pricing</Link></li>
               <li><Link href="/boost-store" className="hover:text-green-600 transition-colors">Boost Store</Link></li>

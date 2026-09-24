@@ -190,7 +190,7 @@ export default function LoginPage() {
   };
 
   return (
-    <main className={`${font.className} flex min-h-screen bg-white`}>
+    <main className={`${font.className} auth-shell flex min-h-screen bg-white`}>
       {/* LEFT SECTION */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gray-900">
         {slides.map((slide, index) => (
@@ -304,7 +304,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="mt-auto pt-8 text-center lg:text-left">
+        <div className="mt-8 pt-8 text-center">
           <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
             © {new Date().getFullYear()} Zebble Quantum Solutions LTD.
           </p>

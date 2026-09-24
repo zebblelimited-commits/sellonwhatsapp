@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
+import { adminDb, adminAuth } from "@/lib/firebase-admin";
+import { syncReferralMilestones } from "@/lib/referrals";
 
 export async function POST(request: NextRequest) {
     try {
         const { userId, productPayload } = await request.json();
+        const authorization = request.headers.get("authorization");
+        if (!authorization?.startsWith("Bearer ")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const decoded = await adminAuth.verifyIdToken(authorization.slice("Bearer ".length).trim());
+        if (decoded.uid !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
         if (!userId) {
             return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
@@ -38,6 +43,7 @@ export async function POST(request: NextRequest) {
             userId,
             createdAt: new Date().toISOString()
         });
+        await syncReferralMilestones(userId);
 
         return NextResponse.json({ success: true, id: docRef.id });
 

@@ -11,7 +11,7 @@ import {
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import {
-  Users, Store, CreditCard, Landmark, AlertTriangle, TrendingUp, Clock,
+  Users, Store, CreditCard, Wallet, Landmark, AlertTriangle, TrendingUp, Clock,
   CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight, Loader2,
   Search, Bell, ShieldCheck, ChevronRight, Eye, Flag, MessageSquare,
   LayoutDashboard, Settings, LogOut, SlidersHorizontal, ClipboardList, Send, ArrowLeft, MoreVertical, User, Phone, FileText, X, Menu, Package, Truck
@@ -26,6 +26,7 @@ import AdminSettingsPanel from "@/components/admin/AdminSettingsPanel";
 import AdminAuditLogsTab from "@/components/admin/AdminAuditLogsTab";
 import AdminVerificationsPanel from "@/components/admin/AdminVerificationsTab";
 import AdminBankVerificationsTab from "@/components/admin/AdminBankVerificationsTab";
+import AdminReferralPayoutsTab from "@/components/admin/AdminReferralPayoutsTab";
 import AdminProductsTab from "@/components/admin/AdminProductsTab";
 import AdminShipping from "@/components/admin/AdminShipping Tab";
 import AdminSearchAnalyticsTab from "@/components/admin/AdminSearchAnalyticsTab";
@@ -1682,6 +1683,7 @@ export default function AdminDashboard() {
       case "orders": return <AdminOrdersTab />;
       case "shipping": return <AdminShipping />;
       case "payouts": return <AdminPayoutsTab />;
+      case "referral-payouts": return <AdminReferralPayoutsTab />;
       case "disputes": return <AdminDisputesTab />;
       case "notifications": return <AdminNotificationsTab />;
       case "chat": return <AdminChatTab initialChats={chats} />;
@@ -1730,6 +1732,7 @@ export default function AdminDashboard() {
               <NavItem icon={<ClipboardList size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => handleTabChange("orders")} />
               <NavItem icon={<Truck size={18} />} label="Shipping" active={activeTab === "shipping"} onClick={() => handleTabChange("shipping")} />
               <NavItem icon={<CreditCard size={18} />} label="Payouts" active={activeTab === "payouts"} onClick={() => handleTabChange("payouts")} badge={stats.pendingPayouts > 0 ? stats.pendingPayouts : null} />
+              <NavItem icon={<Wallet size={18} />} label="Referral payouts" active={activeTab === "referral-payouts"} onClick={() => handleTabChange("referral-payouts")} />
               <NavItem icon={<AlertTriangle size={18} />} label="Disputes" active={activeTab === "disputes"} onClick={() => handleTabChange("disputes")} badge={stats.openDisputes > 0 ? stats.openDisputes : null} />
               <NavItem icon={<MessageSquare size={18} />} label="Chat" active={activeTab === "chat"} onClick={() => handleTabChange("chat")} badge={totalUnreadChats > 0 ? totalUnreadChats : null} />
               <NavItem icon={<Bell size={18} />} label="Notifications" active={activeTab === "notifications"} onClick={() => handleTabChange("notifications")} />
@@ -1763,6 +1766,7 @@ export default function AdminDashboard() {
           <NavItem icon={<ClipboardList size={18} />} label="Orders" active={activeTab === "orders"} onClick={() => handleTabChange("orders")} />
           <NavItem icon={<Truck size={18} />} label="Shipping" active={activeTab === "shipping"} onClick={() => handleTabChange("shipping")} />
           <NavItem icon={<CreditCard size={18} />} label="Payouts" active={activeTab === "payouts"} onClick={() => handleTabChange("payouts")} badge={stats.pendingPayouts > 0 ? stats.pendingPayouts : null} />
+          <NavItem icon={<Wallet size={18} />} label="Referral payouts" active={activeTab === "referral-payouts"} onClick={() => handleTabChange("referral-payouts")} />
           <NavItem icon={<AlertTriangle size={18} />} label="Disputes" active={activeTab === "disputes"} onClick={() => handleTabChange("disputes")} badge={stats.openDisputes > 0 ? stats.openDisputes : null} />
           <NavItem icon={<MessageSquare size={18} />} label="Chat" active={activeTab === "chat"} onClick={() => handleTabChange("chat")} badge={totalUnreadChats > 0 ? totalUnreadChats : null} />
           <NavItem icon={<Bell size={18} />} label="Notifications" active={activeTab === "notifications"} onClick={() => handleTabChange("notifications")} />
@@ -1803,6 +1807,7 @@ export default function AdminDashboard() {
                       activeTab === "orders" ? "Monitor marketplace orders and escrow states" :
                         activeTab === "shipping" ? "Monitor courier handoffs and delivery operations" :
                         activeTab === "payouts" ? "Review and approve vendor payout requests" :
+                        activeTab === "referral-payouts" ? "Review referral wallet withdrawal requests" :
                           activeTab === "disputes" ? "Review and resolve customer disputes" :
                             activeTab === "chat" ? "Real-time support & user communication hub" :
                               activeTab === "notifications" ? "Broadcast announcements to users or vendors" :

@@ -60,6 +60,14 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [shareData, setShareData] = useState({ isOpen: false, url: "", title: "" });
+  const [referralCode, setReferralCode] = useState("");
+
+  const withReferral = (url: string) => {
+    if (!referralCode || typeof window === "undefined") return url;
+    const nextUrl = new URL(url, window.location.origin);
+    nextUrl.searchParams.set("ref", referralCode);
+    return nextUrl.toString();
+  };
 
   // Direct Checkout Modal State for Non-Shipping Items
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
@@ -111,10 +119,19 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
     }
     void fetchData();
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user && user.email) {
         setCustomerEmail(user.email);
         if (user.displayName) setCustomerName(user.displayName);
+        try {
+          const token = await user.getIdToken();
+          const response = await fetch("/api/referrals", { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+          const payload = await response.json().catch(() => ({}));
+          if (response.ok) setReferralCode(payload.wallet?.referralCode || "");
+          await fetch("/api/referrals", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ action: "activity" }) });
+        } catch (referralError) {
+          console.error("Referral activity could not be recorded:", referralError);
+        }
       }
     });
 
@@ -359,7 +376,7 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
                   <button
                     onClick={() => {
                       trackStoreClick();
-                      setShareData({ isOpen: true, title: storeData.storeName, url: window.location.href });
+                      setShareData({ isOpen: true, title: storeData.storeName, url: withReferral(window.location.href) });
                     }}
                     className="p-2 border border-gray-100 rounded-xl hover:bg-gray-50 text-gray-600"
                   >
@@ -415,7 +432,7 @@ export default function PublicStorePage({ params }: { params: Promise<{ username
                   <button
                     onClick={() => {
                       if (vendorId) void trackMetric(vendorId, "click", { productId: p.id });
-                      setShareData({ isOpen: true, title: p.name, url: productFullUrl });
+                      setShareData({ isOpen: true, title: p.name, url: withReferral(productFullUrl) });
                     }}
                     className="absolute top-3 right-3 z-20 p-2 bg-white/90 backdrop-blur rounded-full text-gray-500 hover:text-gray-900 shadow-sm transition-all active:scale-90"
                   >
