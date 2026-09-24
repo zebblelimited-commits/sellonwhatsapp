@@ -549,7 +549,7 @@ export default function QrCodeModal({
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative animate-in fade-in zoom-in duration-200">
                     {/* Close Button */}
                     <button
-                        onClick={onClose}
+                        onClick={async () => { await stopScanning(); onClose(); }}
                         className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors z-10"
                         aria-label="Close modal"
                     >
@@ -578,7 +578,7 @@ export default function QrCodeModal({
 
                     {/* Content */}
                     <div className="p-6">
-                        {activeTab === "generate" ? (
+                        <>
                             <div className="flex flex-col items-center space-y-6">
                                 {/* QR Code */}
                                 <div className="bg-[#f5f5f5] p-6 rounded-[10px] border border-gray-100 shadow-inner flex items-center justify-center min-h-[290px] w-full overflow-hidden">
@@ -617,8 +617,22 @@ export default function QrCodeModal({
                                     </button>
                                 </div>
                             </div>
-                        ) : (
-                            <div key="scanner-view" className="flex flex-col items-center justify-center space-y-4 py-4 w-full">
+                            <div className={activeTab === "scan" ? "flex flex-col items-center justify-center space-y-4 py-4 w-full" : "hidden"}>
+                                <div
+                                    id="qr-reader"
+                                    className={(scanResult ? "hidden " : "") + "w-full max-w-[300px] rounded-[10px] overflow-hidden bg-gray-900 flex items-center justify-center min-h-[300px] relative"}
+                                >
+                                    {!isScanning && (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            </svg>
+                                            <p className="text-sm">{isStarting ? "Starting camera…" : "Camera is off"}</p>
+                                        </div>
+                                    )}
+                                </div>
+
                                 {scanResult ? (
                                     <div className="text-center space-y-4 w-full">
                                         <div className="bg-green-50 border border-[#09A03D]/20 rounded-xl p-4">
@@ -638,18 +652,6 @@ export default function QrCodeModal({
                                     </div>
                                 ) : (
                                     <>
-                                        <div id="qr-reader" className="w-full max-w-[300px] rounded-[10px] overflow-hidden bg-gray-900 flex items-center justify-center min-h-[300px] relative">
-                                            {!isScanning && (
-                                                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                    </svg>
-                                                    <p className="text-sm">{isStarting ? "Starting camera…" : "Camera is off"}</p>
-                                                </div>
-                                            )}
-                                        </div>
-
                                         {scannerError && <div role="alert" className="w-full max-w-[300px] rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-xs leading-5 text-red-700">{scannerError}</div>}
 
                                         {!isScanning ? (
@@ -662,7 +664,7 @@ export default function QrCodeModal({
                                             </button>
                                         ) : (
                                             <button
-                                                onClick={stopScanning}
+                                                onClick={() => void stopScanning()}
                                                 className="w-full max-w-[300px] bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-8 rounded-[12px] transition-colors shadow-sm"
                                             >
                                                 Stop Scanning
@@ -675,7 +677,7 @@ export default function QrCodeModal({
                                     </>
                                 )}
                             </div>
-                        )}
+                        </>
                     </div>
                 </div>
             </div>
