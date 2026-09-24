@@ -46,9 +46,13 @@ export default function QrCodeModal({
     const qrCodeRef = useRef<HTMLDivElement>(null);
     const qrCodeInstance = useRef<QRCodeStyling | null>(null);
     const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+    const stopPromiseRef = useRef<Promise<void> | null>(null);
+    const hasDecodedRef = useRef(false);
 
     const [isScanning, setIsScanning] = useState(false);
     const [scanResult, setScanResult] = useState<string | null>(null);
+    const [scannerError, setScannerError] = useState<string | null>(null);
+    const [isStarting, setIsStarting] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
     // Ensure the correct tab is selected every time the modal opens
@@ -155,43 +159,107 @@ export default function QrCodeModal({
     /*
      * 2. Camera Scanner
      */
-    const startScanning = async () => {
-        if (!html5QrCodeRef.current) {
-            html5QrCodeRef.current = new Html5Qrcode("qr-reader");
+    const stopScanning = async () => {
+        if (stopPromiseRef.current) {
+            await stopPromiseRef.current;
+            return;
         }
 
-        try {
-            await html5QrCodeRef.current.start(
-                { facingMode: "environment" },
-                { fps: 10, qrbox: { width: 250, height: 250 } },
-                (decodedText) => {
-                    setScanResult(decodedText);
-                    stopScanning();
-                },
-                () => {
-                    // Ignore scan errors
-                }
-            );
-            setIsScanning(true);
-        } catch (err) {
-            console.error("Camera error:", err);
-            alert(
-                "Could not access camera. Please ensure:\n\n" +
-                "1. You are using HTTPS or localhost.\n" +
-                "2. You have granted camera permissions."
-            );
+        const scanner = html5QrCodeRef.current;
+        if (!scanner) {
+            setIsScanning(false);
+            return;
         }
+
+        if (!scanner.isScanning) {
+            setIsScanning(false);
+            return;
+        }
+
+        const stopPromise = scanner.stop()
+            .catch((error) => {
+                console.warn("QR scanner cleanup failed:", error);
+            })
+            .finally(() => {
+                stopPromiseRef.current = null;
+                setIsScanning(false);
+            });
+
+        stopPromiseRef.current = stopPromise;
+        await stopPromise;
     };
 
-    const stopScanning = async () => {
+    const getCameraErrorMessage = (error: unknown) => {
+        const name = error instanceof DOMException ? error.name : "";
+        if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+            return "Camera permission was blocked. Allow camera access for this site in your browser address-bar settings, then try again.";
+        }
+        if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+            return "No camera was found. Connect a camera and try again.";
+        }
+        if (name === "NotReadableError" || name === "TrackStartError") {
+            return "The camera is already being used by another application. Close that app and try again.";
+        }
+        if (name === "SecurityError" || (!window.isSecureContext && window.location.hostname !== "localhost")) {
+            return "Camera access requires HTTPS or localhost. Open this site over HTTPS and try again.";
+        }
+        return error instanceof Error ? error.message : "The camera could not be started. Check your browser camera permission and try again.";
+    };
+
+    const startScanning = async () => {
+        if (isStarting || html5QrCodeRef.current?.isScanning) return;
+
+        setScannerError(null);
+        hasDecodedRef.current = false;
+        setIsStarting(true);
+
         try {
-            if (html5QrCodeRef.current) {
-                await html5QrCodeRef.current.stop();
+            if (typeof window === "undefined") return;
+            if (!window.isSecureContext && !["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)) {
+                throw new Error("Camera access requires HTTPS or localhost.");
             }
+
+            const reader = document.getElementById("qr-reader");
+            if (!reader) throw new Error("The QR scanner is not ready. Close and reopen the QR Code panel.");
+
+            if (!navigator.mediaDevices?.getUserMedia) throw new Error("This browser does not support camera access.");
+
+            const cameras = await Html5Qrcode.getCameras();
+            if (!cameras.length) throw new Error("No camera was found on this device.");
+
+            if (!html5QrCodeRef.current) {
+                html5QrCodeRef.current = new Html5Qrcode("qr-reader");
+            }
+
+            const readerAfterPermission = document.getElementById("qr-reader");
+            if (!readerAfterPermission) return;
+
+            const preferredCamera = cameras.find((camera) => /back|rear|environment/i.test(camera.label)) || cameras[0];
+            setScanResult(null);
+
+            await html5QrCodeRef.current.start(
+                preferredCamera.id,
+                { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1 },
+                async (decodedText) => {
+                    if (hasDecodedRef.current) return;
+                    hasDecodedRef.current = true;
+                    await stopScanning();
+                    setScanResult(decodedText);
+                },
+                () => {
+                    // A frame without a QR code is expected while scanning.
+                },
+            );
+
+            setIsScanning(true);
         } catch (error) {
-            console.error("Error stopping scanner:", error);
+            console.error("QR camera error:", error);
+            if (html5QrCodeRef.current?.isScanning) {
+                await stopScanning();
+            }
+            setScannerError(getCameraErrorMessage(error));
         } finally {
-            setIsScanning(false);
+            setIsStarting(false);
         }
     };
 
@@ -200,19 +268,17 @@ export default function QrCodeModal({
      */
     useEffect(() => {
         if (!isOpen || activeTab !== "scan") {
-            if (html5QrCodeRef.current && isScanning) {
-                html5QrCodeRef.current.stop().catch(() => { });
-                setIsScanning(false);
-            }
             setScanResult(null);
+            setScannerError(null);
+            void stopScanning();
         }
 
         return () => {
-            if (html5QrCodeRef.current && isScanning) {
-                html5QrCodeRef.current.stop().catch(() => { });
-            }
+            void stopScanning();
         };
-    }, [isOpen, activeTab, isScanning]);
+        // The scanner instance is stored in a ref so cleanup can safely run during modal/tab changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, activeTab]);
 
     /*
      * Escape HTML
@@ -562,7 +628,8 @@ export default function QrCodeModal({
                                         <button
                                             onClick={() => {
                                                 setScanResult(null);
-                                                startScanning();
+                                                setScannerError(null);
+                                                window.setTimeout(() => { void startScanning(); }, 0);
                                             }}
                                             className="w-full bg-[#09A03D] hover:bg-[#078030] text-white font-semibold py-3 px-8 rounded-[12px] transition-colors shadow-sm"
                                         >
@@ -578,17 +645,20 @@ export default function QrCodeModal({
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                                                     </svg>
-                                                    <p className="text-sm">Camera is off</p>
+                                                    <p className="text-sm">{isStarting ? "Starting camera…" : "Camera is off"}</p>
                                                 </div>
                                             )}
                                         </div>
 
+                                        {scannerError && <div role="alert" className="w-full max-w-[300px] rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-xs leading-5 text-red-700">{scannerError}</div>}
+
                                         {!isScanning ? (
                                             <button
-                                                onClick={startScanning}
-                                                className="w-full max-w-[300px] bg-[#09A03D] hover:bg-[#078030] text-white font-semibold py-3 px-8 rounded-[12px] transition-colors shadow-sm flex items-center justify-center gap-2"
+                                                onClick={() => void startScanning()}
+                                                disabled={isStarting}
+                                                className="w-full max-w-[300px] bg-[#09A03D] hover:bg-[#078030] text-white font-semibold py-3 px-8 rounded-[12px] transition-colors shadow-sm flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                                             >
-                                                Start Scanning
+                                                {isStarting ? "Requesting camera…" : "Start Scanning"}
                                             </button>
                                         ) : (
                                             <button
