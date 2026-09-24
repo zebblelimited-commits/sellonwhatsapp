@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
     const verified = await lookupNombaBankAccount(bankCode, accountNumber);
     const settings = { bankName, bankCode, accountNumber: verified.accountNumber, accountName: verified.accountName, status: "pending_review", submittedAt: FieldValue.serverTimestamp() };
     await adminDb.collection("users").doc(decoded.uid).set({ referralPayoutSettings: settings, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    try { const adminsSnapshot = await adminDb.collection("admins").where("isActive", "==", true).get(); const batch = adminDb.batch(); adminsSnapshot.docs.forEach((admin) => { const notification = adminDb.collection("notifications").doc(); batch.set(notification, { recipientId: admin.id, recipientRole: "admin", adminId: admin.id, type: "referral_payout_account", priority: "high", title: "Referral payout account submitted", body: "A user submitted a referral payout account for review: " + bankName + " ****" + accountNumber.slice(-4), userId: decoded.uid, actionUrl: "/admin?tab=referral-payouts", read: false, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }); }); await batch.commit(); } catch (notificationError) { console.error("Referral payout admin notification failed:", notificationError); }
     return NextResponse.json({ success: true, payoutSettings: { ...settings, submittedAt: new Date().toISOString() } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to save payout account";

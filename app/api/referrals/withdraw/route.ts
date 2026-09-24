@@ -31,7 +31,9 @@ export async function POST(request: NextRequest) {
       const availablePoints = Number(wallet.availablePoints || 0);
       const payoutSettings = user.referralPayoutSettings;
       if (!payoutSettings?.bankCode || !payoutSettings?.accountNumber) throw new Error("Add your referral payout bank account first");
-      if (String(payoutSettings.status || "").toLowerCase() === "rejected") throw new Error("Your referral payout account was rejected. Update it and try again.");
+      const payoutStatus = String(payoutSettings.status || "").toLowerCase();
+      if (payoutStatus === "rejected") throw new Error("Your referral payout account was rejected. Update it and try again.");
+      if (!["approved", "verified"].includes(payoutStatus)) throw new Error("Your referral payout account is still pending review.");
       if (availablePoints < requestedPoints) throw new Error(`Insufficient available points. Your balance is ₦${availablePoints.toLocaleString()}.`);
       transaction.update(userReference, {
         referralWallet: {

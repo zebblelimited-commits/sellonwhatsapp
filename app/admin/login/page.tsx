@@ -129,7 +129,7 @@ export default function AdminLogin() {
   };
 
   return (
-    <main className={`${font.className} flex min-h-screen bg-white`}>
+    <main className={`${font.className} auth-shell flex min-h-screen bg-white overflow-hidden`}>
       {/* LEFT SECTION: Image Carousel */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gray-900">
         {slides.map((slide, index) => (

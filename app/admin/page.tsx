@@ -1750,7 +1750,7 @@ export default function AdminDashboard() {
         </div>
       )}
       {/* Sidebar - Matches buyer dashboard */}
-      <aside className="sticky top-0 hidden h-screen w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
+      <aside className="dashboard-sidebar sticky top-0 hidden w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
         <div className="flex items-center px-2 py-2 mb-6">
           <div className="flex items-center gap-2">
             <Image src="/icon.png" alt="SellOnWhatsapp" width={32} height={32} className="h-8 w-8 rounded-xl object-cover" />
