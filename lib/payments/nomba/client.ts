@@ -319,8 +319,11 @@ export async function lookupNombaBankAccount(bankCode: string, accountNumber: st
 
 export async function listNombaBanks(config?: NombaConfig): Promise<unknown[]> {
   const result = await nombaRequest<JsonObject>("v1/transfers/banks", { method: "GET" }, config);
-  const data = responseData(result);
-  return Array.isArray(data) ? data : Array.isArray(data.banks) ? data.banks : [];
+  const payload = result as JsonObject;
+  const data = payload.data;
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object" && Array.isArray((data as JsonObject).banks)) return (data as JsonObject).banks;
+  return Array.isArray(payload.banks) ? payload.banks : [];
 }
 
 export async function initiateNombaBankTransfer(request: PayoutRequest, config?: NombaConfig): Promise<PayoutResponse> {

@@ -46,7 +46,6 @@ export async function POST(request) {
         bankCode,
         accountNumber: verified.accountNumber,
         accountName: verified.accountName,
-        verificationSessionId: verified.sessionId,
         submittedAt: new Date(),
       },
       payoutStatus: "PENDING_REVIEW",
@@ -56,6 +55,7 @@ export async function POST(request) {
     return NextResponse.json({ success: true, accountName: verified.accountName, accountNumber: verified.accountNumber });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to save payout settings";
-    return NextResponse.json({ error: message }, { status: message === "Unauthorized" ? 401 : 400 });
+    const status = message === "Unauthorized" ? 401 : typeof error?.status === "number" ? error.status : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 }

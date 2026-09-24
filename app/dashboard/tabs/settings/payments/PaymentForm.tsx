@@ -102,9 +102,9 @@ export default function PaymentForm({ storeId, initialData, onComplete }: { stor
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Account Name</label>
-            <input placeholder="Enter Full Account Name" value={formData.accountName} onChange={(e) => setFormData({ ...formData, accountName: e.target.value })} className="p-3 bg-gray-50 border border-gray-100 rounded-2xl text-xs font-bold outline-none focus:bg-white focus:border-green-200 transition-all" />
-            <p className="text-[10px] text-gray-400">Must match the name on your bank account for verification.</p>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Verified Account Name</label>
+            <input placeholder="Verified by Nomba after lookup" value={formData.accountName} readOnly className="p-3 bg-gray-50 border border-gray-100 rounded-2xl text-xs font-bold outline-none focus:bg-white focus:border-green-200 transition-all" />
+            <p className="text-[10px] text-gray-400">Nomba supplies the verified account name after lookup.</p>
           </div>
         </div>
 
