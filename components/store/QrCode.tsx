@@ -243,8 +243,30 @@ export default function QrCodeModal({
                 async (decodedText) => {
                     if (hasDecodedRef.current) return;
                     hasDecodedRef.current = true;
+
+                    const rawValue = decodedText.trim();
+                    let destination: URL;
+                    try {
+                        const candidate = /^https?:\/\//i.test(rawValue)
+                            ? rawValue
+                            : rawValue.startsWith("/")
+                                ? new URL(rawValue, window.location.origin).href
+                                : "https://" + rawValue;
+                        destination = new URL(candidate);
+                    } catch {
+                        hasDecodedRef.current = false;
+                        setScannerError("This QR code does not contain a valid web link.");
+                        return;
+                    }
+
+                    if (!["http:", "https:"].includes(destination.protocol)) {
+                        hasDecodedRef.current = false;
+                        setScannerError("Only HTTP and HTTPS links can be opened.");
+                        return;
+                    }
+
                     await stopScanning();
-                    setScanResult(decodedText);
+                    window.location.assign(destination.href);
                 },
                 () => {
                     // A frame without a QR code is expected while scanning.
