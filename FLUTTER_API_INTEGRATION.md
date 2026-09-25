@@ -386,24 +386,26 @@ GET  /api/cron/escrow-expiry
 
 The Flutter application must never receive Nomba client secrets, webhook secrets, cron secrets, Firebase Admin credentials, or Novu keys.
 
-## 8. Catalog and realtime gap to resolve before release
+## 8. Catalog and realtime APIs
 
-The current web client reads some public storefront/catalog data directly from Firestore. The API route inventory does not yet provide a complete public catalog GET surface. For a stable mobile contract, add read-only routes before the Flutter browse experience is finalized:
+The web app now exposes a server-side catalog contract for Flutter. These routes apply the same public visibility rules used by the website and return sanitized DTOs rather than raw Firestore documents:
 
 ```text
-GET /api/stores
+GET /api/stores?limit=24&page=1&search=&category=&verified=true
 GET /api/stores/{storeId-or-username}
-GET /api/stores/{storeId}/products
+GET /api/stores/{storeId-or-username}/products?limit=24&page=1&search=
+GET /api/products?limit=24&page=1&search=&category=&storeId=&sponsored=true&sort=popular
 GET /api/products/{productId}
 GET /api/homepage
-GET /api/notifications
-PATCH /api/notifications/{id}/read
+GET /api/notifications                 (Firebase bearer token required)
+PATCH /api/notifications/{id}/read     (Firebase bearer token required)
 ```
 
-These routes should return stable DTOs, pagination cursors, explicit field names, and server-side filtering. Do not expose unrestricted Firestore queries merely to make the first mobile screen work. If Flutter uses Firestore temporarily for public reads, verify the Firestore rules and treat that as an interim implementation.
+Catalog list responses use `stores` or `products` resource arrays and include `page`, `limit`, `total`, and `hasMore`. Store and product timestamps are returned as Unix milliseconds. Public DTOs intentionally exclude seller balances, payout settings, Nomba account identifiers, owner credentials, and other server-only fields.
 
-Chat and some dashboard activity currently rely on Firestore listeners in the web experience. For the first mobile release, use Firestore listeners only where rules allow it, or add authenticated API/listener contracts for chat lists, messages, and notifications. Firebase Cloud Messaging should be used for background notifications; the API's notification routes trigger workflows but are not a complete notification inbox API.
+The current website may continue using its existing Firestore listeners; these APIs are additive and do not replace the web implementation. Flutter should use the APIs above for browse/search/store/product screens. The notification list is authenticated and merges notifications addressed to the current buyer, vendor, user, or admin ID. It is not a public endpoint.
 
+Chat and some dashboard activity still rely on Firestore listeners in the web experience. For the first mobile release, use Firestore listeners only where rules allow it, or add authenticated API/listener contracts for chat lists and messages. Firebase Cloud Messaging should be used for background notifications; the notification routes provide the inbox read path but do not replace FCM delivery.
 ## 9. Uploads and images
 
 Do not upload files to a provider directly with a secret embedded in Flutter. The recommended flow is:
