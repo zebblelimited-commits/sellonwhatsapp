@@ -579,7 +579,7 @@ export default function QrCodeModal({
                     {/* Content */}
                     <div className="p-6">
                         <>
-                            <div className="flex flex-col items-center space-y-6">
+                            <div className={activeTab === "generate" ? "flex flex-col items-center space-y-6" : "hidden"}>
                                 {/* QR Code */}
                                 <div className="bg-[#f5f5f5] p-6 rounded-[10px] border border-gray-100 shadow-inner flex items-center justify-center min-h-[290px] w-full overflow-hidden">
                                     <div ref={qrCodeRef} className="flex justify-center items-center" />
@@ -618,14 +618,15 @@ export default function QrCodeModal({
                                 </div>
                             </div>
                             <div className={activeTab === "scan" ? "flex flex-col items-center justify-center space-y-4 py-4 w-full" : "hidden"}>
-                                <div
-                                    id="qr-reader"
-                                    className={(scanResult ? "hidden " : "") + "w-full max-w-[300px] rounded-[10px] overflow-hidden bg-gray-900 flex items-center justify-center min-h-[300px] relative"}
-                                >
+                                <div className="relative w-full max-w-[300px] min-h-[300px]">
+                                    <div
+                                        id="qr-reader"
+                                        className={(scanResult ? "hidden " : "") + "w-full h-full min-h-[300px] rounded-[10px] overflow-hidden bg-gray-900"}
+                                    />
                                     {!isScanning && (
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 pointer-events-none">
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                                             </svg>
                                             <p className="text-sm">{isStarting ? "Starting camera…" : "Camera is off"}</p>
