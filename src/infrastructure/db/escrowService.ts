@@ -37,6 +37,10 @@ const finiteAmount = (value: unknown) => {
     return Number.isFinite(amount) ? amount : 0;
 };
 
+// Nomba checkout sessions should have a bounded payment window. Keep this
+// server-side so clients cannot extend an order's payment lifetime.
+const DEFAULT_PAYMENT_WINDOW_MS = 30 * 60 * 1000;
+
 const eventDocumentId = (eventId: string) => eventId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120);
 
 /** Creates an idempotent ledger record before presenting a virtual account. */
@@ -59,7 +63,7 @@ export async function createEscrowRecord(input: CreateEscrowInput) {
         virtualAccountBankName: input.virtualAccountBankName || null,
         paymentProvider: input.paymentProvider || "nomba",
         status: "PENDING_PAYMENT" as EscrowStatus,
-        expiryDate: input.expiryDate || null,
+        expiryDate: input.expiryDate || new Date(Date.now() + DEFAULT_PAYMENT_WINDOW_MS),
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
     };
@@ -100,7 +104,11 @@ export async function fundEscrowAndOrders(input: FundingInput) {
         if (expectedAmount <= 0 || paidAmount < expectedAmount) {
             throw new Error(`Nomba payment amount is below the escrow amount (${paidAmount}/${expectedAmount})`);
         }
-        if (!["PENDING_PAYMENT", "FUNDED"].includes(String(escrow.status))) {
+        // A payment callback can arrive after the expiry worker has marked a
+        // still-unfunded checkout as EXPIRED. Once Nomba confirms the payment,
+        // it is safe to fund the escrow and restore the order to PAID_HELD.
+        // The caller must have already verified the provider transaction.
+        if (!["PENDING_PAYMENT", "FUNDED", "EXPIRED"].includes(String(escrow.status))) {
             throw new Error(`Escrow cannot be funded from status ${escrow.status}`);
         }
 
@@ -236,6 +244,9 @@ export async function expirePendingEscrow(externalReference: string) {
         if (!snapshot.exists) return false;
         const data = snapshot.data() || {};
         if (data.status !== "PENDING_PAYMENT") return false;
+        // Missing expiry dates must never become new Date(null) (Unix epoch),
+        // otherwise every legacy pending checkout is expired immediately.
+        if (!data.expiryDate) return false;
         const expiry = data.expiryDate?.toDate ? data.expiryDate.toDate() : new Date(data.expiryDate);
         if (Number.isNaN(expiry.getTime()) || expiry.getTime() > Date.now()) return false;
         transaction.update(ref, { status: "EXPIRED" as EscrowStatus, expiredAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });

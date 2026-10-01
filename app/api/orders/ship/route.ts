@@ -38,7 +38,12 @@ export async function POST(request: NextRequest) {
       if (vendorId !== decoded.uid) throw new ShipOrderError("You cannot update this order", 403);
 
       // Detect if order is non-physical / service
-      const isSelfArranged = order.shippingMethod === "self_arranged" || order.deliveryMode === "self_arranged";
+      const orderIsSelfArranged = order.shippingMethod === "self_arranged" || order.deliveryMode === "self_arranged";
+      const requestedSelfArranged = carrier.toLowerCase() === "self_arranged";
+      if (requestedSelfArranged && !orderIsSelfArranged) {
+        throw new ShipOrderError("This order was not placed with self-arranged delivery", 409);
+      }
+      const isSelfArranged = orderIsSelfArranged || requestedSelfArranged;
       const isServiceOrBooking =
         order.productType === 'service' ||
         order.productType === 'booking' ||
@@ -52,10 +57,19 @@ export async function POST(request: NextRequest) {
       }
 
       const rawStatus = String(order.status || "").toUpperCase();
+      const fundsState = String(order.fundsState || "").toLowerCase();
+      const paymentStatus = String(order.paymentStatus || "").toLowerCase();
+      const paymentHeld = fundsState === "held" || (
+        paymentStatus === "paid" &&
+        ["PAID_HELD", "SHIPPED", "OUT_FOR_DELIVERY", "WORK_DONE", "COMPLETED_PENDING_BUYER"].includes(rawStatus)
+      );
+      if (!paymentHeld) {
+        throw new ShipOrderError("Payment must be confirmed and held in escrow before handover", 409);
+      }
 
       // If already shipped or completed, return early
       if (["SHIPPED", "WORK_DONE", "COMPLETED_PENDING_BUYER"].includes(rawStatus)) {
-        return { alreadyUpdated: true, status: rawStatus, notificationOrder: null };
+        return { alreadyUpdated: true, status: rawStatus, isSelfArranged, notificationOrder: null };
       }
 
       if (!["PAID_HELD", "PENDING", "IN_PROGRESS"].includes(rawStatus)) {
@@ -67,6 +81,7 @@ export async function POST(request: NextRequest) {
 
       const updatePayload: Record<string, any> = {
         status: nextStatus,
+        deliveryStatus: "IN_TRANSIT",
         shippedAt: now,
         updatedAt: now,
       };
@@ -74,6 +89,10 @@ export async function POST(request: NextRequest) {
       if (!isServiceOrBooking) {
         if (trackingId) updatePayload.trackingId = trackingId;
         updatePayload.carrier = carrier || "Self-arranged";
+        updatePayload.courierName = carrier || order.courierName || "Self-arranged";
+        updatePayload.handoverMethod = isSelfArranged ? "self_arranged" : "courier";
+        updatePayload.handoverAt = now;
+        updatePayload.handoverBy = decoded.uid;
       }
 
       transaction.update(orderRef, updatePayload);
@@ -82,17 +101,19 @@ export async function POST(request: NextRequest) {
       if (typeof order.buyerId === "string" && order.buyerId) {
         transaction.create(adminDb.collection("notifications").doc(), {
           buyerId: order.buyerId,
-          type: isServiceOrBooking ? "service_completed" : "order_shipped",
+          type: isServiceOrBooking ? "service_completed" : (isSelfArranged ? "order_handover" : "order_shipped"),
           orderId,
           message: isServiceOrBooking
             ? `Work for your order from ${order.storeName || "the provider"} has been completed. Please review and release funds.`
-            : `Your order from ${order.storeName || "the seller"} is now in transit.`,
+            : isSelfArranged
+              ? `The seller has handed over your order from ${order.storeName || "the seller"}. It is now in transit.`
+              : `Your order from ${order.storeName || "the seller"} has been handed over to ${carrier || order.courierName || "the courier"} and is now in transit.`,
           read: false,
           createdAt: now,
         });
       }
 
-      return { alreadyUpdated: false, status: nextStatus, notificationOrder: { id: orderSnap.id, ...order } };
+      return { alreadyUpdated: false, status: nextStatus, isSelfArranged, notificationOrder: { id: orderSnap.id, ...order } };
     });
 
     // Keep the shipment timeline aligned with the seller's manual handoff
@@ -103,9 +124,14 @@ export async function POST(request: NextRequest) {
       if (!shipmentSnap.empty) {
         await shipmentSnap.docs[0].ref.update({
           status: "SHIPPED",
-          dispatchStatus: "NOT_REQUIRED",
+          deliveryStatus: "IN_TRANSIT",
+          dispatchStatus: result.isSelfArranged ? "NOT_REQUIRED" : "MANUAL_HANDOVER",
+          handoverMethod: result.isSelfArranged ? "self_arranged" : "courier",
+          handoverAt: FieldValue.serverTimestamp(),
+          handoverBy: decoded.uid,
           updatedAt: FieldValue.serverTimestamp(),
           ...(trackingId ? { trackingId } : {}),
+          ...(carrier ? { courierName: carrier } : {}),
         });
       }
     }
