@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 export const dynamic = "force-dynamic";
 
 // These collections contain user, marketplace, payment-test, and shipping-test data.
-// System collections such as admins, couriers, plans, hero_slides, sponsored_stores,
+// System collections such as admins, couriers, plans, and hero_slides,
 // and auditLogs are intentionally excluded.
 const RESET_COLLECTIONS = [
   "users",

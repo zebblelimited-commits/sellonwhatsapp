@@ -200,14 +200,6 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 📣 SPONSORED STORES: Public display, protected admin management
-    // ═══════════════════════════════════════════════════════════
-    match /sponsored_stores/{cardId} {
-      allow read: if true;
-      allow create, update, delete: if false;
-    }
-
-    // ═══════════════════════════════════════════════════════════
     // ✅ STORE VERIFICATIONS: Admin review queue + owner access
     // ═══════════════════════════════════════════════════════════
     match /store_verifications/{docId} {
@@ -747,7 +739,8 @@ isSponsored, followerCount, productCount, sponsorshipStatus, sponsored,
 sponsoredAt, sponsoredUntil, priority, placement, source
 ```
 
-An administrator can set store sponsorship with:
+An administrator can manually toggle store sponsorship from the Admin → Stores
+tab. The same action is available through:
 
 ```text
 PATCH /api/admin/stores/{storeId}
@@ -757,14 +750,15 @@ PATCH /api/admin/stores/{storeId}
 {
   "action": "sponsorship",
   "isSponsored": true,
-  "status": "active",
-  "priority": 1,
-  "placement": "marketplace",
-  "source": "admin",
-  "sponsoredUntil": "2027-01-01T00:00:00.000Z"
+  "priority": 1
 }
 ```
 
-The existing `sponsored_stores` Firestore collection is a separate admin-managed
-homepage promotional-card collection. It is not the authoritative store-level
-sponsorship record and should not be used as the store sponsorship API.
+The legacy `sponsored_stores` promotional-card collection is no longer read by
+the web frontend or API. Store sponsorship now comes only from the store
+document's manual admin flag or an active Store Boost. A successful Store Boost
+sets `boostSponsored: true` on the store and all products belonging to that
+store. When the Boost expires, the cron job clears only the Boost flags; any
+independent admin sponsorship remains active. The frontend shows a sponsored
+item only while `isSponsored` is true, the item is public, and
+`sponsoredUntil` has not passed.

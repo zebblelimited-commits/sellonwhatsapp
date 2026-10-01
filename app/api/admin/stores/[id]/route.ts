@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { requireAdmin } from "@/lib/admin-auth";
 import { deleteStoreData } from "@/lib/admin-delete-seller-data";
@@ -64,42 +64,37 @@ export async function PATCH(
 
     if (action === "sponsorship") {
       const isSponsored = body.isSponsored === true;
-      const requestedStatus = typeof body.status === "string" ? body.status.trim().toLowerCase() : "";
-      const sponsorshipStatus = isSponsored ? "active" : requestedStatus || "inactive";
-      if (!["active", "inactive", "expired", "cancelled"].includes(sponsorshipStatus)) {
-        return NextResponse.json({ error: "Invalid sponsorship status" }, { status: 400 });
-      }
-
-      const numericPriority = Number(body.priority);
+      const storeSnapshot = await storeRef.get();
+      if (!storeSnapshot.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
+      const current = storeSnapshot.data() || {};
+      const boostUntil = current.boostSponsoredUntil;
+      const boostUntilMillis = boostUntil && typeof boostUntil === "object" && "toMillis" in boostUntil && typeof boostUntil.toMillis === "function"
+        ? boostUntil.toMillis()
+        : typeof boostUntil === "string" ? Date.parse(boostUntil) : 0;
+      const boostActive = current.boostSponsored === true && (!boostUntilMillis || boostUntilMillis > Date.now());
+      const effectiveSponsored = isSponsored || boostActive;
+      const source = isSponsored && boostActive ? "admin_and_store_boost" : isSponsored ? "admin" : boostActive ? "store_boost" : "none";
+      const numericPriority = Number(body.priority ?? current.priority);
       const priority = Number.isFinite(numericPriority) ? Math.max(0, numericPriority) : 0;
-      const placement = typeof body.placement === "string" ? body.placement.trim().slice(0, 80) : "marketplace";
-      const source = typeof body.source === "string" ? body.source.trim().slice(0, 80) : "admin";
-      const sponsoredUntil = typeof body.sponsoredUntil === "string" ? Date.parse(body.sponsoredUntil) : NaN;
-      if (isSponsored && typeof body.sponsoredUntil === "string" && !Number.isFinite(sponsoredUntil)) {
-        return NextResponse.json({ error: "sponsoredUntil must be a valid ISO date" }, { status: 400 });
-      }
-
       const fields: Record<string, unknown> = {
-        isSponsored,
-        sponsored: isSponsored,
-        sponsorshipStatus,
-        priority,
-        placement,
+        adminSponsored: isSponsored,
+        isSponsored: effectiveSponsored,
+        sponsored: effectiveSponsored,
+        sponsorshipStatus: effectiveSponsored ? "active" : "inactive",
+        sponsorshipSource: source,
         source,
+        priority,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: access.admin.uid,
       };
-      if (isSponsored) {
-        fields.sponsoredAt = FieldValue.serverTimestamp();
-        fields.sponsoredUntil = Number.isFinite(sponsoredUntil)
-          ? Timestamp.fromMillis(sponsoredUntil)
-          : FieldValue.delete();
-      } else {
+      fields.adminSponsoredAt = isSponsored ? FieldValue.serverTimestamp() : FieldValue.delete();
+      if (!boostActive) {
+        fields.sponsoredAt = isSponsored ? FieldValue.serverTimestamp() : FieldValue.delete();
         fields.sponsoredUntil = FieldValue.delete();
+      } else {
+        fields.sponsoredAt = FieldValue.serverTimestamp();
+        fields.sponsoredUntil = isSponsored ? FieldValue.delete() : boostUntil || FieldValue.delete();
       }
-
-      const storeSnapshot = await storeRef.get();
-      if (!storeSnapshot.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
       await storeRef.set(fields, { merge: true });
       await adminDb.collection("auditLogs").add({
         action: isSponsored ? "store_sponsorship_enabled" : "store_sponsorship_disabled",
@@ -107,15 +102,17 @@ export async function PATCH(
         targetId: id,
         performedBy: access.admin.uid,
         performedByEmail: access.admin.email || "",
-        details: { isSponsored, sponsorshipStatus, priority, placement, source },
+        details: { isSponsored, boostActive, priority, source },
         timestamp: FieldValue.serverTimestamp(),
       });
       return NextResponse.json({
         success: true,
         action,
         storeId: id,
-        isSponsored,
-        status: sponsorshipStatus,
+        isSponsored: effectiveSponsored,
+        adminSponsored: isSponsored,
+        boostSponsored: boostActive,
+        status: effectiveSponsored ? "active" : "inactive",
         priority,
       });
     }

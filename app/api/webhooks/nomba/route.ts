@@ -9,6 +9,7 @@ import { isNombaWebhookSignatureValid, verifyNombaTransaction, initiateNombaBank
 import { chowdeckUsesRelay, getChowdeckRelayWalletAccount } from "@/lib/chowdeck";
 import { dispatchShipmentForOrder } from "@/lib/shipping-dispatch";
 import { updateExistingStore } from "@/lib/store-sync";
+import { syncStoreBoostSponsorship } from "@/lib/sponsorship";
 
 // ✅ 1. SAFELY Initialize Novu
 const novuApiKey = process.env.NOVU_API_KEY || process.env.NOVU_SECRET_KEY;
@@ -616,6 +617,10 @@ export async function POST(request: NextRequest) {
                 premiumExpiresAt: expiryDate.toISOString(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
               }, { merge: true });
+            }
+
+            if (collectionName === "boosts" && targetUserId) {
+              await syncStoreBoostSponsorship(targetUserId, true, expiryDate);
             }
           }
 

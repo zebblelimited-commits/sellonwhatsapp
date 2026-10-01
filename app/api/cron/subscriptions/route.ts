@@ -5,6 +5,7 @@ import admin from "firebase-admin";
 import { sendRenewalReminderEmail, sendSubscriptionConfirmationEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/events";
 import { updateExistingStore } from "@/lib/store-sync";
 import { nombaBaseUrl } from "@/lib/payments/nomba/client";
+import { syncStoreBoostSponsorship } from "@/lib/sponsorship";
 
 export const runtime = "nodejs";
 
@@ -267,6 +268,7 @@ export async function GET(req: NextRequest) {
                     status: "expired",
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 });
+                await syncStoreBoostSponsorship(String(boost.storeId || boost.userId || ""), false, undefined, boostDoc.id);
             }
         }
 
@@ -279,8 +281,8 @@ export async function GET(req: NextRequest) {
             gracePeriodSubs,
             processedBoosts,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("❌ [CRON ERROR]:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Subscription cron failed" }, { status: 500 });
     }
 }

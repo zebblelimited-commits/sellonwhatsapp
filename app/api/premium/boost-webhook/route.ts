@@ -5,6 +5,7 @@ import crypto from "crypto";
 // 🌟 Import your notification utility helper here
 import { createNotification } from "@/lib/notifications"; 
 import { sendSubscriptionConfirmationEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/events";
+import { syncStoreBoostSponsorship } from "@/lib/sponsorship";
 
 // Ensure this runs in Node.js environment (required for crypto)
 export const runtime = 'nodejs'; 
@@ -115,7 +116,7 @@ export async function POST(request: NextRequest) {
       const activeDuration = Number(localData.durationDays || localData.durationMonths || 7);
       const durationUnit = localData.durationMonths ? "months" : "days";
       
-      let expiryDate = new Date();
+      const expiryDate = new Date();
       if (durationUnit === "months") {
         expiryDate.setMonth(expiryDate.getMonth() + activeDuration);
       } else {
@@ -129,6 +130,11 @@ export async function POST(request: NextRequest) {
         expiryDate: expiryDate.toISOString(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+
+      const boostOwnerId = String(localData.storeId || localData.userId || localData.vendorId || "").trim();
+      if (isBoost && boostOwnerId) {
+        await syncStoreBoostSponsorship(boostOwnerId, true, expiryDate);
+      }
       
       console.log(`✅ [WEBHOOK SUCCESS] ${collectionName} ${orderRef} updated to 'active'!`);
 
@@ -164,7 +170,6 @@ export async function POST(request: NextRequest) {
           });
         } else if (isSubscription) {
           // Dynamic notification structure if it handles store plan subscriptions
-          const planName = localData.planName || "Premium Subscription Plan";
           await createNotification({
             vendorId: vendorId,
             type: "payment",
@@ -218,9 +223,9 @@ export async function POST(request: NextRequest) {
 
     // ALWAYS return 200 OK so Nomba stops retrying
     return NextResponse.json({ received: true }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("❌ [WEBHOOK CRITICAL ERROR]:", error);
     // Return 200 anyway to prevent Nomba from getting stuck in an infinite retry loop
-    return NextResponse.json({ received: true, error: error.message }, { status: 200 });
+    return NextResponse.json({ received: true, error: error instanceof Error ? error.message : "Webhook processing failed" }, { status: 200 });
   }
 }

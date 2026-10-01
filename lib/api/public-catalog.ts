@@ -1,5 +1,6 @@
 import { adminDb } from "@/lib/firebase-admin";
 import { isPublicStore } from "@/lib/categoryCatalog";
+import { sponsorshipIsActive } from "@/lib/sponsorship";
 
 export { isPublicStore };
 
@@ -25,7 +26,8 @@ const PUBLIC_PRODUCT_FIELDS = [
   "category", "features", "variants", "stockCount", "stock", "availability",
   "status", "storeId", "vendorName", "storeName", "username", "storeUsername",
   "popularityScore", "salesCount", "orderCount", "views", "clicks",
-  "add_to_cart_clicks", "addToCartClicks", "isSponsored", "sponsoredAt",
+  "add_to_cart_clicks", "addToCartClicks", "isSponsored", "sponsored", "sponsorshipStatus",
+  "sponsoredAt", "sponsoredUntil", "priority", "placement", "source",
   "createdAt", "updatedAt", "shipping", "deliveryType", "fulfillmentMethod",
   "turnaroundTime", "duration", "locationType", "maxDaily", "metricType",
   "unitLabel", "weightKg", "dimensions", "bookingDate", "bookingSlot",
@@ -61,23 +63,13 @@ function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-const INACTIVE_SPONSORSHIP_STATUSES = new Set([
-  "inactive", "expired", "cancelled", "canceled", "ended", "rejected",
-]);
-
 /**
  * Returns true only for an explicitly sponsored store with an active window.
  * Store approval status is intentionally not used here because it describes
  * store visibility, not sponsorship.
  */
 export function isActiveSponsoredStore(data: RecordValue, now = Date.now()) {
-  const sponsorshipStatus = text(data.sponsorshipStatus).toLowerCase();
-  const explicitlySponsored = data.isSponsored === true || data.sponsored === true;
-  if (!explicitlySponsored && sponsorshipStatus !== "active") return false;
-  if (INACTIVE_SPONSORSHIP_STATUSES.has(sponsorshipStatus)) return false;
-
-  const sponsoredUntil = timestampValue(data.sponsoredUntil);
-  return sponsoredUntil <= 0 || sponsoredUntil > now;
+  return sponsorshipIsActive(data, now);
 }
 
 export function sponsorshipPriority(data: RecordValue) {
@@ -116,6 +108,7 @@ export function publicProductView(id: string, data: RecordValue, store?: RecordV
 
   if (output.stockCount === undefined && data.stock !== undefined) output.stockCount = jsonValue(data.stock);
   if (output.images === undefined) output.images = [];
+  output.isSponsored = sponsorshipIsActive(data);
 
   return { id, ...output };
 }

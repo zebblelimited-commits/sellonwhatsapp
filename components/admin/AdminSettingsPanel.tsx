@@ -6,7 +6,6 @@ import { EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail
 import { auth } from "@/lib/firebase";
 import { adminMutation } from "@/components/admin/adminApi";
 import AdminHeroSlidesPanel from "@/components/admin/AdminHeroSlidesPanel";
-import AdminSponsoredStoresPanel from "@/components/admin/AdminSponsoredStoresPanel";
 import Image from "next/image";
 
 const permissionGroups = [
@@ -232,7 +231,6 @@ export default function AdminSettingsPanel() {
       </section>
     </div>
     <AdminHeroSlidesPanel />
-    <AdminSponsoredStoresPanel />
     {!isSuperAdmin && <section className="space-y-3 rounded-[28px] border border-amber-200 bg-amber-50 p-6 shadow-sm">
       <div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700"><ShieldCheck size={19} /></div><div><h3 className="font-bold text-amber-950">Reset test data</h3><p className="mt-1 text-xs text-amber-800">This tool is available only to super admins because it permanently deletes marketplace records. Ask a super admin to open Settings and run the reset.</p></div></div>
       <p className="text-xs font-bold text-amber-900">Current account role: <span className="rounded bg-amber-100 px-1.5 py-0.5">{profile.role || "not set"}</span></p>

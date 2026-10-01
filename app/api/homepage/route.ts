@@ -7,6 +7,7 @@ import {
   publicStoreView,
   timestampValue,
 } from "@/lib/api/public-catalog";
+import { sponsorshipIsActive } from "@/lib/sponsorship";
 
 function normalizeHero(id: string, data: Record<string, unknown>) {
   return {
@@ -31,26 +32,12 @@ function normalizeHero(id: string, data: Record<string, unknown>) {
   };
 }
 
-function normalizeSponsoredStore(id: string, data: Record<string, unknown>) {
-  return {
-    id,
-    title: typeof data.title === "string" ? data.title : "Sponsored Store",
-    description: typeof data.description === "string" ? data.description : "Discover products from this featured store.",
-    ctaText: typeof data.ctaText === "string" ? data.ctaText : "View Store",
-    ctaUrl: typeof data.ctaUrl === "string" && data.ctaUrl.trim() ? data.ctaUrl : "/explore",
-    bgImageUrl: typeof data.bgImageUrl === "string" && data.bgImageUrl.trim() ? data.bgImageUrl : "/images/placeholder-cover.svg",
-    sortOrder: Number.isFinite(Number(data.sortOrder)) ? Number(data.sortOrder) : 0,
-    isActive: data.isActive !== false,
-  };
-}
-
 export async function GET() {
   try {
-    const [heroSnapshot, storesSnapshot, productsSnapshot, sponsoredStoresSnapshot] = await Promise.all([
+    const [heroSnapshot, storesSnapshot, productsSnapshot] = await Promise.all([
       adminDb.collection("hero_slides").limit(100).get(),
       adminDb.collection("stores").limit(500).get(),
       adminDb.collection("products").limit(500).get(),
-      adminDb.collection("sponsored_stores").limit(100).get(),
     ]);
 
     const storeRecords = storesSnapshot.docs
@@ -76,10 +63,15 @@ export async function GET() {
       .slice(0, 12);
     const sponsoredProducts = rawProducts
       .filter(({ data }) => storeMap.has(String(data.storeId || data.vendorId || data.ownerId || "")))
-      .filter(({ data }) => data.isSponsored === true)
+      .filter(({ data }) => sponsorshipIsActive(data))
       .map(({ id, data }) => publicProductView(id, data, storeMap.get(String(data.storeId || data.vendorId || data.ownerId || ""))))
       .sort((left, right) => timestampValue(right.sponsoredAt) - timestampValue(left.sponsoredAt))
       .slice(0, 6);
+    const sponsoredStores = storeRecords
+      .filter(({ data }) => sponsorshipIsActive(data))
+      .sort((left, right) => Number(left.data.priority || 0) - Number(right.data.priority || 0) || timestampValue(right.data.sponsoredAt) - timestampValue(left.data.sponsoredAt))
+      .slice(0, 4)
+      .map(({ id, data }) => publicStoreView(id, data));
 
     const categories = HOME_CATEGORY_DEFINITIONS.map((category) => ({
       id: category.id,
@@ -97,11 +89,7 @@ export async function GET() {
       products,
       stores: stores.slice(0, 6),
       newStores,
-      sponsoredStores: sponsoredStoresSnapshot.docs
-        .map((item) => normalizeSponsoredStore(item.id, item.data() as Record<string, unknown>))
-        .filter((card) => card.isActive)
-        .sort((left, right) => left.sortOrder - right.sortOrder)
-        .slice(0, 4),
+      sponsoredStores,
       sponsoredProducts,
       generatedAt: Date.now(),
     });

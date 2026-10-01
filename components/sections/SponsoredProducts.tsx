@@ -31,6 +31,7 @@ type SponsoredProduct = {
   availability?: string;
   status?: string;
   isDeleted?: boolean;
+  isSponsored?: boolean;
   storeId?: string;
   vendorId?: string;
   ownerId?: string;
@@ -38,6 +39,8 @@ type SponsoredProduct = {
   username?: string;
   nombaAccountId?: string;
   sponsoredAt?: unknown;
+  sponsoredUntil?: unknown;
+  sponsorshipStatus?: string;
 };
 
 type SponsoredProductsProps = {
@@ -49,11 +52,18 @@ function timestampValue(value: unknown) {
     return value.toMillis();
   }
   if (value instanceof Date) return value.getTime();
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") return Date.parse(value) || 0;
   return 0;
 }
 
 function productIsVisible(product: SponsoredProduct) {
-  return product.isDeleted !== true && !["inactive", "banned", "deleted"].includes(String(product.status || "").toLowerCase());
+  const sponsoredUntil = timestampValue(product.sponsoredUntil);
+  return product.isDeleted !== true
+    && product.isSponsored !== false
+    && !["inactive", "banned", "deleted", "expired", "cancelled"].includes(String(product.status || "").toLowerCase())
+    && !["inactive", "expired", "cancelled", "canceled", "ended", "rejected"].includes(String(product.sponsorshipStatus || "").toLowerCase())
+    && (sponsoredUntil <= 0 || sponsoredUntil > Date.now());
 }
 
 function productImage(product: SponsoredProduct) {
@@ -358,8 +368,8 @@ export default function SponsoredProducts({ fullPage = false }: SponsoredProduct
       } else {
         throw new Error("Payment gateway checkout link not returned.");
       }
-    } catch (err: any) {
-      setModalError(err.message || "An error occurred while initiating payment.");
+    } catch (err: unknown) {
+      setModalError(err instanceof Error ? err.message : "An error occurred while initiating payment.");
       setIsModalLoading(false);
     }
   };

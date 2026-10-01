@@ -82,10 +82,19 @@ export async function PATCH(request: NextRequest) {
     const isSponsored = body.isSponsored === true;
     const now = FieldValue.serverTimestamp();
     const auditRef = adminDb.collection("auditLogs").doc();
+    const productData = productSnapshot.data() || {};
+    const boostSponsored = productData.boostSponsored === true;
+    const effectiveSponsored = isSponsored || boostSponsored;
     const batch = adminDb.batch();
     batch.update(productRef, {
-      isSponsored,
-      sponsoredAt: isSponsored ? now : FieldValue.delete(),
+      adminSponsored: isSponsored,
+      isSponsored: effectiveSponsored,
+      sponsored: effectiveSponsored,
+      sponsorshipStatus: effectiveSponsored ? "active" : "inactive",
+      sponsorshipSource: isSponsored && boostSponsored ? "admin_and_store_boost" : isSponsored ? "admin" : boostSponsored ? "store_boost" : "none",
+      source: isSponsored && boostSponsored ? "admin_and_store_boost" : isSponsored ? "admin" : boostSponsored ? "store_boost" : "none",
+      sponsoredAt: effectiveSponsored ? now : FieldValue.delete(),
+      sponsoredUntil: isSponsored ? FieldValue.delete() : boostSponsored ? (productData.boostSponsoredUntil || FieldValue.delete()) : FieldValue.delete(),
       updatedAt: now,
     });
     batch.set(auditRef, {
@@ -94,12 +103,12 @@ export async function PATCH(request: NextRequest) {
       targetId: id,
       performedBy: access.admin.uid,
       performedByEmail: access.admin.email || "",
-      details: { isSponsored },
+      details: { isSponsored, boostSponsored, effectiveSponsored },
       timestamp: now,
     });
     await batch.commit();
 
-    return NextResponse.json({ success: true, id, isSponsored });
+    return NextResponse.json({ success: true, id, isSponsored: effectiveSponsored, adminSponsored: isSponsored, boostSponsored });
   } catch (error) {
     console.error("Admin product sponsorship action error:", error);
     return NextResponse.json({ error: "Product sponsorship could not be updated" }, { status: 500 });

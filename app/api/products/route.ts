@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { syncReferralMilestones } from "@/lib/referrals";
 import { getPublicStore, getPublicStoreMap, isPublicProduct, jsonValue, publicProductView, timestampValue } from "@/lib/api/public-catalog";
+import { sponsorshipIsActive } from "@/lib/sponsorship";
 
 function numberParam(value: string | null, fallback: number, maximum: number) {
     const parsed = Number(value);
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
             .map((item) => ({ id: item.id, data: item.data() as Record<string, unknown> }))
             .filter(({ data }) => isPublicProduct(data))
             .filter(({ data }) => !targetStore || String(data.storeId || data.vendorId || data.ownerId || "") === targetStore.id)
-            .filter(({ data }) => !sponsoredOnly || data.isSponsored === true);
+            .filter(({ data }) => !sponsoredOnly || sponsorshipIsActive(data));
         const stores = await getPublicStoreMap(rawProducts.map(({ data }) => String(data.storeId || data.vendorId || data.ownerId || "")));
 
         const products = rawProducts
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({ success: true, id: docRef.id });
 
-    } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 500 });
+    } catch (err: unknown) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : "Product could not be created" }, { status: 500 });
     }
 }

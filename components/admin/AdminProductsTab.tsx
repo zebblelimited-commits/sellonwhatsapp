@@ -83,8 +83,8 @@ export default function AdminProductsTab() {
     setUpdatingId(product.id);
     setError("");
     try {
-      await adminMutation("/api/admin/products", { id: product.id, isSponsored: !product.isSponsored });
-      setProducts((current) => current.map((item) => item.id === product.id ? { ...item, isSponsored: !item.isSponsored } : item));
+      const result = await adminMutation<{ isSponsored?: boolean }>("/api/admin/products", { id: product.id, isSponsored: !product.isSponsored });
+      setProducts((current) => current.map((item) => item.id === product.id ? { ...item, isSponsored: result.isSponsored === true } : item));
     } catch (updateError) {
       console.error("Product sponsorship update error:", updateError);
       setError(updateError instanceof Error ? updateError.message : "Product sponsorship could not be updated");

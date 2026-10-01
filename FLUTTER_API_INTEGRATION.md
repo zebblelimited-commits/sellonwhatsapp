@@ -352,8 +352,7 @@ GET/PATCH  /api/admin/notifications
 GET/PATCH  /api/admin/couriers
 GET/PATCH  /api/admin/hero-slides
 POST       /api/admin/hero-images
-POST       /api/admin/sponsored-images
-PATCH      /api/admin/sponsored-stores
+PATCH      /api/admin/stores/{id}       (action: sponsorship)
 GET        /api/admin/stores/{id}
 POST       /api/admin/refunds/{id}
 POST       /api/admin/payouts/{id}/approve
