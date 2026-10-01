@@ -38,16 +38,36 @@ export async function POST(request: NextRequest) {
     let buyerId = typeof body.buyerId === "string" ? body.buyerId.trim() : "";
     let vendorId = typeof body.vendorId === "string" ? body.vendorId.trim() : "";
     const participantId = typeof body.participantId === "string" ? body.participantId.trim() : "";
-    const participantRole = body.participantRole === "vendor" || body.participantRole === "buyer" ? body.participantRole : "";
+    const participantRole: ChatRole | "" = body.participantRole === "vendor" || body.participantRole === "buyer" || body.participantRole === "admin"
+      ? body.participantRole
+      : "";
+    let supportAdminId = "";
 
     if (actor.role === "admin") {
-      if (!participantId || !participantRole) throw new ChatError("A buyer or seller must be selected", 400);
+      if (!participantId || !participantRole || participantRole === "admin") throw new ChatError("A buyer or seller must be selected", 400);
       if (participantRole === "buyer") buyerId = participantId;
       else vendorId = participantId;
     } else if (actor.role === "vendor") {
-      if (!buyerId) buyerId = participantId;
-      if (!buyerId || vendorId && vendorId !== decoded.uid) throw new ChatError("A buyer is required", 400);
       vendorId = decoded.uid;
+      if (participantRole === "admin") {
+        // Sellers can open a support conversation without inventing a buyer
+        // participant. Use the requested active admin when supplied, or the
+        // first active admin as the support owner.
+        const requestedAdmin = participantId
+          ? await adminDb.collection("admins").doc(participantId).get()
+          : null;
+        if (requestedAdmin?.exists && requestedAdmin.data()?.isActive === true) {
+          supportAdminId = requestedAdmin.id;
+        } else {
+          const activeAdmins = await adminDb.collection("admins").where("isActive", "==", true).limit(1).get();
+          supportAdminId = activeAdmins.docs[0]?.id || "";
+        }
+        if (!supportAdminId) throw new ChatError("No active support administrator is available", 503);
+        buyerId = "";
+      } else {
+        if (!buyerId) buyerId = participantId;
+        if (!buyerId || vendorId && vendorId !== decoded.uid) throw new ChatError("A buyer is required", 400);
+      }
     } else {
       if (!vendorId) vendorId = participantId;
       if (!vendorId || buyerId && buyerId !== decoded.uid) throw new ChatError("A seller is required", 400);
@@ -56,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     const chatId = `support_${buyerId || "none"}_${vendorId || "none"}`;
     const chatRef = adminDb.collection("support_chats").doc(chatId);
-    const targetId = actor.role === "admin" ? participantId : actor.role === "buyer" ? vendorId : buyerId;
+    const targetId = actor.role === "admin" ? participantId : actor.role === "buyer" ? vendorId : participantRole === "admin" ? supportAdminId : buyerId;
     const [targetUserSnap, targetVendorSnap, targetStoreSnap] = await Promise.all([
       targetId ? adminDb.collection("users").doc(targetId).get() : Promise.resolve(null),
       targetId ? adminDb.collection("vendors").doc(targetId).get() : Promise.resolve(null),
@@ -74,9 +94,9 @@ export async function POST(request: NextRequest) {
     const result = await adminDb.runTransaction(async (transaction) => {
       const existing = await transaction.get(chatRef);
       const now = FieldValue.serverTimestamp();
-      const participants = Array.from(new Set([buyerId, vendorId, ...(actor.role === "admin" ? [decoded.uid] : [])].filter(Boolean)));
+      const participants = Array.from(new Set([buyerId, vendorId, supportAdminId, ...(actor.role === "admin" ? [decoded.uid] : [])].filter(Boolean)));
       const current = existing.data() || {};
-      const adminIds = Array.from(new Set([...(Array.isArray(current.adminIds) ? current.adminIds : []), ...(actor.role === "admin" ? [decoded.uid] : [])]));
+      const adminIds = Array.from(new Set([...(Array.isArray(current.adminIds) ? current.adminIds : []), supportAdminId, ...(actor.role === "admin" ? [decoded.uid] : [])].filter(Boolean)));
       const fields = {
         chatId,
         channel: "support",
@@ -85,7 +105,7 @@ export async function POST(request: NextRequest) {
         vendorId: vendorId || null,
         participants,
         adminIds,
-        participantRole: actor.role === "admin" ? participantRole : actor.role === "buyer" ? "vendor" : "buyer",
+        participantRole: actor.role === "admin" ? participantRole : actor.role === "buyer" ? "vendor" : participantRole === "admin" ? "admin" : "buyer",
         userName: targetName,
         userEmail: targetEmail,
         userPhone: targetPhone,

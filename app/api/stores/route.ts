@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { isPublicStore, jsonValue, publicStoreView, timestampValue } from "@/lib/api/public-catalog";
+import {
+  isActiveSponsoredStore,
+  isPublicStore,
+  jsonValue,
+  publicStoreView,
+  sponsorshipPriority,
+  timestampValue,
+} from "@/lib/api/public-catalog";
 
 function numberParam(value: string | null, fallback: number, maximum: number) {
   const parsed = Number(value);
@@ -15,6 +22,7 @@ export async function GET(request: NextRequest) {
     const search = (params.get("search") || params.get("q") || "").trim().toLowerCase();
     const category = (params.get("category") || "").trim().toLowerCase();
     const verifiedOnly = params.get("verified") === "true";
+    const sponsoredOnly = params.get("sponsored") === "true";
 
     const snapshot = await adminDb.collection("stores").limit(500).get();
     const stores = snapshot.docs
@@ -30,20 +38,35 @@ export async function GET(request: NextRequest) {
           .toLowerCase();
         return (!search || searchable.includes(search))
           && (!category || categoryValues.some((value) => value.includes(category)))
-          && (!verifiedOnly || data.isVerified === true);
+          && (!verifiedOnly || data.isVerified === true)
+          && (!sponsoredOnly || isActiveSponsoredStore(data));
       })
-      .sort((left, right) => timestampValue(right.data.createdAt) - timestampValue(left.data.createdAt));
+      .sort((left, right) => {
+        if (sponsoredOnly) {
+          const priorityDifference = sponsorshipPriority(left.data) - sponsorshipPriority(right.data);
+          if (priorityDifference !== 0) return priorityDifference;
+          return timestampValue(right.data.sponsoredAt) - timestampValue(left.data.sponsoredAt);
+        }
+        return timestampValue(right.data.createdAt) - timestampValue(left.data.createdAt);
+      });
 
     const start = (page - 1) * limit;
     const visible = stores.slice(start, start + limit).map(({ id, data }) => publicStoreView(id, data));
 
-    return NextResponse.json({
+    const response: Record<string, unknown> = {
       stores: jsonValue(visible),
       page,
       limit,
       total: stores.length,
       hasMore: start + limit < stores.length,
-    });
+    };
+
+    // Keep the existing `stores` contract unchanged for normal callers while
+    // exposing the explicit alias requested by mobile clients on sponsored
+    // requests.
+    if (sponsoredOnly) response.sponsoredStores = jsonValue(visible);
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Public stores API error:", error);
     return NextResponse.json({ error: "Stores could not be loaded" }, { status: 500 });

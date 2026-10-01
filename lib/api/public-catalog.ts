@@ -10,9 +10,13 @@ const PUBLIC_STORE_FIELDS = [
   "logoUrl", "logo", "bannerUrl", "coverImage", "coverImageUrl",
   "category", "mainCategory", "subCategory", "storeCategory",
   "businessCategory", "categoryName", "location", "address", "city",
-  "state", "country", "phone", "whatsappNumber", "socialLinks", "website",
+  "state", "lga", "country", "phone", "whatsappNumber", "socialLinks", "website",
+  "latitude", "longitude",
   "followerCount", "followersCount", "productCount", "isVerified",
   "verificationTier", "status", "isActive", "createdAt", "updatedAt", "slug",
+  "storeId", "ownerId", "vendorId", "isSponsored", "sponsored",
+  "sponsorshipStatus", "sponsoredAt", "sponsoredUntil", "priority",
+  "placement", "source",
 ] as const;
 
 const PUBLIC_PRODUCT_FIELDS = [
@@ -57,14 +61,46 @@ function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+const INACTIVE_SPONSORSHIP_STATUSES = new Set([
+  "inactive", "expired", "cancelled", "canceled", "ended", "rejected",
+]);
+
+/**
+ * Returns true only for an explicitly sponsored store with an active window.
+ * Store approval status is intentionally not used here because it describes
+ * store visibility, not sponsorship.
+ */
+export function isActiveSponsoredStore(data: RecordValue, now = Date.now()) {
+  const sponsorshipStatus = text(data.sponsorshipStatus).toLowerCase();
+  const explicitlySponsored = data.isSponsored === true || data.sponsored === true;
+  if (!explicitlySponsored && sponsorshipStatus !== "active") return false;
+  if (INACTIVE_SPONSORSHIP_STATUSES.has(sponsorshipStatus)) return false;
+
+  const sponsoredUntil = timestampValue(data.sponsoredUntil);
+  return sponsoredUntil <= 0 || sponsoredUntil > now;
+}
+
+export function sponsorshipPriority(data: RecordValue) {
+  const priority = Number(data.priority);
+  return Number.isFinite(priority) ? priority : 0;
+}
+
 export function isPublicProduct(data: RecordValue) {
   return data.isDeleted !== true && !["inactive", "banned", "deleted"].includes(text(data.status).toLowerCase());
 }
 
 export function publicStoreView(id: string, data: RecordValue): RecordValue & { id: string } {
+  const output = copyFields(PUBLIC_STORE_FIELDS, data);
+  // These aliases make the public response usable by web and mobile clients
+  // even when older store documents only contain one owner identifier.
+  output.storeId = text(data.storeId) || id;
+  output.ownerId = text(data.ownerId) || text(data.vendorId) || text(data.uid);
+  output.vendorId = text(data.vendorId) || text(data.ownerId) || text(data.uid);
+  output.isSponsored = isActiveSponsoredStore(data);
+
   return {
     id,
-    ...copyFields(PUBLIC_STORE_FIELDS, data),
+    ...output,
   };
 }
 

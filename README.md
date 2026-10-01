@@ -623,3 +623,148 @@ service cloud.firestore {
     }
   }
 }
+
+//////////////////////////////////
+
+## Resolved Flutter integration contracts
+
+The following contracts are implemented by this web project. Flutter should use
+the API with a Firebase ID token in `Authorization: Bearer <token>` unless the
+endpoint is explicitly public.
+
+### Support chat
+
+Routes:
+
+```text
+POST /api/chats
+POST /api/chats/{chatId}/messages
+POST /api/chats/{chatId}/read
+```
+
+Create a buyer-to-seller chat:
+
+```json
+{
+  "participantId": "SELLER_UID_OR_STORE_ID",
+  "participantRole": "vendor",
+  "subject": "Question about this store"
+}
+```
+
+Create a seller-to-buyer chat by replacing `participantId` with the buyer UID
+and `participantRole` with `buyer`. A seller can also open an administrator
+support chat with `{ "participantId": "support", "participantRole": "admin" }`;
+the API assigns the first active administrator when that placeholder is used.
+
+The create response contains the authoritative chat ID at `chat.id`:
+
+```json
+{
+  "success": true,
+  "chat": {
+    "id": "support_BUYER_UID_VENDOR_UID",
+    "chatId": "support_BUYER_UID_VENDOR_UID",
+    "buyerId": "BUYER_UID",
+    "vendorId": "VENDOR_UID",
+    "participants": ["BUYER_UID", "VENDOR_UID"],
+    "participantRole": "vendor",
+    "status": "open",
+    "subject": "Question about this store",
+    "unreadBy": { "buyer": 0, "vendor": 0, "admin": 0 },
+    "createdAt": "SERVER_TIMESTAMP",
+    "updatedAt": "SERVER_TIMESTAMP"
+  }
+}
+```
+
+The Firestore document is stored at `support_chats/{chatId}`. The web contract
+uses `vendorId`, `participants`, `adminIds`, and singular `participantRole`; it
+does not use `sellerId`, `participantIds`, or `participantRoles`.
+
+Send a message with `{ "content": "Hello" }`. The response is:
+
+```json
+{ "success": true, "messageId": "MESSAGE_ID", "recipientCount": 1 }
+```
+
+Message documents are stored at
+`support_chats/{chatId}/messages/{messageId}`:
+
+```json
+{
+  "senderId": "BUYER_UID",
+  "senderEmail": "buyer@example.com",
+  "senderRole": "buyer",
+  "content": "Hello",
+  "timestamp": "SERVER_TIMESTAMP",
+  "createdAt": "SERVER_TIMESTAMP",
+  "read": false,
+  "readBy": ["BUYER_UID"]
+}
+```
+
+The read endpoint takes no body and returns
+`{ "success": true, "marked": 1 }`. It marks messages read for the current
+user and resets that participant's value in `unreadBy`.
+
+Chat access is authorized for active admins, the document's `buyerId`,
+`vendorId`, or a UID in `participants`. The deployed composite indexes are:
+
+```text
+support_chats: vendorId ASC, lastMessageAt DESC
+support_chats: buyerId ASC, lastMessageAt DESC
+```
+
+Participant display data currently stored on a chat is `userName`, `userEmail`,
+`userPhone`, and `contactPhone`. `photoUrl`/`avatarUrl` is not part of the web
+chat contract yet, so Flutter should treat an avatar as optional.
+
+### Sponsored stores
+
+The public endpoint is now:
+
+```text
+GET /api/stores?sponsored=true&page=1&limit=20
+```
+
+It is public and returns both `stores` and `sponsoredStores` containing the
+same paginated sponsored results. A normal `GET /api/stores` keeps its existing
+response and does not add a second sponsored list.
+
+Sponsored stores must be public and have either `isSponsored: true`,
+`sponsored: true`, or `sponsorshipStatus: "active"`. Records with an inactive,
+expired, cancelled, or ended status—or a past `sponsoredUntil`—are excluded.
+Results are ordered by ascending `priority` (priority `1` is shown first), then
+newest `sponsoredAt`. Pagination uses `page`, `limit`, `total`, and `hasMore`.
+
+The public store response includes these normalized fields when available:
+
+```text
+id, storeId, ownerId, vendorId, storeName, name, username, description,
+logoUrl, bannerUrl, category, state, address, phone, isVerified,
+isSponsored, followerCount, productCount, sponsorshipStatus, sponsored,
+sponsoredAt, sponsoredUntil, priority, placement, source
+```
+
+An administrator can set store sponsorship with:
+
+```text
+PATCH /api/admin/stores/{storeId}
+```
+
+```json
+{
+  "action": "sponsorship",
+  "isSponsored": true,
+  "status": "active",
+  "priority": 1,
+  "placement": "marketplace",
+  "source": "admin",
+  "sponsoredUntil": "2027-01-01T00:00:00.000Z"
+}
+```
+
+The existing `sponsored_stores` Firestore collection is a separate admin-managed
+homepage promotional-card collection. It is not the authoritative store-level
+sponsorship record and should not be used as the store sponsorship API.

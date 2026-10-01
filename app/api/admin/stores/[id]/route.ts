@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { requireAdmin } from "@/lib/admin-auth";
 import { deleteStoreData } from "@/lib/admin-delete-seller-data";
 
-const STORE_ACTIONS = ["approve", "reject", "suspend", "verify", "restore", "delete"] as const;
+const STORE_ACTIONS = ["approve", "reject", "suspend", "verify", "restore", "delete", "sponsorship"] as const;
 type StoreAction = (typeof STORE_ACTIONS)[number];
 
 function isSuperAdminRole(role: unknown) {
@@ -33,7 +33,7 @@ export async function PATCH(
 
   try {
     const { id } = await params;
-    const body = (await request.json()) as { action?: string; reason?: unknown };
+    const body = (await request.json()) as Record<string, unknown>;
     const action = body?.action as StoreAction;
     const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
 
@@ -60,6 +60,64 @@ export async function PATCH(
         timestamp: FieldValue.serverTimestamp(),
       });
       return NextResponse.json({ success: true, action, storeId: id, deleted });
+    }
+
+    if (action === "sponsorship") {
+      const isSponsored = body.isSponsored === true;
+      const requestedStatus = typeof body.status === "string" ? body.status.trim().toLowerCase() : "";
+      const sponsorshipStatus = isSponsored ? "active" : requestedStatus || "inactive";
+      if (!["active", "inactive", "expired", "cancelled"].includes(sponsorshipStatus)) {
+        return NextResponse.json({ error: "Invalid sponsorship status" }, { status: 400 });
+      }
+
+      const numericPriority = Number(body.priority);
+      const priority = Number.isFinite(numericPriority) ? Math.max(0, numericPriority) : 0;
+      const placement = typeof body.placement === "string" ? body.placement.trim().slice(0, 80) : "marketplace";
+      const source = typeof body.source === "string" ? body.source.trim().slice(0, 80) : "admin";
+      const sponsoredUntil = typeof body.sponsoredUntil === "string" ? Date.parse(body.sponsoredUntil) : NaN;
+      if (isSponsored && typeof body.sponsoredUntil === "string" && !Number.isFinite(sponsoredUntil)) {
+        return NextResponse.json({ error: "sponsoredUntil must be a valid ISO date" }, { status: 400 });
+      }
+
+      const fields: Record<string, unknown> = {
+        isSponsored,
+        sponsored: isSponsored,
+        sponsorshipStatus,
+        priority,
+        placement,
+        source,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: access.admin.uid,
+      };
+      if (isSponsored) {
+        fields.sponsoredAt = FieldValue.serverTimestamp();
+        fields.sponsoredUntil = Number.isFinite(sponsoredUntil)
+          ? Timestamp.fromMillis(sponsoredUntil)
+          : FieldValue.delete();
+      } else {
+        fields.sponsoredUntil = FieldValue.delete();
+      }
+
+      const storeSnapshot = await storeRef.get();
+      if (!storeSnapshot.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
+      await storeRef.set(fields, { merge: true });
+      await adminDb.collection("auditLogs").add({
+        action: isSponsored ? "store_sponsorship_enabled" : "store_sponsorship_disabled",
+        targetType: "store",
+        targetId: id,
+        performedBy: access.admin.uid,
+        performedByEmail: access.admin.email || "",
+        details: { isSponsored, sponsorshipStatus, priority, placement, source },
+        timestamp: FieldValue.serverTimestamp(),
+      });
+      return NextResponse.json({
+        success: true,
+        action,
+        storeId: id,
+        isSponsored,
+        status: sponsorshipStatus,
+        priority,
+      });
     }
 
     let storeData: Record<string, unknown> | undefined;
