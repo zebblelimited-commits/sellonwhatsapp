@@ -33,15 +33,17 @@ function storeHref(store: SponsoredStore) {
 
 function StoreCard({ store }: { store: SponsoredStore }) {
   return (
-    <article className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
-      <Link href={storeHref(store)} className="relative block h-32 overflow-hidden bg-gray-100">
-        {store.bannerUrl || store.logoUrl ? <Image src={store.bannerUrl || store.logoUrl || "/images/placeholder-cover.svg"} alt="" fill sizes="(max-width: 640px) 100vw, 25vw" className="object-cover transition duration-300 group-hover:scale-105" /> : <div className="flex h-full items-center justify-center text-gray-300"><StoreIcon size={34} /></div>}
-        <span className="absolute left-3 top-3 rounded-full bg-black/65 px-3 py-1 text-[10px] font-bold text-white backdrop-blur">Sponsored</span>
-        <div className="absolute -bottom-5 left-4 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border-2 border-white bg-gray-100 shadow">
+    <article className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+      <div className="relative h-32">
+        <Link href={storeHref(store)} className="relative block h-32 overflow-hidden bg-gray-100">
+          {store.bannerUrl || store.logoUrl ? <Image src={store.bannerUrl || store.logoUrl || "/images/placeholder-cover.svg"} alt="" fill sizes="(max-width: 640px) 100vw, 25vw" className="object-cover transition duration-300 group-hover:scale-105" /> : <div className="flex h-full items-center justify-center text-gray-300"><StoreIcon size={34} /></div>}
+          <span className="absolute left-3 top-3 rounded-full bg-black/65 px-3 py-1 text-[10px] font-bold text-white backdrop-blur">Sponsored</span>
+        </Link>
+        <Link href={storeHref(store)} aria-label={`Open ${storeName(store)}`} className="absolute -bottom-5 left-4 z-20 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border-2 border-white bg-gray-100 shadow">
           {store.logoUrl ? <Image src={store.logoUrl} alt="" fill sizes="48px" className="object-cover" /> : <StoreIcon size={20} className="text-gray-300" />}
-        </div>
-      </Link>
-      <div className="p-4 pt-7">
+        </Link>
+      </div>
+      <div className="relative z-10 p-4 pt-7">
         <div className="flex items-start justify-between gap-2"><div className="min-w-0"><h3 className="truncate text-sm font-extrabold text-gray-900">{storeName(store)}</h3><p className="truncate text-[10px] font-medium text-gray-400">{store.username ? `@${store.username}` : store.category || "Marketplace store"}</p></div>{store.isVerified && <span className="shrink-0 text-[10px] font-bold text-green-600">Verified</span>}</div>
         <p className="mt-2 line-clamp-2 min-h-8 text-xs leading-4 text-gray-500">{store.description || "Explore products from this featured store."}</p>
         <Link href={storeHref(store)} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-green-600">View store <ExternalLink size={13} /></Link>
