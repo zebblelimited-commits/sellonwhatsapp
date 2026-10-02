@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Empty request body" }, { status: 400 });
     }
     body = JSON.parse(rawBody);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Invalid JSON format" }, { status: 400 });
   }
 
@@ -43,36 +43,52 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing ID token in payload" }, { status: 400 });
   }
 
-  // 3. Create the session cookie
+  const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days
+  let decodedToken: Awaited<ReturnType<typeof adminAuth.verifyIdToken>>;
+
+  // Keep token failures separate from server credential or Firestore errors.
   try {
-    const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days
-    const decodedToken = await adminAuth.verifyIdToken(idToken);
-    const sessionCookie = await adminAuth.createSessionCookie(idToken, { expiresIn });
-    const role = await resolvePortalRole(decodedToken.uid, decodedToken.role);
-
-    const cookieStore = await cookies();
-    cookieStore.set("__session", sessionCookie, {
-      maxAge: Math.floor(expiresIn / 1000),
-      expires: new Date(Date.now() + expiresIn),
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      sameSite: "lax",
-    });
-    cookieStore.set("__role", role, {
-      maxAge: Math.floor(expiresIn / 1000),
-      expires: new Date(Date.now() + expiresIn),
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      sameSite: "lax",
-    });
-
-    return NextResponse.json({ status: "success", role }, { status: 200 });
+    decodedToken = await adminAuth.verifyIdToken(idToken);
   } catch (error) {
-    console.error("Error creating session cookie:", error);
-    return NextResponse.json({ error: "Unauthorized or invalid token" }, { status: 401 });
+    console.error("Admin ID token verification failed:", error);
+    return NextResponse.json({ error: "Admin token could not be verified" }, { status: 401 });
   }
+
+  let sessionCookie: string;
+  try {
+    sessionCookie = await adminAuth.createSessionCookie(idToken, { expiresIn });
+  } catch (error) {
+    console.error("Admin session cookie creation failed:", error);
+    return NextResponse.json({ error: "Admin session could not be created" }, { status: 503 });
+  }
+
+  let role: string;
+  try {
+    role = await resolvePortalRole(decodedToken.uid, decodedToken.role);
+  } catch (error) {
+    console.error("Admin role lookup failed:", error);
+    return NextResponse.json({ error: "Admin role could not be loaded" }, { status: 503 });
+  }
+
+  const cookieStore = await cookies();
+  cookieStore.set("__session", sessionCookie, {
+    maxAge: Math.floor(expiresIn / 1000),
+    expires: new Date(Date.now() + expiresIn),
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    sameSite: "lax",
+  });
+  cookieStore.set("__role", role, {
+    maxAge: Math.floor(expiresIn / 1000),
+    expires: new Date(Date.now() + expiresIn),
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    sameSite: "lax",
+  });
+
+  return NextResponse.json({ status: "success", role }, { status: 200 });
 }
 
 export async function DELETE() {
