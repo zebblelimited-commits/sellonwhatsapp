@@ -75,14 +75,16 @@ export default function AdminLogin() {
           lastLogin: new Date(),
           updatedAt: new Date()
         });
-      } catch (updateErr: any) {
-        console.warn("⚠️ Could not update lastLogin (non-critical):", updateErr.message);
+      } catch (updateErr: unknown) {
+        console.warn("⚠️ Could not update lastLogin (non-critical):", updateErr instanceof Error ? updateErr.message : updateErr);
       }
 
       // ✅ 4. CRITICAL FIX: Mint the session cookie for the Middleware
       // Without this, the middleware will block /admin and redirect back to login
       console.log("🍪 Minting session cookie...");
-      const idToken = await user.getIdToken();
+      // Always use a fresh token here. A previously cached token can be
+      // rejected by the Admin SDK even though Firebase sign-in succeeded.
+      const idToken = await user.getIdToken(true);
       const sessionResponse = await fetch('/api/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -104,22 +106,29 @@ export default function AdminLogin() {
       router.push("/admin");
       router.refresh();
 
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorDetails = err && typeof err === "object" ? err as { code?: unknown; message?: unknown } : {};
+      const errorCode = typeof errorDetails.code === "string" ? errorDetails.code : "";
+      const errorMessage = typeof errorDetails.message === "string" ? errorDetails.message : "";
       console.error("❌ Login failed:", {
-        code: err.code,
-        message: err.message,
-        name: err.name
+        code: errorCode,
+        message: errorMessage,
+        name: err instanceof Error ? err.name : "UnknownError"
       });
 
       // User-friendly error messages
-      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
+      if (["auth/invalid-credential", "auth/wrong-password", "auth/user-not-found", "auth/invalid-email"].includes(errorCode)) {
         setError("Invalid email or password");
-      } else if (err.code === "auth/too-many-requests") {
+      } else if (errorCode === "auth/too-many-requests") {
         setError("Too many failed attempts. Please try again later");
-      } else if (err.message?.includes("Access denied")) {
-        setError(err.message);
-      } else if (err.code === "permission-denied") {
+      } else if (errorMessage.includes("Access denied")) {
+        setError(errorMessage);
+      } else if (errorCode === "permission-denied") {
         setError("Permission error. Please contact support.");
+      } else if (errorMessage.includes("Unauthorized or invalid token")) {
+        setError("Admin authentication could not be verified. Please refresh and sign in again.");
+      } else if (errorMessage.trim()) {
+        setError(errorMessage);
       } else {
         setError("Login failed. Please try again");
       }
