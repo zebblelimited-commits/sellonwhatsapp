@@ -4,8 +4,12 @@ import { cookies } from "next/headers";
 import { resolvePortalRole as resolveRole } from "@/lib/portal-role";
 
 async function resolvePortalRole(uid: string, tokenRole?: unknown) {
-  const [adminSnapshot, storeSnapshot, vendorSnapshot, buyerSnapshot, userSnapshot] = await Promise.all([
-    adminDb.collection("admins").doc(uid).get(),
+  // Admin accounts are authoritative. Resolve them independently so an
+  // unrelated buyer/vendor/store collection failure cannot block admin login.
+  const adminSnapshot = await adminDb.collection("admins").doc(uid).get();
+  if (adminSnapshot.exists && adminSnapshot.data()?.isActive === true) return "admin" as const;
+
+  const [storeSnapshot, vendorSnapshot, buyerSnapshot, userSnapshot] = await Promise.all([
     adminDb.collection("stores").doc(uid).get(),
     adminDb.collection("vendors").doc(uid).get(),
     adminDb.collection("buyers").doc(uid).get(),
@@ -13,7 +17,7 @@ async function resolvePortalRole(uid: string, tokenRole?: unknown) {
   ]);
 
   return resolveRole({
-    admin: { exists: adminSnapshot.exists && adminSnapshot.data()?.isActive === true, role: adminSnapshot.data()?.role },
+    admin: { exists: false },
     store: { exists: storeSnapshot.exists, role: storeSnapshot.data()?.role },
     vendor: { exists: vendorSnapshot.exists, role: vendorSnapshot.data()?.role },
     buyer: { exists: buyerSnapshot.exists, role: buyerSnapshot.data()?.role },
