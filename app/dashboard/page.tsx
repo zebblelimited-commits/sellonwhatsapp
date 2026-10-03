@@ -251,21 +251,23 @@ function Dashboard() {
         
         activeListeners.push(unsubSubscription);
 
-        try {
-          const docRef = doc(db, "stores", user.uid);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setStoreData(data);
-            setShowCoordinatesNotice(!hasSavedCoordinates(data));
-            setStats(prev => ({
-              ...prev,
-              followers: data.followerCount || 0,
-            }));
-          }
-        } catch (e) {
-          console.error("Failed to load store profile metrics:", e);
-        }
+        const storeRef = doc(db, "stores", user.uid);
+        const unsubscribeStore = onSnapshot(storeRef, (storeSnapshot) => {
+          if (!storeSnapshot.exists()) return;
+          const data = storeSnapshot.data();
+          // This listener keeps the Withdraw tab aligned with the canonical
+          // server ledger after escrow release, payout reconciliation, or a
+          // refunded withdrawal—without requiring a full page reload.
+          setStoreData(data);
+          setShowCoordinatesNotice(!hasSavedCoordinates(data));
+          setStats(prev => ({
+            ...prev,
+            followers: data.followerCount || 0,
+          }));
+        }, (error) => {
+          console.error("Failed to listen to store profile metrics:", error);
+        });
+        activeListeners.push(unsubscribeStore);
 
         // 🌟 FETCH REAL ANALYTICS COUNTS FROM THE 'analytics' COLLECTION
         try {
