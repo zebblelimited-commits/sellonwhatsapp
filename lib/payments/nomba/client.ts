@@ -131,7 +131,7 @@ function canContinueNombaLookup(error: unknown): boolean {
   const message = `${error.message} ${body.description || ""} ${body.message || ""}`.toLowerCase();
   return [404, 200].includes(error.status)
     || responseCode === "01"
-    || /already completed|not found|does not exist|no transaction/.test(message);
+    || /already completed|unable to find order|unable to find transaction|order.*not found|not found|does not exist|no transaction/.test(message);
 }
 
 async function parseResponse(response: Response): Promise<JsonObject> {
