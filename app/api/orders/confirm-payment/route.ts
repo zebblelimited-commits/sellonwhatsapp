@@ -97,6 +97,13 @@ export async function POST(request: NextRequest) {
                 if (verification?.confirmed) {
                     const expectedAmount = amountOf(escrow.amount);
                     if (!Number.isFinite(verification.amount) || Math.abs(Number(verification.amount) - expectedAmount) > 0.01) {
+                        console.error("Nomba payment amount mismatch", {
+                            orderReference,
+                            expectedAmount,
+                            providerAmount: verification.amount,
+                            providerStatus: verification.status,
+                            providerReference: verification.transactionId || "<missing>",
+                        });
                         throw new PaymentConfirmationError("Nomba payment amount does not match the order total", 409);
                     }
                     if (verification.currency && verification.currency !== "NGN") {

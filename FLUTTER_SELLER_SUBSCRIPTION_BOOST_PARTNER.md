@@ -19,6 +19,40 @@ Use this guide with:
 
 All payment initialization and payment verification remain server-side.
 
+## 0. Current payment contract at a glance
+
+The three checkout products use separate protected APIs and separate server records:
+
+| Product | Initialize checkout | Verify/refresh status | Server record |
+|---|---|---|---|
+| Pricing subscription | `POST /api/premium/subscription-checkout` | `GET /api/subscription/{reference}` | `subscriptions/{reference}` |
+| Store Boost | `POST /api/premium/boost-checkout` | `GET /api/boost-store/{reference}` | `boosts/{reference}` |
+| Marketplace Partner | `POST /api/partner/subscribe` | Refresh `stores/{sellerUid}` | `stores/{sellerUid}` |
+
+All three requests require a Firebase ID token:
+
+```http
+Authorization: Bearer FIREBASE_ID_TOKEN
+Content-Type: application/json
+Accept: application/json
+```
+
+The Flutter app must call the web application's deployed API base URL, not Nomba directly. Nomba client credentials, access tokens, account IDs, split configuration, and webhook secrets must remain server-only.
+
+The Nomba dashboard must send payment events to the deployed unified webhook:
+
+```text
+POST /api/webhooks/nomba
+```
+
+The webhook confirms the transaction and activates the corresponding server record. Opening a checkout URL, returning from the browser, or receiving a successful redirect is not proof of payment.
+
+For subscriptions and Store Boost, the current implementation creates a Nomba parent-account checkout. These are not seller-order escrow payments and do not use the buyer/seller/courier split. Marketplace Partner also uses the parent-account checkout.
+
+### Current fee entitlement rule
+
+The seller commission is settled at order checkout, not charged again during withdrawal. An active Pro Business Lite (`pro_lite`), Pro Yearly Business Max (`pro_max`), or Marketplace Partner entitlement waives the seller commission for eligible orders. Flutter should display the entitlement returned by the server and must not calculate or deduct another seller commission locally.
+
 ## 1. Product separation
 
 These are three related but different products.
@@ -33,10 +67,11 @@ Store Boost
   Examples: search ranking, featured placement, nearby buyer notifications.
 
 Marketplace Partner
-  A recurring or time-limited seller partnership benefit.
-  Current UI shows 1.5% total transaction fee instead of 3%,
-  partner badge, higher visibility, priority support, advanced analytics,
-  and boost discounts.
+  A time-limited seller partnership benefit.
+  The current checkout is a one-time NGN 10,000 payment for 30 days;
+  automatic recurring billing is not implemented by this route.
+  It waives the seller commission, and provides a partner badge,
+  higher visibility, priority support, advanced analytics, and boost discounts.
 ```
 
 Do not combine their records or status flags:
@@ -160,6 +195,8 @@ Pro Yearly Business Max
 ```
 
 The backend subscription route is the source of truth for plan validity and price. Do not trust a price stored only in Flutter.
+
+The current paid plan IDs accepted by the web API are `pro_lite` and `pro_max`. The paid Pro plans waive the seller commission while active; this is separate from the buyer-facing platform fee and from courier handling charges.
 
 ### 4.2 Duration options
 
@@ -336,6 +373,10 @@ The current backend returns:
 
 The exact return URL accepted by the backend must be verified for mobile. If the backend only accepts an HTTP return URL, route the user to a web success page and then return to Flutter through a universal link or app link.
 
+The server currently also stores a pending subscription record before the checkout is opened. Its important fields are `userId`, `planId`, `planName`, `durationMonths`, `basePrice`, `finalPrice`, `discount`, `savingsAmount`, `autoRenew`, `status: "pending_payment"`, `nombaReference`, `createdAt`, and a tentative expiry date. Flutter should treat this as Processing until the status endpoint or an authenticated subscription listener confirms activation.
+
+Important implementation note: the current route accepts some pricing fields from the request body for compatibility with the web client. Flutter must not use this to alter prices or grant access. The backend should derive the plan price, duration discount, and final amount from `planId` and `durationMonths`; until that hardening is deployed, keep the Flutter plan table synchronized with the web plan table and show the server response amount.
+
 ### 5.2 Flutter repository method
 
 ```dart
@@ -437,6 +478,8 @@ Future<SellerSubscription> pollSubscription(
 
 Use authenticated verification if the deployed status endpoint requires it. The current web route is public by reference, so references must be treated as sensitive and not logged or exposed unnecessarily.
 
+The status route may perform just-in-time Nomba verification when the subscription is still pending. When payment is confirmed, it activates the subscription and synchronizes seller feature flags and store fields such as `subscriptionPlan`, `isPartner` where applicable, and expiry information. Therefore, after a successful response, refresh both the subscription state and the seller store state.
+
 On timeout:
 
 - Do not create another checkout automatically.
@@ -449,21 +492,19 @@ On timeout:
 
 ### 7.1 Boost packages
 
-The current seller UI provides:
+The current seller UI uses these package IDs and daily base prices:
 
 ```text
 Micro Boost
   Plan ID: micro
-  NGN 999
-  24 hours
+  NGN 999 per day
   Trending Stores
   15% search ranking boost
   Basic analytics
 
 Pro Boost
   Plan ID: pro
-  NGN 4,999
-  3 days
+  NGN 4,999 per day
   Nearby buyer push within 5 km
   WhatsApp broadcast to opted-in buyers
   Category priority
@@ -471,8 +512,7 @@ Pro Boost
 
 Max Boost
   Plan ID: max
-  NGN 14,999
-  7 days
+  NGN 14,999 per day
   Homepage hero banner
   Editor's Picks newsletter
   Social media shoutout
@@ -488,13 +528,23 @@ Category priority   + NGN 1,000
 Boost insurance     + NGN 500
 ```
 
+Current duration choices are:
+
+```text
+1 day   0% discount
+3 days  10% discount
+7 days  17% discount
+14 days 25% discount
+```
+
 Final boost price:
 
 ```text
-package price + selected add-ons
+daily base price * duration days * (1 - duration discount)
+  + selected add-ons
 ```
 
-The current web UI calculates this total. The server must still validate the package and final charge.
+The current web UI calculates this total and rounds the result to the nearest naira. The server must still validate the package, duration, add-ons, and final charge. The Store Boost payment itself does not waive seller commission; it only creates a temporary store sponsorship/visibility entitlement after confirmed payment.
 
 ### 7.2 Boost UI
 
@@ -621,12 +671,12 @@ Body:
 
 ```json
 {
-  "planId": "pro",
-  "planName": "Pro Boost",
-  "price": 4999,
-  "finalPrice": 6499,
-  "durationDays": 3,
-  "durationLabel": "3 days",
+  "planId": "micro",
+  "planName": "Micro Boost",
+  "price": 999,
+  "finalPrice": 999,
+  "durationDays": 1,
+  "durationLabel": "1 day",
   "storeId": "SELLER_UID",
   "userId": "SELLER_UID",
   "storeName": "My Store"
@@ -640,6 +690,10 @@ The current backend:
 - Creates a pending boosts record.
 - Creates a platform Nomba checkout.
 - Returns checkoutUrl and orderReference.
+
+The server stores a pending `boosts/{orderReference}` record containing `packageName`, `tier`, `totalAmount`, `durationDays`, `durationLabel`, `storeId`, `userId`, `storeName`, `nombaReference`, `paymentProvider`, `paymentStatus`, and timestamps.
+
+Important implementation note: the current route accepts price fields for web-client compatibility. Do not allow a Flutter user to edit the amount. The backend should derive the amount from the selected package, duration, and add-ons before creating the Nomba order.
 
 Response:
 
@@ -718,10 +772,10 @@ Poll using a bounded timer. Do not poll forever and do not treat the checkout ca
 The current Partner tab presents:
 
 ```text
-1.5% total transaction fee
-  Standard seller total fee: 3%
-  Partner total fee: 1.5%
-  Seller commission is waived
+Seller commission waived
+  The normal seller commission is 1.5% of eligible product value.
+  Partner seller commission: 0%
+  Buyer platform and shipping charges remain separate checkout amounts.
 
 Partner badge
 Higher marketplace visibility
@@ -733,9 +787,9 @@ Boost discounts
 The Partner tab calculates savings:
 
 ```text
-standard fees = monthly sales * 0.03
-partner fees = monthly sales * 0.015
-monthly savings = standard fees - partner fees
+standard seller commission = monthly sales * 0.015
+partner seller commission = monthly sales * 0
+monthly savings = standard seller commission - partner seller commission
 ```
 
 This is an estimate for UI only. The server is authoritative for actual fees.
@@ -803,7 +857,7 @@ Partner screen
   Subscribe / Manage subscription
 ```
 
-If the partner is active, show Manage Subscription and expiry. If inactive, show Get Started and the monthly partner price.
+If the partner is active, show Manage Subscription and expiry. If inactive, show Get Started and the 30-day partner price.
 
 ### 9.4 Partner subscription API
 
@@ -837,7 +891,7 @@ Future<String> startPartnerCheckout() async {
 }
 ```
 
-The route creates a callback reference and includes partner_subscription metadata. The deployed webhook and store synchronization must update the partner state after confirmed payment.
+The route actually creates a one-time 30-day checkout reference, not an automatically recurring subscription. It creates a reference in the form `PARTNER_{storeId}_{timestamp}` and includes `partner_subscription` metadata with `storeId`, `userId`, and `durationDays: "30"`. The deployed webhook verifies the payment and updates `stores/{storeId}` with `isPartner: true`, `partnerExpiry`, `partnerPlan: "marketplace-pro"`, and `lastPartnerPaymentAt`.
 
 ### 9.5 Partner verification
 
@@ -853,6 +907,8 @@ After checkout:
 6. Do not display Active just because checkoutUrl opened or returned successfully.
 
 Before mobile production release, add a protected partner status endpoint or ensure Firestore rules safely expose the seller's own partner fields.
+
+Because there is no separate partner status endpoint in the current API, Flutter should refresh the authenticated seller's own store document after checkout and on app resume. If the store has not changed after bounded retries, show Processing rather than Active.
 
 ## 10. External checkout in Flutter
 
@@ -980,7 +1036,7 @@ Use the notification implementation in FLUTTER_SUPPORT_CHAT_NOTIFICATIONS.md.
 
 ## 14. Security and payment requirements
 
-- The server validates plan IDs and prices.
+- The server validates plan IDs and should derive prices from the selected plan and duration.
 - The server validates seller/store ownership.
 - The server verifies Nomba payment status.
 - Flutter never calls Nomba directly.
@@ -1036,5 +1092,3 @@ Before release, confirm:
 9. Add payment result states and cancellation-safe polling.
 10. Refresh notifications, dashboard metrics, and entitlement locks.
 11. Test successful, failed, cancelled, delayed, duplicate, and expired payments.
-
-

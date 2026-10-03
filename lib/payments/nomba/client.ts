@@ -106,6 +106,22 @@ function responseData(body: unknown): JsonObject {
     : record;
 }
 
+function firstFiniteAmount(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const amount = typeof value === "string"
+      ? Number(value.replace(/,/g, "").trim())
+      : Number(value);
+    if (Number.isFinite(amount) && amount >= 0) return amount;
+  }
+  return undefined;
+}
+
+function paymentStatus(...values: unknown[]): string {
+  return values
+    .map((value) => String(value || "").trim().toUpperCase())
+    .find(Boolean) || "";
+}
+
 async function parseResponse(response: Response): Promise<JsonObject> {
   const text = await response.text();
   let body: unknown = {};
@@ -194,15 +210,50 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
       const data = responseData(result);
       const details = data.transactionDetails && typeof data.transactionDetails === "object" ? data.transactionDetails as JsonObject : {};
       const order = data.order && typeof data.order === "object" ? data.order as JsonObject : {};
-      const statusCode = String(details.statusCode || "").toUpperCase();
+      const statusCode = paymentStatus(details.statusCode, data.status, order.status);
       const confirmed = data.success === true || String(data.success).toLowerCase() === "true" || statusCode.includes("SUCCESS") || statusCode.includes("APPROVED");
       if (confirmed) {
         return {
           confirmed: true,
-          status: "SUCCESS",
+          status: statusCode || "SUCCESS",
           transactionId: String(details.paymentReference || details.transactionId || "") || undefined,
-          amount: Number.isFinite(Number(order.amount)) ? Number(order.amount) : undefined,
+          amount: firstFiniteAmount(order.amount, details.amount, data.amount, data.transactionAmount),
           currency: String(order.currency || details.currency || data.currency || "").trim().toUpperCase() || undefined,
+          rawResponse: result,
+        };
+      }
+    } catch (error) {
+      const responseCode = error instanceof NombaError && error.responseBody && typeof error.responseBody === "object"
+        ? String((error.responseBody as JsonObject).code || "")
+        : "";
+      if (!(error instanceof NombaError && (error.status === 404 || error.status === 200 || responseCode === "01"))) throw error;
+    }
+  }
+
+  // The checkout-order response represents the gross amount the buyer was
+  // asked to pay. This is important for split payments: an account transaction
+  // lookup can expose only one split leg, while escrow validation must compare
+  // against the complete checkout amount.
+  for (const path of [
+    `v1/checkout/order/${encodeURIComponent(value)}`,
+    ...(isSandbox(config) ? [`sandbox/checkout/order/${encodeURIComponent(value)}`] : []),
+  ]) {
+    try {
+      const result = await nombaRequest<JsonObject>(path, { method: "GET" }, config);
+      const data = responseData(result);
+      const order = data.order && typeof data.order === "object" ? data.order as JsonObject : {};
+      const details = data.transactionDetails && typeof data.transactionDetails === "object" ? data.transactionDetails as JsonObject : {};
+      const status = paymentStatus(order.status, data.status, data.transactionStatus, details.statusCode, data.gatewayMessage);
+      const confirmed = data.success === true
+        || String(data.success).toLowerCase() === "true"
+        || /SUCCESS|SUCCESSFUL|APPROVED|COMPLETED/.test(status);
+      if (confirmed) {
+        return {
+          confirmed: true,
+          status: status || "SUCCESS",
+          transactionId: String(data.transactionId || data.id || details.paymentReference || details.transactionId || "") || undefined,
+          amount: firstFiniteAmount(data.amount, order.amount, details.amount, data.transactionAmount),
+          currency: String(data.currency || order.currency || details.currency || "").trim().toUpperCase() || undefined,
           rawResponse: result,
         };
       }
@@ -220,15 +271,17 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
     try {
       const result = await nombaRequest<JsonObject>(url.pathname + url.search, { method: "GET" }, config);
       const data = responseData(result);
-      const status = String(data.status || data.transactionStatus || data.gatewayMessage || "").toUpperCase();
+      const details = data.transactionDetails && typeof data.transactionDetails === "object" ? data.transactionDetails as JsonObject : {};
+      const order = data.order && typeof data.order === "object" ? data.order as JsonObject : {};
+      const status = paymentStatus(data.status, data.transactionStatus, data.gatewayMessage, details.statusCode, order.status);
       const confirmed = ["SUCCESS", "PAYMENT_SUCCESS", "PAYMENT_SUCCESSFUL", "PAYMENT SUCCESSFUL", "APPROVED", "COMPLETED"]
         .includes(status);
       return {
         confirmed,
         status,
-        transactionId: String(data.id || data.transactionId || "") || undefined,
-        amount: Number.isFinite(Number(data.amount)) ? Number(data.amount) : undefined,
-        currency: String(data.currency || data.transactionCurrency || "").trim().toUpperCase() || undefined,
+        transactionId: String(data.id || data.transactionId || details.paymentReference || details.transactionId || "") || undefined,
+        amount: firstFiniteAmount(data.amount, data.transactionAmount, order.amount, details.amount),
+        currency: String(data.currency || data.transactionCurrency || order.currency || details.currency || "").trim().toUpperCase() || undefined,
         rawResponse: result,
       };
     } catch (error) {
@@ -255,9 +308,14 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
         ? data.transactionDetails as JsonObject
         : {};
       const order = data.order && typeof data.order === "object" ? data.order as JsonObject : {};
-      const status = String(
-        details.statusCode || data.status || data.gatewayMessage || data.message || ""
-      ).toUpperCase();
+      const status = paymentStatus(
+        details.statusCode,
+        data.status,
+        data.transactionStatus,
+        data.gatewayMessage,
+        data.message,
+        order.status,
+      );
       const confirmed = data.success === true
         || String(data.success).toLowerCase() === "true"
         || /SUCCESS|APPROVED|COMPLETED/.test(status);
@@ -265,7 +323,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
         confirmed,
         status,
         transactionId: String(data.id || details.paymentReference || details.transactionId || "") || undefined,
-        amount: Number.isFinite(Number(order.amount || data.amount)) ? Number(order.amount || data.amount) : undefined,
+        amount: firstFiniteAmount(order.amount, data.amount, data.transactionAmount, details.amount),
         currency: String(order.currency || details.currency || data.currency || "").trim().toUpperCase() || undefined,
         rawResponse: result,
       };
