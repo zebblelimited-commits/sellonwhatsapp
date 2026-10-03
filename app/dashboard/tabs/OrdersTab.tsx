@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { Package, Truck, CheckCircle, Clock, Info, Flag, AlertTriangle, MessageSquare, Search, Briefcase } from "lucide-react";
+import { Package, Truck, CheckCircle, Clock, Info, Flag, AlertTriangle, MessageSquare, Search, Briefcase, X, Hand } from "lucide-react";
 import DisputeResponseModal from "@/components/disputes/DisputeResponseModal";
 import { showToast } from "@/lib/toast";
 import { supportChatRequest } from "@/components/chat/chatApi";
@@ -25,9 +25,41 @@ type SellerOrder = {
     shippingMethod?: string;
     trackingId?: string;
     buyerId?: string;
+    checkoutReference?: string;
+    orderReference?: string;
+    orderNumber?: string;
+    orderId?: string;
+    productName?: string;
+    productTitle?: string;
+    productImage?: string;
+    imageUrl?: string;
+    image?: string;
+    images?: string[];
+    deliveryMode?: string;
+    deliveryStatus?: string;
+    fundsState?: string;
     [key: string]: any;
 };
 type SellerDispute = { id: string; orderId?: string; status?: string;[key: string]: any };
+
+function firstOrderItem(order: SellerOrder) {
+    return Array.isArray(order.items) && order.items.length > 0 ? order.items[0] : undefined;
+}
+
+function orderReference(order: SellerOrder) {
+    return String(order.checkoutReference || order.orderReference || order.orderNumber || order.orderId || order.id);
+}
+
+function orderProductTitle(order: SellerOrder) {
+    const item = firstOrderItem(order);
+    return String(order.productName || order.productTitle || order.title || item?.name || item?.productName || item?.title || "Marketplace order");
+}
+
+function orderProductImage(order: SellerOrder) {
+    const item = firstOrderItem(order);
+    const itemImages = Array.isArray(item?.images) ? item.images : [];
+    return String(order.productImage || order.imageUrl || order.image || order.images?.[0] || item?.image || item?.imageUrl || item?.thumbnail || itemImages[0] || "");
+}
 
 export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes?: SellerDispute[]; onDisputeAction?: (action: string, dispute: SellerDispute) => void }) {
     const router = useRouter();
@@ -36,6 +68,9 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
     const [listenerError, setListenerError] = useState("");
     const [chatLoadingOrderId, setChatLoadingOrderId] = useState<string | null>(null);
     const [completionLoadingOrderId, setCompletionLoadingOrderId] = useState<string | null>(null);
+    const [handoverOrder, setHandoverOrder] = useState<SellerOrder | null>(null);
+    const [handoverLoadingOrderId, setHandoverLoadingOrderId] = useState<string | null>(null);
+    const [handoverError, setHandoverError] = useState("");
 
     // Filter and Search State
     const [filter, setFilter] = useState('all');
@@ -159,6 +194,49 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
         }
     };
 
+    const handleConfirmHandover = async () => {
+        if (!handoverOrder || handoverLoadingOrderId) return;
+
+        setHandoverLoadingOrderId(handoverOrder.id);
+        setHandoverError("");
+
+        try {
+            const user = auth.currentUser;
+            if (!user) throw new Error("Your seller session has expired. Please sign in again.");
+
+            const idToken = await user.getIdToken();
+            const response = await fetch("/api/orders/ship", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({ orderId: handoverOrder.id, carrier: "self_arranged" }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || "Could not confirm handover.");
+
+            setOrders((currentOrders) => currentOrders.map((order) => (
+                order.id === handoverOrder.id
+                    ? {
+                        ...order,
+                        status: data.status || "SHIPPED",
+                        deliveryStatus: "IN_TRANSIT",
+                        handoverMethod: "self_arranged",
+                    }
+                    : order
+            )));
+            setHandoverOrder(null);
+            showToast("success", "Handover confirmed. The buyer can now track the order as in transit.");
+        } catch (error) {
+            console.error("Failed to confirm order handover:", error);
+            const message = error instanceof Error ? error.message : "Could not confirm handover.";
+            setHandoverError(message);
+        } finally {
+            setHandoverLoadingOrderId(null);
+        }
+    };
+
     const openResponseModal = (dispute: SellerDispute) => {
         setResponseModal(dispute);
         setResponseText("");
@@ -227,7 +305,8 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             result = result.filter(o =>
-                o.id.toLowerCase().includes(q) ||
+                orderReference(o).toLowerCase().includes(q) ||
+                orderProductTitle(o).toLowerCase().includes(q) ||
                 o.customerName?.toLowerCase().includes(q) ||
                 o.customerPhone?.includes(q) ||
                 (o.totalAmount ?? o.total)?.toString().includes(q) ||
@@ -269,6 +348,22 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
         if (status === "WORK_DONE") return "Work Done";
         if (status === "COMPLETED") return "Completed";
         return canonicalStatus(status).replace("_", " ");
+    };
+
+    const isPaymentHeld = (order: SellerOrder, orderStatus: string) => {
+        const fundsState = String(order.fundsState || "").toLowerCase();
+        return fundsState === "held" || ["PAID_HELD", "SHIPPED", "WORK_DONE"].includes(orderStatus);
+    };
+
+    const isSelfArranged = (order: SellerOrder) =>
+        String(order.shippingMethod || "").toLowerCase() === "self_arranged" ||
+        String(order.deliveryMode || "").toLowerCase() === "self_arranged";
+
+    const getDisplayStatusLabel = (order: SellerOrder, orderStatus: string, hasDispute: boolean) => {
+        if (hasDispute) return "Disputed";
+        if (isSelfArranged(order) && orderStatus === "PAID_HELD" && isPaymentHeld(order, orderStatus)) return "Ready for handover";
+        if (orderStatus === "PAID_HELD") return "Escrow Held";
+        return getStatusLabel(order.status, false);
     };
 
     return (
@@ -327,26 +422,46 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                         const hasDispute = !!dispute;
                         const orderStatus = normalizedOrderStatus(order);
                         const isService = order.orderType === "service" || order.orderType === "booking";
+                        const selfArranged = isSelfArranged(order);
+                        const paymentHeld = isPaymentHeld(order, orderStatus);
+                        const readyForHandover = selfArranged && paymentHeld && orderStatus === "PAID_HELD";
+                        const productTitle = orderProductTitle(order);
+                        const productImage = orderProductImage(order);
                         const customerPhone = order.customerPhone || order.buyerPhone || order.phone || "";
 
                         return (
                             <div key={order.id} className={`min-w-0 max-w-full overflow-hidden bg-white p-4 rounded-2xl border shadow-sm transition-all hover:shadow-md ${hasDispute ? 'border-red-200 ring-1 ring-red-100' : 'border-gray-100'}`}>
                                 {/* Row 1: ID, Type badge, and Status */}
                                 <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex min-w-0 items-center gap-2">
                                         <div className={`p-1.5 rounded-lg border ${getStatusStyle(order.status, hasDispute)}`}>
                                             {getStatusIcon(order.status, hasDispute)}
                                         </div>
-                                        <span className="font-bold text-gray-900 text-xs">#{order.id.slice(-6).toUpperCase()}</span>
+                                        <span className="min-w-0 break-all font-bold text-gray-900 text-xs" title={orderReference(order)}>#{orderReference(order)}</span>
                                         {isService && <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">SERVICE</span>}
                                         {hasDispute && <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">DISPUTED</span>}
                                     </div>
-                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border uppercase tracking-wider ${getStatusStyle(order.status, hasDispute)}`}>
-                                        {getStatusLabel(order.status, hasDispute)}
+                                    <span className={`shrink-0 text-[9px] font-black px-2 py-0.5 rounded-full border uppercase tracking-wider ${getStatusStyle(readyForHandover ? "PAID_HELD" : order.status, hasDispute)}`}>
+                                        {getDisplayStatusLabel(order, orderStatus, hasDispute)}
                                     </span>
                                 </div>
 
-                                {/* Row 2: Amount and Details */}
+                                {/* Product summary */}
+                                <div className="mb-3 flex min-w-0 items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-2.5">
+                                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-white">
+                                        {productImage ? (
+                                            <img src={productImage} alt={productTitle} className="h-full w-full object-cover" />
+                                        ) : (
+                                            <div className="flex h-full w-full items-center justify-center text-gray-300"><Package size={20} /></div>
+                                        )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-xs font-extrabold text-gray-900" title={productTitle}>{productTitle}</p>
+                                        <p className="mt-1 break-all text-[10px] font-bold text-gray-400">Order reference: {orderReference(order)}</p>
+                                    </div>
+                                </div>
+
+                                {/* Amount and Details */}
                                 <div className="flex items-center justify-between mb-3">
                                     <div>
                                         <p className="text-sm font-extrabold text-gray-800">₦{(order.totalAmount ?? order.total ?? 0).toLocaleString()}</p>
@@ -412,6 +527,14 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                                             >
                                                 <Briefcase size={12} /> {completionLoadingOrderId === order.id ? "Updating…" : "Work Done"}
                                             </button>
+                                        ) : selfArranged ? (
+                                            <button
+                                                onClick={() => { setHandoverError(""); setHandoverOrder(order); }}
+                                                disabled={handoverLoadingOrderId !== null}
+                                                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white rounded-xl text-[10px] font-bold transition-all"
+                                            >
+                                                <Hand size={12} /> Confirm Handover
+                                            </button>
                                         ) : (
                                             <div className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-blue-100 bg-blue-50 text-blue-700 text-[10px] font-bold">
                                                 <Truck size={12} /> {order.courierName || order.shippingMethod || "Courier processing"}
@@ -452,6 +575,34 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                 onClose={closeResponseModal}
                 onSubmit={handleRespondToDispute}
             />
+
+            {handoverOrder && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-gray-950/50 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !handoverLoadingOrderId) setHandoverOrder(null); }}>
+                    <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="confirm-handover-title">
+                        <div className="mb-4 flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-green-600">Seller action</p>
+                                <h2 id="confirm-handover-title" className="mt-1 text-lg font-extrabold text-gray-900">Confirm Handover</h2>
+                            </div>
+                            <button type="button" onClick={() => setHandoverOrder(null)} disabled={Boolean(handoverLoadingOrderId)} className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50" aria-label="Close confirmation dialog">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <p className="text-sm leading-6 text-gray-600">Confirm that this order has been handed over or released for delivery. The buyer will see it as in transit and can confirm delivery when it arrives.</p>
+                        <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                            <p className="truncate text-xs font-extrabold text-gray-900">{orderProductTitle(handoverOrder)}</p>
+                            <p className="mt-1 break-all text-[10px] font-bold text-gray-400">Reference: {orderReference(handoverOrder)}</p>
+                        </div>
+                        {handoverError && <p className="mt-3 rounded-xl border border-red-100 bg-red-50 p-3 text-xs font-bold text-red-700">{handoverError}</p>}
+                        <div className="mt-5 flex gap-2">
+                            <button type="button" onClick={() => setHandoverOrder(null)} disabled={Boolean(handoverLoadingOrderId)} className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+                            <button type="button" onClick={() => void handleConfirmHandover()} disabled={handoverLoadingOrderId === handoverOrder.id} className="flex-1 rounded-xl bg-green-600 px-4 py-3 text-xs font-bold text-white hover:bg-green-700 disabled:cursor-wait disabled:opacity-60">
+                                {handoverLoadingOrderId === handoverOrder.id ? "Confirming…" : "Confirm Handover"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
