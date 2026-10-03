@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
         userId: decodedToken.uid,
         planId: String(planId),
         planName: String(planName || "Store Boost Profile Package"),
+        amount: resolvedPrice.toFixed(2),
         durationDays: String(durationDays || 1),
         isBoost: "true",
       },

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import admin from "firebase-admin";
 import { sendSubscriptionConfirmationEmail } from "@/lib/email/events";
-import { verifyNombaTransaction } from "@/lib/payments/nomba/client";
+import { nombaAmountMatchesOrder, nombaProcessingFeeForOrder, verifyNombaTransaction } from "@/lib/payments/nomba/client";
 import { updateExistingStore } from "@/lib/store-sync";
 
 async function triggerNovuNotification(userId: string, payload: Record<string, string>) {
@@ -108,6 +108,18 @@ export async function GET(
       } else {
         const verification = await verifyNombaTransaction(reference);
         if (verification.confirmed && subscriptionRecord?.userId) {
+          const expectedAmount = Number(subscriptionRecord.finalPrice || 0);
+          if (!Number.isFinite(expectedAmount) || expectedAmount <= 0
+            || !Number.isFinite(verification.amount)
+            || !nombaAmountMatchesOrder(Number(verification.amount), expectedAmount)) {
+            console.error("[Subscription Status] Provider amount did not match subscription amount", {
+              reference,
+              expectedAmount,
+              providerAmount: verification.amount,
+            });
+            throw new Error("Subscription payment amount could not be reconciled");
+          }
+
           const isMaxTier = subscriptionRecord.planId === "pro_yearly_business_max"
             || subscriptionRecord.planId === "pro_max"
             || reference.includes("PRO_MAX")
@@ -122,7 +134,10 @@ export async function GET(
             planId: isMaxTier ? "pro_yearly_business_max" : (isProLite ? "pro_business_lite" : String(subscriptionRecord.planId || "pro")),
             planName: isMaxTier ? "Pro Yearly Business Max Plan" : (isProLite ? "Pro Business Lite Plan" : String(subscriptionRecord.planName || "Pro Plan")),
             durationMonths: Number(subscriptionRecord.durationMonths || (isMaxTier ? 12 : 1)),
-            finalPrice: verification.amount || Number(subscriptionRecord.finalPrice || 0),
+            finalPrice: expectedAmount,
+            expectedAmount,
+            providerAmount: Number(verification.amount),
+            providerFee: nombaProcessingFeeForOrder(Number(verification.amount), expectedAmount),
             productLimit: isMaxTier ? 999999 : (isProLite ? 500 : 20),
           };
         }
@@ -144,6 +159,10 @@ export async function GET(
           durationMonths: verifiedData.durationMonths,
           productLimit: verifiedData.productLimit,
           finalPrice: verifiedData.finalPrice,
+          expectedAmount: verifiedData.expectedAmount || verifiedData.finalPrice,
+          providerAmount: verifiedData.providerAmount || verifiedData.finalPrice,
+          providerFee: verifiedData.providerFee || 0,
+          paymentStatus: "paid",
           paidAt: now.toISOString(),
           startDate: now.toISOString(),
           expiryDate: expiry.toISOString(),

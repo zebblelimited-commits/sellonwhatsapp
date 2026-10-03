@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
         type: "partner_subscription",
         storeId,
         userId: storeId,
+        amount: amountInNaira,
         durationDays: "30",
         productName: "SellOnWhatsapp Marketplace Partner Subscription (1 Month)",
       },

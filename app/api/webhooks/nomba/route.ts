@@ -285,13 +285,19 @@ export async function POST(request: NextRequest) {
     const escrowSnap = escrowRef ? await escrowRef.get() : null;
     let verifiedPaymentAmount = Number(transaction?.transactionAmount || transaction?.amount || payload?.data?.order?.amount || 0);
     let verifiedPaymentCurrency = String(transaction?.currency || payload?.data?.order?.currency || payload?.data?.currency || "").trim().toUpperCase();
+    let verifiedExpectedAmount = 0;
+    let verifiedProviderFee = 0;
 
     if (eventType === "PAYMENT_SUCCESS" && collectionName === "orders" && !escrowSnap?.exists) {
       console.error(`[NOMBA WEBHOOK] No escrow ledger exists for ${ledgerReference || orderRef}`);
       return NextResponse.json({ received: false, retryable: true }, { status: 409 });
     }
 
-    const requiresPaymentVerification = !isPayout && (eventType === "PAYMENT_SUCCESS" || isBoost || isSubscription);
+    const successfulPaymentEvent = eventType === "PAYMENT_SUCCESS"
+      || ["SUCCESS", "APPROVED", "COMPLETED"].includes(gatewayStatus);
+    const requiresPaymentVerification = !isPayout
+      && successfulPaymentEvent
+      && (collectionName === "orders" || isBoost || isSubscription || isPartner);
     if (requiresPaymentVerification) {
       const verificationReferences = [
         providerReference,
@@ -313,26 +319,50 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (eventType === "PAYMENT_SUCCESS" && collectionName === "orders" && escrowSnap?.exists) {
+    if (successfulPaymentEvent && collectionName === "orders" && escrowSnap?.exists) {
       const expectedAmount = Number(escrowSnap.data()?.amount || 0);
+      verifiedExpectedAmount = expectedAmount;
       if (!Number.isFinite(expectedAmount) || expectedAmount <= 0 || !Number.isFinite(verifiedPaymentAmount) || !nombaAmountMatchesOrder(verifiedPaymentAmount, expectedAmount)) {
         console.error(`[NOMBA WEBHOOK] Payment amount does not match escrow or configured Nomba fee ${ledgerReference}: ${verifiedPaymentAmount}/${expectedAmount}`);
         return NextResponse.json({ received: false, retryable: true }, { status: 202 });
       }
+      verifiedProviderFee = nombaProcessingFeeForOrder(verifiedPaymentAmount, expectedAmount);
       if (verifiedPaymentCurrency && verifiedPaymentCurrency !== "NGN") {
         console.error(`[NOMBA WEBHOOK] Unsupported payment currency for ${ledgerReference}: ${verifiedPaymentCurrency}`);
         return NextResponse.json({ received: false, retryable: true }, { status: 202 });
       }
     }
 
-    if (eventType === "PAYMENT_SUCCESS" && collectionName === "orders" && escrowRef && escrowSnap?.exists) {
-      const expectedAmount = Number(escrowSnap.data()?.amount || 0);
-      const providerFee = nombaProcessingFeeForOrder(verifiedPaymentAmount, expectedAmount);
+    if (requiresPaymentVerification && collectionName !== "orders") {
+      const record = docSnaps[0].data() || {};
+      verifiedExpectedAmount = isPartner
+        ? Number(metadata?.amount || 10000)
+        : isBoost
+          ? Number(record.totalAmount || 0)
+          : Number(record.finalPrice || metadata?.actualAmount || 0);
+
+      if (!Number.isFinite(verifiedExpectedAmount) || verifiedExpectedAmount <= 0
+        || !Number.isFinite(verifiedPaymentAmount)
+        || !nombaAmountMatchesOrder(verifiedPaymentAmount, verifiedExpectedAmount)) {
+        console.error("[NOMBA WEBHOOK] Platform payment amount mismatch", {
+          orderReference: orderRef,
+          collectionName,
+          expectedAmount: verifiedExpectedAmount,
+          providerAmount: verifiedPaymentAmount,
+        });
+        return NextResponse.json({ received: false, retryable: true }, { status: 202 });
+      }
+
+      verifiedProviderFee = nombaProcessingFeeForOrder(verifiedPaymentAmount, verifiedExpectedAmount);
+    }
+
+    if (successfulPaymentEvent && collectionName === "orders" && escrowRef && escrowSnap?.exists) {
       await escrowRef.set({
         status: "FUNDED",
         fundedAmount: verifiedPaymentAmount,
         providerAmount: verifiedPaymentAmount,
-        providerFee,
+        providerFee: verifiedProviderFee,
+        expectedAmount: verifiedExpectedAmount,
         providerReference: String(providerReference || ledgerReference),
         paidAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -405,6 +435,12 @@ export async function POST(request: NextRequest) {
             isPartner: true,
             partnerExpiry: expiryDate.toISOString(),
             partnerPlan: "marketplace-pro",
+            paymentStatus: "paid",
+            expectedAmount: verifiedExpectedAmount,
+            providerAmount: verifiedPaymentAmount,
+            providerFee: verifiedProviderFee,
+            providerReference,
+            providerStatus: gatewayStatus,
             lastPartnerPaymentAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
@@ -577,6 +613,9 @@ export async function POST(request: NextRequest) {
                 transaction.update(documentRef, {
                   status: newStatus,
                   paymentStatus: "paid",
+                  expectedAmount: verifiedExpectedAmount,
+                  providerAmount: verifiedPaymentAmount,
+                  providerFee: verifiedProviderFee,
                   providerReference,
                   providerStatus: gatewayStatus,
                   startDate: new Date().toISOString(),
@@ -594,6 +633,12 @@ export async function POST(request: NextRequest) {
               // 1️⃣ Update the Subscription Document
               await documentRef.update({
                 status: newStatus,
+                paymentStatus: "paid",
+                expectedAmount: verifiedExpectedAmount,
+                providerAmount: verifiedPaymentAmount,
+                providerFee: verifiedProviderFee,
+                providerReference,
+                providerStatus: gatewayStatus,
                 startDate: new Date().toISOString(),
                 expiryDate: expiryDate.toISOString(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),

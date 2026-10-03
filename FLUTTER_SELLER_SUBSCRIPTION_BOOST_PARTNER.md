@@ -39,6 +39,8 @@ Accept: application/json
 
 The Flutter app must call the web application's deployed API base URL, not Nomba directly. Nomba client credentials, access tokens, account IDs, split configuration, and webhook secrets must remain server-only.
 
+Flutter does not calculate or add the Nomba processing fee. The web server reconciles the product amount against either the exact product amount or the configured Nomba fee-inclusive amount, then stores `expectedAmount`, `providerAmount`, and `providerFee`. The subscription, boost, or partner price shown by Flutter remains the product price.
+
 The Nomba dashboard must send payment events to the deployed unified webhook:
 
 ```text
@@ -1049,6 +1051,9 @@ Use the notification implementation in FLUTTER_SUPPORT_CHAT_NOTIFICATIONS.md.
 - Do not create duplicate checkouts after a timeout without checking the existing reference.
 - Require authentication before opening seller growth screens.
 - Use server-side idempotency for checkout initialization where supported.
+- Do not mark a payment active from the browser redirect.
+- Do not add `NOMBA_PROCESSING_FEE_RATE` or `NOMBA_PROCESSING_FEE_CAP` to the Flutter app; those are server-only reconciliation settings.
+- When the server returns Processing, keep the bounded status poll and refresh the entitlement instead of creating another checkout.
 
 ## 15. API checklist
 
