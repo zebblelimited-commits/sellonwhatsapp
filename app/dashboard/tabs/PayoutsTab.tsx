@@ -36,6 +36,7 @@ export default function PayoutsTab({ payoutHistory = [] }: PayoutsTabProps) {
     const normalizedStatus = status.toLowerCase() === "approved" ? "processing" : status.toLowerCase();
     const config: Record<string, { label: string, icon: LucideIcon, bg: string, text: string }> = {
       completed: { label: "Completed", icon: CheckCircle2, bg: "bg-green-100", text: "text-green-700" },
+      available: { label: "Available", icon: CheckCircle2, bg: "bg-emerald-100", text: "text-emerald-700" },
       pending: { label: "Pending", icon: Clock, bg: "bg-yellow-100", text: "text-yellow-700" },
       processing: { label: "Processing", icon: Clock, bg: "bg-blue-100", text: "text-blue-700" },
       failed: { label: "Failed", icon: XCircle, bg: "bg-red-100", text: "text-red-700" },

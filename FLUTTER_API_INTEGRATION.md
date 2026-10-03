@@ -210,7 +210,7 @@ Every endpoint in this table requires `Authorization: Bearer <Firebase ID token>
 | `POST` | `/api/account/delete` | Deletes the authenticated account and related data. Require a confirmation screen. |
 | `POST` | `/api/checkout` | Creates a Nomba checkout for a buyer cart. The server recalculates the totals. |
 | `POST` | `/api/orders/confirm-payment` | Confirms a checkout/payment reference and returns order payment status. |
-| `POST` | `/api/orders/complete` | Buyer or authorized party completes an order and releases escrow. Body: `{ "orderId": "..." }`. |
+| `POST` | `/api/orders/complete` | Buyer completes an eligible order and releases escrow into the seller's available balance. Body: `{ "orderId": "..." }`. The seller withdraws later through `/api/withdraw`. |
 | `POST` | `/api/orders/ship` | Seller marks an order shipped or service work complete. Body includes `orderId`, and physical shipments use `trackingId` and `carrier`. |
 | `POST` | `/api/shipping/dispatch` | Dispatches a shipment. Body: `{ "shipmentId": "..." }`. |
 | `POST` | `/api/products` | Seller creates a product. Body: `{ "userId": "current_uid", "productPayload": { ... } }`. |

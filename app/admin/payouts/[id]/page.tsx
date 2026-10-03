@@ -75,6 +75,22 @@ export default function AdminPayoutDetailsPage() {
     }
   };
 
+  const creditLegacyOrderPayout = async () => {
+    if (!payout) return;
+    if (!window.confirm("Credit this legacy order payout to the seller's available balance? Confirm that Nomba did not already pay the seller.")) return;
+    setActionLoading("credit_available_balance");
+    setError("");
+    try {
+      await adminMutation(`/api/admin/payouts/${encodeURIComponent(payout.id)}/reconcile`, {
+        action: "credit_available_balance",
+      });
+    } catch (actionError: unknown) {
+      setError(actionError instanceof Error ? actionError.message : "Available balance credit failed");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
   if (loading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="animate-spin text-green-600" size={30} /></div>;
   if (!payout) return <div className="rounded-3xl bg-white p-10 text-center"><ShieldAlert className="mx-auto mb-3 text-red-500" /><p className="font-bold">Payout not found</p><button onClick={() => router.back()} className="mt-4 text-sm font-bold text-green-700">Go back</button></div>;
 
@@ -102,6 +118,10 @@ export default function AdminPayoutDetailsPage() {
   const completedTimestamp = firstValue(payout, "completedAt");
   const balanceRestoredTimestamp = firstValue(payout, "balanceRestoredAt");
   const reconciledTimestamp = firstValue(payout, "reconciledAt", "refundedAt");
+  const canCreditLegacyOrderPayout = payout.id.startsWith("SELLER_")
+    && status === "completed"
+    && String(payout.providerStatus || "").toUpperCase() === "MANUALLY_CONFIRMED"
+    && !payout.balanceCreditedAt;
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-10">
       <button onClick={() => router.back()} className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900"><ArrowLeft size={16} /> Back to payouts</button>
@@ -113,6 +133,7 @@ export default function AdminPayoutDetailsPage() {
         <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm"><h2 className="mb-4 flex items-center gap-2 font-black"><Clock3 size={17} className="text-purple-600" /> Reconciliation timeline</h2><Info label="Gateway attempt" value={dateValue(gatewayTimestamp)} /><Info label="Completed" value={completedTimestamp ? dateValue(completedTimestamp) : status === "completed" ? "Completed timestamp not recorded" : "Not completed"} /><Info label="Balance restored" value={balanceRestoredTimestamp ? dateValue(balanceRestoredTimestamp) : status === "failed" || status === "refunded" ? "Restoration timestamp not recorded" : "Not applicable"} /><Info label="Reconciled" value={reconciledTimestamp ? dateValue(reconciledTimestamp) : status === "failed" || status === "refunded" ? "Reconciliation timestamp not recorded" : "Not reconciled"} /><Info label="Reason" value={text(payout.reconciliationReason || payout.failureReason || payout.refundReason)} /></div>
       </section>
       {(canProcess || canResolve) && <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm"><h2 className="mb-1 flex items-center gap-2 font-black"><RefreshCw size={17} className="text-blue-600" /> Safe reconciliation controls</h2><p className="mb-4 text-xs text-gray-500">Completion requires a provider reference. Failed/refunded actions restore the reserved gross amount only once.</p><div className="grid gap-3 md:grid-cols-2"><input value={providerReference} onChange={(event) => setProviderReference(event.target.value)} placeholder="Provider reference (required for completion)" className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-green-600" /><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reason for failed/refunded action" className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-green-600" /></div><div className="mt-4 flex flex-wrap gap-2">{canProcess && <ActionButton label="Mark processing" icon={<RefreshCw size={14} />} loading={actionLoading === "processing"} onClick={() => reconcile("processing")} />}{canComplete && <ActionButton label="Confirm completed" icon={<CheckCircle2 size={14} />} loading={actionLoading === "completed"} onClick={() => reconcile("completed")} />}{canResolve && <ActionButton label="Mark failed + restore" icon={<XCircle size={14} />} loading={actionLoading === "failed"} onClick={() => reconcile("failed")} />}{canResolve && <ActionButton label="Mark refunded + restore" icon={<RefreshCw size={14} />} loading={actionLoading === "refunded"} onClick={() => reconcile("refunded")} danger />}</div></section>}
+      {canCreditLegacyOrderPayout && <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm"><h2 className="mb-1 flex items-center gap-2 font-black text-amber-950"><DollarSign size={17} /> Legacy order payout migration</h2><p className="mb-4 text-xs leading-5 text-amber-900">This legacy order payout was manually confirmed but was not credited to the seller ledger. Use this only if Nomba did not already transfer the money to the seller.</p><ActionButton label="Credit available balance" icon={<CheckCircle2 size={14} />} loading={actionLoading === "credit_available_balance"} onClick={() => void creditLegacyOrderPayout()} /> </section>}
       {(["failed", "refunded"].includes(status) && !balanceRestoredTimestamp) && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">This payout has no balance-restoration timestamp. Verify the seller ledger before taking any further financial action; the system will not assume the balance was restored.</div>}
       {Boolean(payout.balanceRestoredAt) && <div className="rounded-2xl bg-amber-50 p-4 text-sm font-medium text-amber-800">The seller balance was already restored for this payout. Reconciliation actions cannot restore it a second time.</div>}
     </div>

@@ -27,11 +27,12 @@ export async function PATCH(
 
   try {
     const { id } = await params;
-    const body = await request.json() as { status?: unknown; reason?: unknown; providerReference?: unknown };
+    const body = await request.json() as { status?: unknown; action?: unknown; reason?: unknown; providerReference?: unknown };
+    const action = typeof body.action === "string" ? body.action.trim().toLowerCase() : "";
     const nextStatus = typeof body.status === "string" ? body.status.trim().toLowerCase() as PayoutStatus : "" as PayoutStatus;
     const reason = typeof body.reason === "string" ? body.reason.trim() : "";
     const providerReference = typeof body.providerReference === "string" ? body.providerReference.trim() : "";
-    if (!id || !PAYOUT_STATUSES.includes(nextStatus)) throw new ReconciliationError("Invalid payout status", 400);
+    if (!id || (action !== "credit_available_balance" && !PAYOUT_STATUSES.includes(nextStatus))) throw new ReconciliationError("Invalid payout status or action", 400);
     if ((nextStatus === "failed" || nextStatus === "refunded") && !reason) throw new ReconciliationError("A reconciliation reason is required", 400);
 
     const result = await adminDb.runTransaction(async (transaction) => {
@@ -42,6 +43,56 @@ export async function PATCH(
       const rawCurrentStatus = String(payout.status || "pending").toLowerCase();
       const currentStatus = (rawCurrentStatus === "approved" ? "processing" : rawCurrentStatus) as PayoutStatus;
       const vendorId = typeof payout.vendorId === "string" ? payout.vendorId : typeof payout.storeId === "string" ? payout.storeId : "";
+
+      // Legacy SELLER_* records were created before order releases started
+      // crediting the seller ledger. This guarded action migrates only an
+      // admin-manually-confirmed legacy payout; provider-confirmed transfers
+      // are never credited again.
+      if (action === "credit_available_balance") {
+        const providerStatus = String(payout.providerStatus || "").trim().toUpperCase();
+        const isLegacyOrderSettlement = String(payout.id || id).startsWith("SELLER_") && typeof payout.orderId === "string" && payout.orderId;
+        if (!isLegacyOrderSettlement) throw new ReconciliationError("Only legacy order settlements can be credited to the seller balance", 409);
+        if (payout.balanceCreditedAt) return { alreadyProcessed: true, status: "available", balanceCredited: true };
+        if (providerStatus !== "MANUALLY_CONFIRMED") throw new ReconciliationError("This payout does not have an admin-only provider confirmation. Do not credit it without confirming that Nomba did not pay the seller.", 409);
+
+        const storeRef = adminDb.collection("stores").doc(vendorId);
+        const storeSnap = await transaction.get(storeRef);
+        if (!storeSnap.exists) throw new ReconciliationError("Seller wallet not found", 404);
+        const currentAvailable = Number(storeSnap.data()?.availableBalance ?? 0);
+        const grossAmount = Number(payout.grossAmount ?? payout.netAmount ?? payout.amount ?? 0);
+        if (!Number.isFinite(currentAvailable) || currentAvailable < 0 || !Number.isFinite(grossAmount) || grossAmount <= 0) {
+          throw new ReconciliationError("Seller balance or payout amount is invalid; no balance was changed", 409);
+        }
+
+        const now = FieldValue.serverTimestamp();
+        transaction.update(storeRef, { availableBalance: currentAvailable + grossAmount, updatedAt: now });
+        transaction.update(payoutRef, {
+          status: "available",
+          settlementType: "order_release",
+          balanceCreditedAt: now,
+          balanceCreditedBy: access.admin.uid,
+          providerStatus: "AVAILABLE_BALANCE",
+          reconciledAt: now,
+          reconciledBy: access.admin.uid,
+          reconciledByEmail: access.admin.email || "",
+          updatedAt: now,
+        });
+        transaction.update(adminDb.collection("orders").doc(String(payout.orderId)), {
+          sellerPayoutStatus: "available",
+          sellerPayoutAvailableAt: now,
+          updatedAt: now,
+        });
+        transaction.set(adminDb.collection("auditLogs").doc(), {
+          action: "legacy_order_payout_credited_to_available_balance",
+          targetType: "payout",
+          targetId: id,
+          performedBy: access.admin.uid,
+          performedByEmail: access.admin.email || "",
+          details: { restoredAmount: grossAmount, reason: "legacy_order_release_migration" },
+          timestamp: now,
+        });
+        return { alreadyProcessed: false, status: "available", balanceCredited: true };
+      }
 
       if (currentStatus === nextStatus) return { alreadyProcessed: true, status: currentStatus, balanceRestored: Boolean(payout.balanceRestoredAt) };
       if (currentStatus === "completed") throw new ReconciliationError("Completed payouts cannot be changed", 409);

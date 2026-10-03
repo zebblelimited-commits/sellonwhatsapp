@@ -1105,8 +1105,9 @@ The endpoint:
 - Validates escrow state.
 - Changes status to COMPLETED.
 - Releases escrow ledger values through a server transaction.
-- Creates a seller payout record.
-- Attempts Nomba settlement when seller payout details are configured.
+- Credits the seller's `stores/{sellerUid}.availableBalance` with the net seller payout.
+- Creates an `available` order-settlement record for audit/history.
+- Does not initiate an automatic Nomba seller transfer. The seller must use the Withdraw flow.
 - Records referral order rewards.
 - Sends notifications.
 

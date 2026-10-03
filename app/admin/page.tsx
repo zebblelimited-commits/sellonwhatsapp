@@ -524,7 +524,7 @@ function AdminPayoutsTab() {
         </div>
         <div className="flex flex-wrap gap-2">
           <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search payouts…" className="w-56 rounded-xl border border-gray-200 bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-green-600" /></div>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 outline-none focus:border-green-600"><option value="all">All statuses</option><option value="pending">Pending</option><option value="processing">Processing</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="refunded">Refunded</option></select>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 outline-none focus:border-green-600"><option value="all">All statuses</option><option value="available">Available balance</option><option value="pending">Pending</option><option value="processing">Processing</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="refunded">Refunded</option></select>
         </div>
       </div>
       {listenerError && <div className="rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700">{listenerError}</div>}
@@ -1444,7 +1444,7 @@ function StatusBadge({ status, size = 'sm' }: { status: string; size?: 'sm' | 'm
     active: { label: 'Active', color: 'bg-green-100 text-green-700' }, verified: { label: 'Verified', color: 'bg-blue-100 text-blue-700' },
     banned: { label: 'Banned', color: 'bg-red-100 text-red-700' }, suspended: { label: 'Suspended', color: 'bg-amber-100 text-amber-700' },
     pending: { label: 'Pending', color: 'bg-gray-100 text-gray-700' }, open: { label: 'Open', color: 'bg-red-100 text-red-700' },
-    under_review: { label: 'Review', color: 'bg-amber-100 text-amber-700' }, resolved: { label: 'Resolved', color: 'bg-green-100 text-green-700' }
+    under_review: { label: 'Review', color: 'bg-amber-100 text-amber-700' }, resolved: { label: 'Resolved', color: 'bg-green-100 text-green-700' }, available: { label: 'Available', color: 'bg-emerald-100 text-emerald-700' }
   };
   const { label, color } = config[status.toLowerCase()] || config.pending;
   return <span className={`inline-flex items-center rounded-full font-bold uppercase tracking-wider ${color} ${size === 'sm' ? 'px-2 py-0.5 text-[9px]' : 'px-3 py-1 text-xs'}`}>{label}</span>;
