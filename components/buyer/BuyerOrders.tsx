@@ -15,6 +15,25 @@ import {
 
 type BuyerDispute = { orderId: string; status?: string; reason?: string; description?: string; vendorResponded?: boolean };
 
+function firstOrderItem(order: any) {
+    return Array.isArray(order.items) && order.items.length > 0 ? order.items[0] : undefined;
+}
+
+function buyerOrderReference(order: any) {
+    return String(order.checkoutReference || order.orderReference || order.orderNumber || order.orderId || order.id);
+}
+
+function buyerProductTitle(order: any) {
+    const item = firstOrderItem(order);
+    return String(order.productName || order.productTitle || order.title || item?.name || item?.productName || item?.title || "Marketplace order");
+}
+
+function buyerProductImage(order: any) {
+    const item = firstOrderItem(order);
+    const itemImages = Array.isArray(item?.images) ? item.images : [];
+    return String(order.productImage || order.imageUrl || order.image || order.images?.[0] || item?.image || item?.imageUrl || item?.thumbnail || itemImages[0] || "");
+}
+
 export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: BuyerDispute[]; onDisputeAction?: (action: string, payload: unknown) => void }) {
     const router = useRouter(); // ✅ Initialize router
     const [orders, setOrders] = useState<any[]>([]);
@@ -322,6 +341,9 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                         : isSelfArranged
                             ? ["shipped", "in_transit", "out_for_delivery", "delivered"].includes(orderStatus) || ["in_transit", "out_for_delivery", "delivered"].includes(deliveryStatus)
                             : orderStatus === "delivered" || deliveryStatus === "delivered";
+                    const productTitle = buyerProductTitle(order);
+                    const productImage = buyerProductImage(order);
+                    const reference = buyerOrderReference(order);
 
                     return (
                         // ✅ FIXED: Link to correct buyer order detail path
@@ -349,8 +371,8 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                                                     order.status === "SHIPPED" ? <Truck size={20} /> :
                                                         <CheckCircle size={20} />}
                                         </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-900 text-sm">Order #{order.id.slice(-6).toUpperCase()}</h4>
+                                        <div className="min-w-0">
+                                            <h4 className="break-all font-bold text-gray-900 text-sm" title={reference}>Order #{reference}</h4>
                                             {/* ✅ FIX: Read 'total' or fallback to 'totalAmount' */}
                                             <p className="text-[11px] text-gray-400 font-bold">₦{(order.totalAmount || order.total || 0).toLocaleString()}</p>
                                         </div>
@@ -366,6 +388,20 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                                                     order.status}
                                         </span>
                                         <ChevronRight size={16} className="text-gray-300" />
+                                    </div>
+                                </div>
+
+                                <div className="flex min-w-0 items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50/70 p-3">
+                                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-white">
+                                        {productImage ? (
+                                            <img src={productImage} alt={productTitle} className="h-full w-full object-cover" />
+                                        ) : (
+                                            <div className="flex h-full w-full items-center justify-center text-gray-300"><Package size={22} /></div>
+                                        )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-extrabold text-gray-900" title={productTitle}>{productTitle}</p>
+                                        <p className="mt-1 break-all text-[10px] font-bold text-gray-400">Order ID: {reference}</p>
                                     </div>
                                 </div>
 
