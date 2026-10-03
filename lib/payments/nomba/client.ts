@@ -122,6 +122,18 @@ function paymentStatus(...values: unknown[]): string {
     .find(Boolean) || "";
 }
 
+function canContinueNombaLookup(error: unknown): boolean {
+  if (!(error instanceof NombaError)) return false;
+  const body = error.responseBody && typeof error.responseBody === "object"
+    ? error.responseBody as JsonObject
+    : {};
+  const responseCode = String(body.code || "");
+  const message = `${error.message} ${body.description || ""} ${body.message || ""}`.toLowerCase();
+  return [404, 200].includes(error.status)
+    || responseCode === "01"
+    || /already completed|not found|does not exist|no transaction/.test(message);
+}
+
 async function parseResponse(response: Response): Promise<JsonObject> {
   const text = await response.text();
   let body: unknown = {};
@@ -223,10 +235,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
         };
       }
     } catch (error) {
-      const responseCode = error instanceof NombaError && error.responseBody && typeof error.responseBody === "object"
-        ? String((error.responseBody as JsonObject).code || "")
-        : "";
-      if (!(error instanceof NombaError && (error.status === 404 || error.status === 200 || responseCode === "01"))) throw error;
+      if (!canContinueNombaLookup(error)) throw error;
     }
   }
 
@@ -258,10 +267,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
         };
       }
     } catch (error) {
-      const responseCode = error instanceof NombaError && error.responseBody && typeof error.responseBody === "object"
-        ? String((error.responseBody as JsonObject).code || "")
-        : "";
-      if (!(error instanceof NombaError && (error.status === 404 || error.status === 200 || responseCode === "01"))) throw error;
+      if (!canContinueNombaLookup(error)) throw error;
     }
   }
 
@@ -275,21 +281,19 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
       const order = data.order && typeof data.order === "object" ? data.order as JsonObject : {};
       const status = paymentStatus(data.status, data.transactionStatus, data.gatewayMessage, details.statusCode, order.status);
       const confirmed = ["SUCCESS", "PAYMENT_SUCCESS", "PAYMENT_SUCCESSFUL", "PAYMENT SUCCESSFUL", "APPROVED", "COMPLETED"]
-        .includes(status);
-      return {
-        confirmed,
-        status,
-        transactionId: String(data.id || data.transactionId || details.paymentReference || details.transactionId || "") || undefined,
-        amount: firstFiniteAmount(data.amount, data.transactionAmount, order.amount, details.amount),
-        currency: String(data.currency || data.transactionCurrency || order.currency || details.currency || "").trim().toUpperCase() || undefined,
-        rawResponse: result,
-      };
+        .includes(status) || /SUCCESS|SUCCESSFUL|APPROVED|COMPLETED/.test(status);
+      if (confirmed) {
+        return {
+          confirmed: true,
+          status,
+          transactionId: String(data.id || data.transactionId || details.paymentReference || details.transactionId || "") || undefined,
+          amount: firstFiniteAmount(data.amount, data.transactionAmount, order.amount, details.amount),
+          currency: String(data.currency || data.transactionCurrency || order.currency || details.currency || "").trim().toUpperCase() || undefined,
+          rawResponse: result,
+        };
+      }
     } catch (error) {
-      const responseCode = error instanceof NombaError && error.responseBody && typeof error.responseBody === "object"
-        ? String((error.responseBody as JsonObject).code || "")
-        : "";
-      if (error instanceof NombaError && (error.status === 404 || error.status === 200 || responseCode === "01")) continue;
-      throw error;
+      if (!canContinueNombaLookup(error)) throw error;
     }
   }
 
@@ -328,10 +332,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
         rawResponse: result,
       };
     } catch (error) {
-      const responseCode = error instanceof NombaError && error.responseBody && typeof error.responseBody === "object"
-        ? String((error.responseBody as JsonObject).code || "")
-        : "";
-      if (!(error instanceof NombaError && (error.status === 404 || error.status === 200 || responseCode === "01"))) throw error;
+      if (!canContinueNombaLookup(error)) throw error;
     }
   }
 
