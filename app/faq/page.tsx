@@ -113,7 +113,7 @@ const FAQ_DATA: FAQItem[] = [
   {
     id: "op-1",
     question: "How do I receive payments from buyers?",
-    answer: "SellOnWhatsApp uses escrow protection: (1) Buyer pays via Nomba (card/transfer), (2) Funds are held securely, (3) You ship the order and mark as 'Shipped', (4) Buyer confirms receipt, (5) Funds release to your wallet within 24 hours. Withdraw anytime to your bank account (3% fee).",
+    answer: "SellOnWhatsApp uses escrow protection: (1) Buyer pays via Nomba (card/transfer), (2) Funds are held securely, (3) You ship the order and mark as 'Shipped', (4) Buyer confirms receipt, (5) Funds release to your wallet within 24 hours. Seller commission is settled at checkout, and no additional seller commission is charged when you withdraw.",
     category: "orders-payments",
     tags: ["payments", "escrow", "payouts", "Nomba"]
   },

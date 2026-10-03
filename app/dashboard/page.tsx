@@ -120,7 +120,10 @@ function Dashboard() {
     followers: 0,
     totalSales: 0,
     escrowBalance: 0,
-    availableBalance: 0
+    availableBalance: 0,
+    isPartner: false,
+    partnerExpiry: "",
+    subscriptionPlan: ""
   });
 
   const [disputes, setDisputes] = useState<any[]>([]);
@@ -156,7 +159,10 @@ function Dashboard() {
       ...prev,
       totalSales: Number.isFinite(totalSalesTotal) ? Math.max(0, totalSalesTotal) : 0,
       escrowBalance: Number.isFinite(escrowTotal) ? Math.max(0, escrowTotal) : 0,
-      availableBalance: Number.isFinite(availableTotal) ? Math.max(0, availableTotal) : 0
+      availableBalance: Number.isFinite(availableTotal) ? Math.max(0, availableTotal) : 0,
+      isPartner: storeData?.isPartner === true,
+      partnerExpiry: String(storeData?.partnerExpiry || ""),
+      subscriptionPlan: String(storeData?.subscriptionPlan || "")
     }));
   }, [orders, disputes, currentUser, storeData]);
 
@@ -883,7 +889,7 @@ function ProFeaturePlaceholder({ feature, onUpgrade }: { feature: ProFeature; on
     advanced_withdraw: {
       title: "Instant Withdrawals",
       description: "Get your funds faster with priority processing and lower fees.",
-      benefits: ["Same-day bank transfers", "Reduced withdrawal fees", "Higher withdrawal limits", "Priority support"]
+      benefits: ["Same-day bank transfers", "No additional withdrawal commission", "Higher withdrawal limits", "Priority support"]
     },
     priority_support: {
       title: "Priority Support",

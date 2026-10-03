@@ -8,6 +8,7 @@ import {
   MessageSquare, Eye
 } from "lucide-react";
 import { showToast } from "@/lib/toast";
+import { hasSellerCommissionWaiver } from "@/lib/escrow/calculator";
 
 export default function PartnerTab({ storeId }: { storeId: string }) {
   const [storeData, setStoreData] = useState<any>(null);
@@ -52,6 +53,7 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
     storeData?.isPartner === true ||
     storeData?.subscriptionPlan === "pro_max" ||
     String(storeData?.subscriptionPlan || "").toLowerCase().includes("max");
+  const hasCommissionWaiver = hasSellerCommissionWaiver(storeData || {});
 
   // Fallback to subscriptionExpiry if partnerExpiry isn't set yet
   const partnerExpiry = storeData?.partnerExpiry ? new Date(storeData.partnerExpiry) : (storeData?.subscriptionExpiry ? new Date(storeData.subscriptionExpiry) : null);
@@ -108,6 +110,13 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
       <div>
         <h2 className="text-2xl font-bold text-gray-900">Partner Program</h2>
         <p className="text-sm text-gray-500 mt-1">Sell more. Save more. Grow more.</p>
+      </div>
+
+      <div className="rounded-2xl border border-green-100 bg-green-50 p-4 text-sm text-green-900">
+        <p className="font-bold">Seller commission waiver</p>
+        <p className="mt-1 text-xs text-green-800">
+          Active Marketplace Partner, Pro Business Lite, and Pro Yearly Business Max plans waive the 1.5% seller commission at checkout. The buyer platform fee and courier handling fee still apply where applicable.
+        </p>
       </div>
 
       {/* Partner Status Banner */}
@@ -182,8 +191,8 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
             <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center mb-3">
               <Percent size={24} className="text-[#00a63e]" />
             </div>
-            <h4 className="font-bold text-gray-900 text-sm mb-1">0% Seller Fees</h4>
-            <p className="text-xs text-gray-500">Pay only the 1.5% platform fee instead of 3% total</p>
+            <h4 className="font-bold text-gray-900 text-sm mb-1">0% Seller Commission</h4>
+            <p className="text-xs text-gray-500">Eligible Partner, Pro Business Lite, and Pro Yearly Business Max plans waive the 1.5% seller commission at checkout</p>
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -276,13 +285,13 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
               </div>
             </div>
 
-            {/* Partner Seller Card */}
-            <div className={`rounded-2xl p-4 border hover:shadow-md hover:-translate-y-1 transition-all duration-300 cursor-default ${isPartner ? 'bg-green-50 border-green-200 hover:bg-green-100' : 'bg-amber-50/50 border-amber-200 hover:bg-amber-50'
+            {/* Commission-waiver seller card */}
+            <div className={`rounded-2xl p-4 border hover:shadow-md hover:-translate-y-1 transition-all duration-300 cursor-default ${hasCommissionWaiver ? 'bg-green-50 border-green-200 hover:bg-green-100' : 'bg-amber-50/50 border-amber-200 hover:bg-amber-50'
               }`}>
-              <h4 className={`font-bold text-xs mb-3 ${isPartner ? 'text-green-900' : 'text-amber-900'}`}>
-                Partner Seller {isPartner && <CheckCircle2 size={12} className="inline ml-1 text-green-600" />}
+              <h4 className={`font-bold text-xs mb-3 ${hasCommissionWaiver ? 'text-green-900' : 'text-amber-900'}`}>
+                Partner / Pro Seller {hasCommissionWaiver && <CheckCircle2 size={12} className="inline ml-1 text-green-600" />}
               </h4>
-              <p className="text-[10px] text-gray-500 mb-3">1.5% Total Fees</p>
+              <p className="text-[10px] text-gray-500 mb-3">1.5% buyer platform fee; seller commission waived</p>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Platform Fee (1.5%)</span>
@@ -291,15 +300,15 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Seller Commission</span>
-                  <span className={`font-bold ${isPartner ? 'text-green-600' : 'text-amber-600'}`}>
-                    {isPartner ? '₦0 (Waived)' : `₦{(monthlySales * 0.015).toLocaleString()}`}
+                  <span className={`font-bold ${hasCommissionWaiver ? 'text-green-600' : 'text-amber-600'}`}>
+                    {hasCommissionWaiver ? '₦0 (Waived)' : `₦${(monthlySales * 0.015).toLocaleString()}`}
                   </span>
                 </div>
                 <div className="pt-2 border-t border-gray-200/50">
                   <div className="flex justify-between">
-                    <span className={`font-bold ${isPartner ? 'text-green-700' : 'text-amber-700'}`}>Total Fees</span>
-                    <span className={`font-bold ${isPartner ? 'text-green-700' : 'text-amber-700'}`}>
-                      ₦{partnerFees.toLocaleString()}
+                    <span className={`font-bold ${hasCommissionWaiver ? 'text-green-700' : 'text-amber-700'}`}>Total Fees</span>
+                    <span className={`font-bold ${hasCommissionWaiver ? 'text-green-700' : 'text-amber-700'}`}>
+                      ₦{(hasCommissionWaiver ? partnerFees : standardFees).toLocaleString()}
                     </span>
                   </div>
                 </div>

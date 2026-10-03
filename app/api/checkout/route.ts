@@ -5,7 +5,7 @@ import { chowdeckConfigured } from "@/lib/chowdeck";
 import { sendboxConfigured } from "@/lib/sendbox";
 import { topshipConfigured, type TopshipQuote } from "@/lib/topship";
 import { gigConfigured, type GigQuote } from "@/lib/gig";
-import { calculateEscrowBreakdown } from "@/lib/escrow/calculator";
+import { calculateEscrowBreakdown, hasSellerCommissionWaiver } from "@/lib/escrow/calculator";
 import { createEscrowRecord } from "@/src/infrastructure/db/escrowService";
 import { createNombaCheckoutOrder, nombaBaseUrl } from "@/lib/payments/nomba/client";
 
@@ -343,11 +343,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 && !item.bookingSlot,
             );
 
-            const isPartner =
-                storeData.isPartner === true ||
-                storeData.subscriptionPlan === "pro_max" ||
-                storeData.subscriptionPlan === "pro_yearly_business_max" ||
-                String(storeData.subscriptionPlan || "").toLowerCase().includes("max");
+            const isSellerCommissionWaived = hasSellerCommissionWaiver(storeData);
 
             // Handling fee is waived for self-arranged shipping
             const handlingFee = !isSelfArranged && shippingCost > 0 ? 200 : 0;
@@ -355,7 +351,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 productCost: productSubtotal,
                 shippingCost,
                 courierHandlingFee: handlingFee,
-                isSubscribedSeller: isPartner,
+                isSubscribedSeller: isSellerCommissionWaived,
             });
             const { sellerCommission, sellerPayout, platformRevenue } = breakdown.allocations;
             const { buyerPlatformFee, totalPaidByBuyer: orderTotal } = breakdown.buyerBreakdown;

@@ -157,10 +157,11 @@ export async function POST(request: NextRequest) {
         throw new WithdrawalError(errorMessage, 400);
       }
 
-      const isPartnerActive = Boolean(storeData.isPartner && storeData.partnerExpiry && new Date(storeData.partnerExpiry).getTime() > Date.now());
-      const feePercent = isPartnerActive ? 0.015 : 0.03;
-      const platformFee = Math.round(requestedAmount * feePercent);
-      const netPayout = requestedAmount - platformFee;
+      // Seller commission is settled during checkout. Withdrawals transfer the
+      // already-net seller balance and must not charge the seller again.
+      // Keep platformFee in the payout schema for backward compatibility.
+      const platformFee = 0;
+      const netPayout = requestedAmount;
 
       transaction.update(storeRef, {
         availableBalance: availableBalance - requestedAmount,

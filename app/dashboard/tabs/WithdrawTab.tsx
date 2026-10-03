@@ -8,6 +8,7 @@ import {
   Wallet, Lock, CreditCard, Building2, AlertCircle
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { hasSellerCommissionWaiver } from "@/lib/escrow/calculator";
 
 interface BankDetails {
   bankCode?: string;
@@ -37,6 +38,7 @@ interface WithdrawTabProps {
     totalSales?: number;
     isPartner?: boolean;
     partnerExpiry?: string;
+    subscriptionPlan?: string;
   };
   bankDetails?: BankDetails;
   payoutHistory?: PayoutRecord[];
@@ -55,15 +57,12 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
     withdrawalControllerRef.current?.abort();
   }, []);
 
-  // ✅ DYNAMIC FEE CALCULATION
-  const isPartnerActive = Boolean(stats?.isPartner && stats?.partnerExpiry && new Date(stats.partnerExpiry) > new Date());
-  const SOWA_FEE_PERCENT = isPartnerActive ? 0.015 : 0.03; 
-  const FEE_DISPLAY = isPartnerActive ? '1.5%' : '3%';
+  const hasCommissionWaiver = hasSellerCommissionWaiver(stats || {});
+  const COMMISSION_DISPLAY = '1.5%';
   
   const rawAvailableValue = Number(stats?.availableBalance ?? 0);
   const rawAvailable = Number.isFinite(rawAvailableValue) ? Math.max(0, rawAvailableValue) : 0;
-  const availableSowaFee = rawAvailable * SOWA_FEE_PERCENT;
-  const netAvailable = rawAvailable - availableSowaFee;
+  const netAvailable = rawAvailable;
   const rawEscrow = Number(stats?.escrowBalance ?? 0);
   const escrowBalance = Number.isFinite(rawEscrow) ? Math.max(0, rawEscrow) : 0;
 
@@ -184,7 +183,7 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
         
         {/* Card 1: Withdraw to Bank (GREEN BACKGROUND - ENHANCED FONTS) */}
         <div className={`min-w-0 max-w-full rounded-3xl shadow-sm p-6 min-h-[280px] flex flex-col ${
-          isPartnerActive 
+          hasCommissionWaiver
             ? 'bg-gradient-to-br from-amber-400 to-orange-500 border border-amber-300' 
             : 'bg-gradient-to-br from-green-500 to-emerald-600 border border-green-400'
         }`}>
@@ -192,10 +191,10 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
             <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
               <ArrowUpRight size={24} className="text-white" />
             </div>
-            {isPartnerActive && (
+            {hasCommissionWaiver && (
               <div className="flex items-center gap-1 bg-white/30 backdrop-blur-sm px-2 py-1 rounded-full border border-white/40">
                 <Crown size={12} className="text-white" />
-                <span className="text-[9px] font-black text-white uppercase">1.5% Fee</span>
+                <span className="text-[9px] font-black text-white uppercase">0% Seller Commission</span>
               </div>
             )}
           </div>
@@ -203,7 +202,9 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
           {/* 🌟 ENHANCED TYPOGRAPHY FOR EMPHASIS */}
           <p className="text-x font-black text-white uppercase tracking-wider mb-1">Withdraw to Bank</p>
           <p className="text-xl font-black text-white mb-1">Receive: {formatCurrency(netAvailable)}</p>
-          <p className="mb-4 text-[10px] font-semibold text-white/75">After the {FEE_DISPLAY} platform fee</p>
+          <p className="mb-4 text-[10px] font-semibold text-white/75">
+            {hasCommissionWaiver ? 'Seller commission waived at checkout.' : `${COMMISSION_DISPLAY} seller commission deducted at checkout.`} No withdrawal fee.
+          </p>
 
           {/* Compact Withdraw Form INSIDE the green card */}
           <div className="mt-auto space-y-2">
@@ -286,14 +287,18 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
           </div>
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Available Balance</p>
           <h3 className="text-2xl font-black text-gray-900 mb-2">{formatCurrency(rawAvailable)}</h3>
-          <p className="text-xs text-gray-400 mb-4">Gross balance before fees</p>
+          <p className="text-xs text-gray-400 mb-4">Net balance after checkout fee allocation</p>
           <div className="mt-auto pt-4 border-t border-gray-100 space-y-1.5">
             <div className="flex justify-between items-center text-[11px]">
-              <span className="text-gray-500 font-medium">Platform Fee ({FEE_DISPLAY})</span>
-              <span className="text-red-500 font-bold">-{formatCurrency(availableSowaFee)}</span>
+              <span className="text-gray-500 font-medium">Seller Commission</span>
+              <span className="text-gray-500 font-bold">{hasCommissionWaiver ? '₦0 (Waived)' : `${COMMISSION_DISPLAY} at checkout`}</span>
             </div>
             <div className="flex justify-between items-center text-[11px]">
-              <span className="text-gray-700 font-bold">Net Withdrawable</span>
+              <span className="text-gray-500 font-medium">Withdrawal Fee</span>
+              <span className="text-green-600 font-bold">₦0</span>
+            </div>
+            <div className="flex justify-between items-center text-[11px]">
+              <span className="text-gray-700 font-bold">Withdrawable Balance</span>
               <span className="text-green-600 font-black">{formatCurrency(netAvailable)}</span>
             </div>
           </div>
@@ -418,8 +423,8 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
           <li className="flex items-start gap-2">
             <ChevronRight size={16} className="mt-0.5 text-green-600 shrink-0" />
             <span>
-              <strong>{FEE_DISPLAY} SOWA platform fee</strong> is deducted automatically at withdrawal. 
-              {isPartnerActive && <span className="text-amber-600 font-bold"> (You are enjoying reduced fees as a Partner!)</span>}
+              <strong>{hasCommissionWaiver ? '0% seller commission' : `${COMMISSION_DISPLAY} seller commission`}</strong>{' '}
+              {hasCommissionWaiver ? 'is waived at checkout for your active plan.' : 'is deducted at checkout.'} No additional seller commission is deducted during withdrawal.
             </span>
           </li>
           <li className="flex items-start gap-2">

@@ -50,7 +50,7 @@ export default function PremiumFeatureModal({ isOpen, onClose, feature, onUpgrad
       description: "Get your funds faster with priority processing and lower fees.",
       benefits: [
         "Same-day bank transfers",
-        "Reduced withdrawal fees (1.5% vs 3%)",
+        "Seller commission handled at checkout with no additional withdrawal fee",
         "Higher withdrawal limits",
         "Priority support",
         "Auto-schedule payouts"
