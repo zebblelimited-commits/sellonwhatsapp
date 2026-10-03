@@ -144,10 +144,16 @@ export default function OrderDetailsPage() {
         order.productType === 'service' ||
         order.productType === 'booking' ||
         order.productType === 'utility' ||
-        order.shippingMethod === 'self_arranged' ||
         (order.items && order.items.some((i: any) => i.bookingDate || i.bookingSlot));
 
     const isShippedOrWorkDone = status === "shipped" || status === "out_for_delivery" || status === "delivered" || status === "work_done" || status === "completed_pending_buyer";
+    const deliveryStatus = String(order.deliveryStatus || "").toLowerCase();
+    const isSelfArranged = order.shippingMethod === "self_arranged" || order.deliveryMode === "self_arranged";
+    const canConfirmDelivery = isServiceOrBooking
+        ? status === "work_done" || status === "completed_pending_buyer" || status === "shipped"
+        : isSelfArranged
+            ? isShippedOrWorkDone || ["in_transit", "out_for_delivery", "delivered"].includes(deliveryStatus)
+            : status === "delivered" || deliveryStatus === "delivered";
     const isCompleted = status === "completed";
     const isDisputed = status === "disputed" || status === "under_review";
 
@@ -328,7 +334,7 @@ export default function OrderDetailsPage() {
             {/* Bottom Actions */}
             <div className="space-y-3 pt-6 border-t border-gray-100 mt-6">
                 {/* ✅ RELEASE FUNDS BUTTON ACTIVATED UPON WORK COMPLETION OR DELIVERY */}
-                {(isShippedOrWorkDone || isServiceOrBooking) && !isCompleted && !isDisputed && (
+                {canConfirmDelivery && !isCompleted && !isDisputed && (
                     <button
                         onClick={() => setShowConfirmModal(true)}
                         disabled={processing}

@@ -38,8 +38,20 @@ export async function POST(request: NextRequest) {
 
       const orderData = orderSnap.data() || {};
       const sellerId = typeof orderData.storeId === "string" ? orderData.storeId : orderData.vendorId;
-      if (sellerId !== userId && orderData.buyerId !== userId) {
+      const isSeller = sellerId === userId;
+      const isBuyer = orderData.buyerId === userId;
+      if (!isSeller && !isBuyer) {
         throw new CompletionError("Forbidden", 403);
+      }
+
+      // Sellers may complete service work, but they must never release escrow
+      // for a physical order. Physical delivery must be confirmed by the
+      // buyer after handover/delivery.
+      const isServiceOrBooking =
+        ["service", "booking", "utility"].includes(String(orderData.productType || orderData.orderType || "").toLowerCase()) ||
+        (Array.isArray(orderData.items) && orderData.items.some((item: any) => item.bookingDate || item.bookingSlot));
+      if (isSeller && !isServiceOrBooking) {
+        throw new CompletionError("Only the buyer can confirm delivery and release funds for a physical order", 403);
       }
 
       const rawStatus = String(orderData.status || "").toUpperCase();
@@ -56,6 +68,22 @@ export async function POST(request: NextRequest) {
       }
       if (["refunded", "refund_pending"].includes(fundsState)) {
         throw new CompletionError("This order has already been refunded and cannot release funds", 409);
+      }
+
+      const deliveryStatus = String(orderData.deliveryStatus || "").toUpperCase();
+      const isSelfArranged = String(orderData.deliveryMode || "").toLowerCase() === "self_arranged" || String(orderData.shippingMethod || "").toLowerCase() === "self_arranged";
+      if (isBuyer && isServiceOrBooking) {
+        const serviceReady = ["WORK_DONE", "COMPLETED_PENDING_BUYER", "SHIPPED"].includes(normalizedStatus);
+        if (!serviceReady) throw new CompletionError("The seller has not marked this service as completed yet", 409);
+      }
+      if (isBuyer && !isServiceOrBooking) {
+        // Aggregator delivery must be reported delivered by the courier. A
+        // self-arranged order has no courier callback, so seller handover
+        // moves it to SHIPPED/IN_TRANSIT and the buyer confirms on receipt.
+        const physicalReady = isSelfArranged
+          ? ["SHIPPED", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"].includes(normalizedStatus) || ["IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED"].includes(deliveryStatus)
+          : normalizedStatus === "COMPLETED" || normalizedStatus === "DELIVERED" || deliveryStatus === "DELIVERED";
+        if (!physicalReady) throw new CompletionError("Delivery must be completed before you can release the held funds", 409);
       }
 
       // Updated to allow service/work completions in addition to physical shipping statuses

@@ -68,6 +68,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
     const [listenerError, setListenerError] = useState("");
     const [chatLoadingOrderId, setChatLoadingOrderId] = useState<string | null>(null);
     const [completionLoadingOrderId, setCompletionLoadingOrderId] = useState<string | null>(null);
+    const [completionConfirmOrder, setCompletionConfirmOrder] = useState<SellerOrder | null>(null);
     const [handoverOrder, setHandoverOrder] = useState<SellerOrder | null>(null);
     const [handoverLoadingOrderId, setHandoverLoadingOrderId] = useState<string | null>(null);
     const [handoverError, setHandoverError] = useState("");
@@ -158,16 +159,18 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
         }
     };
 
-    // Updated completion handler to support services
-    const handleMarkAsCompleted = async (order: SellerOrder) => {
+    const handleMarkAsCompleted = (order: SellerOrder) => {
         if (completionLoadingOrderId) return;
 
-        const isService = order.orderType === "service" || order.orderType === "booking";
-        const promptMsg = isService
-            ? "Mark service work as completed? The buyer will be notified to confirm and release escrow funds."
-            : "Mark this order as delivered? The funds will be released to your available balance.";
+        setCompletionConfirmOrder(order);
+    };
 
-        if (!confirm(promptMsg)) return;
+    // Updated completion handler to support services
+    const handleConfirmCompletion = async () => {
+        if (!completionConfirmOrder || completionLoadingOrderId) return;
+
+        const order = completionConfirmOrder;
+        const isService = order.orderType === "service" || order.orderType === "booking";
 
         setCompletionLoadingOrderId(order.id);
         try {
@@ -186,6 +189,7 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
             if (!res.ok) throw new Error(data.error || 'Failed to complete order');
 
             showToast("success", isService ? 'Service marked as work completed!' : 'Order marked as completed!');
+            setCompletionConfirmOrder(null);
         } catch (error: any) {
             console.error(error);
             showToast("error", error.message || 'Failed to update order.');
@@ -541,13 +545,9 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                                             </div>
                                         )
                                     ) : ["SHIPPED", "OUT_FOR_DELIVERY", "WORK_DONE"].includes(orderStatus) ? (
-                                        <button
-                                            onClick={() => handleMarkAsCompleted(order)}
-                                            disabled={completionLoadingOrderId !== null}
-                                            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white rounded-xl text-[10px] font-bold transition-all"
-                                        >
-                                            <CheckCircle size={12} /> {completionLoadingOrderId === order.id ? "Updating…" : "Complete"}
-                                        </button>
+                                        <div className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border text-[10px] font-bold ${isService ? "border-purple-100 bg-purple-50 text-purple-700" : "border-blue-100 bg-blue-50 text-blue-700"}`}>
+                                            {isService ? <Briefcase size={12} /> : <Truck size={12} />} Awaiting buyer confirmation
+                                        </div>
                                     ) : orderStatus === "COMPLETED" ? (
                                         <div className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-green-100 bg-green-50 text-green-700 text-[10px] font-bold">
                                             <CheckCircle size={12} /> Completed
@@ -575,6 +575,37 @@ export default function OrdersTab({ disputes = [], onDisputeAction }: { disputes
                 onClose={closeResponseModal}
                 onSubmit={handleRespondToDispute}
             />
+
+            {completionConfirmOrder && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-gray-950/50 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !completionLoadingOrderId) setCompletionConfirmOrder(null); }}>
+                    <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="complete-order-title">
+                        <div className="mb-4 flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-green-600">Seller action</p>
+                                <h2 id="complete-order-title" className="mt-1 text-lg font-extrabold text-gray-900">{completionConfirmOrder.orderType === "service" || completionConfirmOrder.orderType === "booking" ? "Mark Work as Done" : "Mark Order as Delivered"}</h2>
+                            </div>
+                            <button type="button" onClick={() => setCompletionConfirmOrder(null)} disabled={Boolean(completionLoadingOrderId)} className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50" aria-label="Close completion dialog">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <p className="text-sm leading-6 text-gray-600">
+                            {completionConfirmOrder.orderType === "service" || completionConfirmOrder.orderType === "booking"
+                                ? "Mark service work as completed? The buyer will be notified to confirm and release escrow funds."
+                                : "Mark this order as delivered? The funds will be released to your available balance."}
+                        </p>
+                        <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                            <p className="truncate text-xs font-extrabold text-gray-900">{orderProductTitle(completionConfirmOrder)}</p>
+                            <p className="mt-1 break-all text-[10px] font-bold text-gray-400">Reference: {orderReference(completionConfirmOrder)}</p>
+                        </div>
+                        <div className="mt-5 flex gap-2">
+                            <button type="button" onClick={() => setCompletionConfirmOrder(null)} disabled={Boolean(completionLoadingOrderId)} className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+                            <button type="button" onClick={() => void handleConfirmCompletion()} disabled={completionLoadingOrderId === completionConfirmOrder.id} className="flex-1 rounded-xl bg-green-600 px-4 py-3 text-xs font-bold text-white hover:bg-green-700 disabled:cursor-wait disabled:opacity-60">
+                                {completionLoadingOrderId === completionConfirmOrder.id ? "Updating…" : completionConfirmOrder.orderType === "service" || completionConfirmOrder.orderType === "booking" ? "Mark Work Done" : "Mark as Delivered"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {handoverOrder && (
                 <div className="fixed inset-0 z-[80] flex items-center justify-center bg-gray-950/50 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !handoverLoadingOrderId) setHandoverOrder(null); }}>

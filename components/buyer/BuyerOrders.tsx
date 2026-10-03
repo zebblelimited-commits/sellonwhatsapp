@@ -313,6 +313,15 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                 orders.map((order) => {
                     const dispute = getOrderDispute(order.id);
                     const hasActiveDispute = !!dispute;
+                    const orderStatus = String(order.status || "").toLowerCase();
+                    const deliveryStatus = String(order.deliveryStatus || "").toLowerCase();
+                    const isServiceOrBooking = ["service", "booking", "utility"].includes(String(order.productType || order.orderType || "").toLowerCase()) || (Array.isArray(order.items) && order.items.some((item: any) => item.bookingDate || item.bookingSlot));
+                    const isSelfArranged = order.shippingMethod === "self_arranged" || order.deliveryMode === "self_arranged";
+                    const canConfirmDelivery = isServiceOrBooking
+                        ? ["work_done", "completed_pending_buyer", "shipped"].includes(orderStatus)
+                        : isSelfArranged
+                            ? ["shipped", "in_transit", "out_for_delivery", "delivered"].includes(orderStatus) || ["in_transit", "out_for_delivery", "delivered"].includes(deliveryStatus)
+                            : orderStatus === "delivered" || deliveryStatus === "delivered";
 
                     return (
                         // ✅ FIXED: Link to correct buyer order detail path
@@ -383,7 +392,7 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                                 )}
 
                                 {/* ✅ SHIPPED Status Actions */}
-                                {order.status === "SHIPPED" && !hasActiveDispute && (
+                                {canConfirmDelivery && !hasActiveDispute && (
                                     <div className="flex flex-col sm:flex-row items-center gap-3">
                                         <div className="flex flex-1 items-center gap-3 px-4 py-3 bg-gray-50 rounded-2xl border border-gray-100 w-full">
                                             <Package size={14} className="text-gray-400" />
@@ -407,7 +416,7 @@ export function BuyerOrders({ disputes = [], onDisputeAction }: { disputes?: Buy
                                             onClick={(e) => openConfirmModal(e, order.id)}
                                             className="w-full sm:w-auto px-6 py-3.5 bg-green-600 text-white rounded-2xl font-bold text-xs hover:bg-green-700 shadow-lg shadow-green-100 active:scale-[0.95]"
                                         >
-                                            Confirm Receipt
+                                            {isServiceOrBooking ? "Confirm Service" : "Confirm Receipt"}
                                         </button>
                                     </div>
                                 )}
