@@ -5,7 +5,7 @@ import { Novu } from "@novu/node";
 import { inventoryAdjustment } from "@/lib/inventory";
 import { notifyOrderPaymentConfirmed, notifyOrderStatus, notifyPayoutCompleted } from "@/lib/novu-events";
 import { sendSubscriptionConfirmationEmail, sendSubscriptionPaymentFailedEmail } from "@/lib/email/events";
-import { isNombaWebhookSignatureValid, verifyNombaTransaction, initiateNombaBankTransfer } from "@/lib/payments/nomba/client";
+import { isNombaWebhookSignatureValid, nombaAmountMatchesOrder, nombaProcessingFeeForOrder, verifyNombaTransaction, initiateNombaBankTransfer } from "@/lib/payments/nomba/client";
 import { chowdeckUsesRelay, getChowdeckRelayWalletAccount } from "@/lib/chowdeck";
 import { dispatchShipmentForOrder } from "@/lib/shipping-dispatch";
 import { updateExistingStore } from "@/lib/store-sync";
@@ -315,8 +315,8 @@ export async function POST(request: NextRequest) {
 
     if (eventType === "PAYMENT_SUCCESS" && collectionName === "orders" && escrowSnap?.exists) {
       const expectedAmount = Number(escrowSnap.data()?.amount || 0);
-      if (!Number.isFinite(expectedAmount) || expectedAmount <= 0 || !Number.isFinite(verifiedPaymentAmount) || Math.abs(verifiedPaymentAmount - expectedAmount) > 0.01) {
-        console.error(`[NOMBA WEBHOOK] Payment amount does not exactly match escrow ${ledgerReference}: ${verifiedPaymentAmount}/${expectedAmount}`);
+      if (!Number.isFinite(expectedAmount) || expectedAmount <= 0 || !Number.isFinite(verifiedPaymentAmount) || !nombaAmountMatchesOrder(verifiedPaymentAmount, expectedAmount)) {
+        console.error(`[NOMBA WEBHOOK] Payment amount does not match escrow or configured Nomba fee ${ledgerReference}: ${verifiedPaymentAmount}/${expectedAmount}`);
         return NextResponse.json({ received: false, retryable: true }, { status: 202 });
       }
       if (verifiedPaymentCurrency && verifiedPaymentCurrency !== "NGN") {
@@ -326,9 +326,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (eventType === "PAYMENT_SUCCESS" && collectionName === "orders" && escrowRef && escrowSnap?.exists) {
+      const expectedAmount = Number(escrowSnap.data()?.amount || 0);
+      const providerFee = nombaProcessingFeeForOrder(verifiedPaymentAmount, expectedAmount);
       await escrowRef.set({
         status: "FUNDED",
         fundedAmount: verifiedPaymentAmount,
+        providerAmount: verifiedPaymentAmount,
+        providerFee,
         providerReference: String(providerReference || ledgerReference),
         paidAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),

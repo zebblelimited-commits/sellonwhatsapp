@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { notifyOrderPaymentConfirmed } from "@/lib/novu-events";
 import { dispatchShipmentForOrder } from "@/lib/shipping-dispatch";
-import { nombaBaseUrl, verifyNombaTransaction } from "@/lib/payments/nomba/client";
+import { nombaAmountMatchesOrder, nombaBaseUrl, nombaProcessingFeeForOrder, verifyNombaTransaction } from "@/lib/payments/nomba/client";
 import { createEscrowRecord, fundEscrowAndOrders, getEscrowByReference } from "@/src/infrastructure/db/escrowService";
 
 class PaymentConfirmationError extends Error {
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
                 }
                 if (verification?.confirmed) {
                     const expectedAmount = amountOf(escrow.amount);
-                    if (!Number.isFinite(verification.amount) || Math.abs(Number(verification.amount) - expectedAmount) > 0.01) {
+                    if (!Number.isFinite(verification.amount) || !nombaAmountMatchesOrder(Number(verification.amount), expectedAmount)) {
                         console.error("Nomba payment amount mismatch", {
                             orderReference,
                             expectedAmount,
@@ -105,6 +105,10 @@ export async function POST(request: NextRequest) {
                             providerReference: verification.transactionId || "<missing>",
                         });
                         throw new PaymentConfirmationError("Nomba payment amount does not match the order total", 409);
+                    }
+                    const providerFee = nombaProcessingFeeForOrder(Number(verification.amount), expectedAmount);
+                    if (providerFee > 0) {
+                        console.info("Nomba processing fee detected", { orderReference, providerFee });
                     }
                     if (verification.currency && verification.currency !== "NGN") {
                         throw new PaymentConfirmationError("Nomba payment currency is not supported for this order", 409);

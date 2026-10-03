@@ -122,6 +122,47 @@ function paymentStatus(...values: unknown[]): string {
     .find(Boolean) || "";
 }
 
+function nombaProcessingFeeRate(): number {
+  const configured = Number(process.env.NOMBA_PROCESSING_FEE_RATE ?? "0.014");
+  return Number.isFinite(configured) && configured >= 0 ? configured : 0.014;
+}
+
+function nombaProcessingFeeCap(): number {
+  const configured = Number(process.env.NOMBA_PROCESSING_FEE_CAP ?? "1800");
+  return Number.isFinite(configured) && configured >= 0 ? configured : 1800;
+}
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Nomba may add its processing charge to the customer's checkout debit. The
+ * application ledger must continue to use the order amount, while payment
+ * verification may therefore see order amount + Nomba processing fee.
+ */
+export function nombaExpectedCustomerAmount(orderAmount: number): number {
+  const amount = Number(orderAmount);
+  if (!Number.isFinite(amount) || amount < 0) return 0;
+  const fee = Math.min(nombaProcessingFeeCap(), roundCurrency(amount * nombaProcessingFeeRate()));
+  return roundCurrency(amount + fee);
+}
+
+export function nombaAmountMatchesOrder(providerAmount: number, orderAmount: number): boolean {
+  const provider = Number(providerAmount);
+  const expected = Number(orderAmount);
+  if (!Number.isFinite(provider) || !Number.isFinite(expected) || expected < 0) return false;
+  return Math.abs(provider - expected) <= 0.01
+    || Math.abs(provider - nombaExpectedCustomerAmount(expected)) <= 0.01;
+}
+
+export function nombaProcessingFeeForOrder(providerAmount: number, orderAmount: number): number {
+  if (!nombaAmountMatchesOrder(providerAmount, orderAmount)) return 0;
+  const provider = roundCurrency(Number(providerAmount));
+  const expected = roundCurrency(Number(orderAmount));
+  return provider > expected ? roundCurrency(provider - expected) : 0;
+}
+
 function canContinueNombaLookup(error: unknown): boolean {
   if (!(error instanceof NombaError)) return false;
   const body = error.responseBody && typeof error.responseBody === "object"
@@ -261,7 +302,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
           confirmed: true,
           status: status || "SUCCESS",
           transactionId: String(data.transactionId || data.id || details.paymentReference || details.transactionId || "") || undefined,
-          amount: firstFiniteAmount(data.amount, order.amount, details.amount, data.transactionAmount),
+          amount: firstFiniteAmount(order.amount, data.amount, details.amount, data.transactionAmount),
           currency: String(data.currency || order.currency || details.currency || "").trim().toUpperCase() || undefined,
           rawResponse: result,
         };

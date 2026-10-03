@@ -53,6 +53,9 @@ NOMBA_ESCROW_ACCOUNT_ID=...          # seller-net split destination and seller p
 NOMBA_PAYOUT_ACCOUNT_ID=...           # courier-shipping split destination and courier payout source
 NOMBA_SENDER_NAME=SellOnWhatsApp
 NOMBA_WEBHOOK_SECRET=...              # Developer > Webhook Setup signature key
+# Optional: Nomba customer processing-fee reconciliation defaults
+NOMBA_PROCESSING_FEE_RATE=0.014
+NOMBA_PROCESSING_FEE_CAP=1800
 CRON_SECRET=...                       # Vercel Cron bearer secret
 ESCROW_CRON_SECRET=...                # optional local alias for the escrow cron
 NEXT_PUBLIC_APP_URL=https://your-domain.example
@@ -78,6 +81,10 @@ Configure Nomba webhook events `payment_success`, `payment_failed`,
 `payment_reversal`, `payout_success`, `payout_failed`, and `payout_refund` to
 point to `/api/webhooks/nomba`. The webhook is signature-checked and successful
 payments are verified against Nomba before the Firestore ledger is funded.
+If Nomba adds its customer processing fee to the debit, the verifier accepts
+the exact configured fee-inclusive amount while keeping the application escrow
+amount unchanged. Confirm these two optional values against the fees on the
+production Nomba account before changing them.
 
 For courier settlement, add `bankCode`, `accountNumber`, and `accountName` to
 the courier document’s `payoutSettings` (or `bankDetails`). If those details
