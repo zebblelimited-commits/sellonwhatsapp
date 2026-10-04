@@ -253,6 +253,7 @@ export async function createNombaParentCheckoutOrder(
 export async function verifyNombaTransaction(reference: string, config?: NombaConfig): Promise<NombaTransactionResult> {
   const value = reference.trim();
   if (!value) return { confirmed: false, status: "" };
+  let observedStatus = "";
 
   if (isSandbox(config)) {
     try {
@@ -264,6 +265,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
       const details = data.transactionDetails && typeof data.transactionDetails === "object" ? data.transactionDetails as JsonObject : {};
       const order = data.order && typeof data.order === "object" ? data.order as JsonObject : {};
       const statusCode = paymentStatus(details.statusCode, data.status, order.status);
+      observedStatus = statusCode || observedStatus;
       const confirmed = data.success === true || String(data.success).toLowerCase() === "true" || statusCode.includes("SUCCESS") || statusCode.includes("APPROVED");
       if (confirmed) {
         return {
@@ -294,6 +296,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
       const order = data.order && typeof data.order === "object" ? data.order as JsonObject : {};
       const details = data.transactionDetails && typeof data.transactionDetails === "object" ? data.transactionDetails as JsonObject : {};
       const status = paymentStatus(order.status, data.status, data.transactionStatus, details.statusCode, data.gatewayMessage);
+      observedStatus = status || observedStatus;
       const confirmed = data.success === true
         || String(data.success).toLowerCase() === "true"
         || /SUCCESS|SUCCESSFUL|APPROVED|COMPLETED/.test(status);
@@ -321,6 +324,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
       const details = data.transactionDetails && typeof data.transactionDetails === "object" ? data.transactionDetails as JsonObject : {};
       const order = data.order && typeof data.order === "object" ? data.order as JsonObject : {};
       const status = paymentStatus(data.status, data.transactionStatus, data.gatewayMessage, details.statusCode, order.status);
+      observedStatus = status || observedStatus;
       const confirmed = ["SUCCESS", "PAYMENT_SUCCESS", "PAYMENT_SUCCESSFUL", "PAYMENT SUCCESSFUL", "APPROVED", "COMPLETED"]
         .includes(status) || /SUCCESS|SUCCESSFUL|APPROVED|COMPLETED/.test(status);
       if (confirmed) {
@@ -361,6 +365,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
         data.message,
         order.status,
       );
+      observedStatus = status || observedStatus;
       const confirmed = data.success === true
         || String(data.success).toLowerCase() === "true"
         || /SUCCESS|APPROVED|COMPLETED/.test(status);
@@ -377,7 +382,7 @@ export async function verifyNombaTransaction(reference: string, config?: NombaCo
     }
   }
 
-  return { confirmed: false, status: "NOT_FOUND" };
+  return { confirmed: false, status: observedStatus || "NOT_FOUND" };
 }
 
 export function nombaWebhookSignature(payload: unknown, timestamp: string, secret: string): string {

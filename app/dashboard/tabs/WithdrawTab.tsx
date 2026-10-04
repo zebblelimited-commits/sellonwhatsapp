@@ -5,7 +5,7 @@ import { auth } from "@/lib/firebase";
 import {
   ArrowUpRight, ShieldCheck, Info, Loader2,
   Clock, CheckCircle2, XCircle, Copy, ChevronRight, Crown,
-  Wallet, Lock, CreditCard, Building2, AlertCircle
+  Wallet, Lock, CreditCard, Building2, AlertCircle, RefreshCw
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { hasSellerCommissionWaiver } from "@/lib/escrow/calculator";
@@ -49,6 +49,7 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [copiedRef, setCopiedRef] = useState<string | null>(null);
+  const [reconcilingId, setReconcilingId] = useState<string | null>(null);
   const withdrawalControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
 
@@ -146,6 +147,35 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
     navigator.clipboard.writeText(text);
     setCopiedRef(id);
     setTimeout(() => setCopiedRef(null), 1500);
+  };
+
+  const checkWithdrawalStatus = async (payoutId: string) => {
+    if (reconcilingId) return;
+    setReconcilingId(payoutId);
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error("Not authenticated");
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/withdraw/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ payoutId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to check withdrawal status");
+      setNotification({
+        type: "success",
+        message: data.status === "completed"
+          ? "✅ Nomba confirmed the withdrawal."
+          : data.status === "failed"
+            ? "↩️ Nomba rejected the withdrawal. The funds were restored to your available balance."
+            : `⏳ ${data.message || "The withdrawal is still processing."}`,
+      });
+    } catch (error) {
+      setNotification({ type: "error", message: `❌ ${error instanceof Error ? error.message : "Unable to check withdrawal status."}` });
+    } finally {
+      setReconcilingId(null);
+    }
   };
 
   const history = payoutHistory; 
@@ -396,6 +426,17 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
                     </td>
                     <td className="px-5 py-4">{getStatusBadge(item.status || "pending")}</td>
                     <td className="px-5 py-4 text-right">
+                      {["processing", "pending", "approved"].includes(String(item.status || "").toLowerCase()) && (
+                        <button
+                          onClick={() => checkWithdrawalStatus(item.id)}
+                          disabled={reconcilingId === item.id}
+                          className="mr-1 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-bold text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                          title="Check provider status"
+                        >
+                          <RefreshCw size={13} className={reconcilingId === item.id ? "animate-spin" : ""} />
+                          Check
+                        </button>
+                      )}
                       <button 
                         onClick={() => copyToClipboard(item.id, item.id)}
                         className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700 transition-colors"
