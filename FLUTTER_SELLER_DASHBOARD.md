@@ -255,6 +255,28 @@ The seller dashboard should treat the store ledger as canonical:
 
 Do not reconstruct the balance by summing client-side order values.
 
+For the Withdraw card, subscribe to `stores/{sellerUid}` rather than loading
+the balance once during screen initialization. The web dashboard uses a live
+store listener so order releases, failed withdrawal refunds, and admin
+reconciliation appear without a full reload. A missing numeric field should be
+rendered as zero, but it should not be replaced with an order-derived total.
+
+When a withdrawal row is `processing`, the amount is reserved. Flutter should
+show a Check status action that calls:
+
+```http
+POST /api/withdraw/status
+Authorization: Bearer FIREBASE_ID_TOKEN
+Content-Type: application/json
+```
+
+```json
+{ "payoutId": "PAYOUT_SELLER_UID_IDEMPOTENCY_KEY" }
+```
+
+Refresh the store document and payout history after the response. Only the
+server may complete or refund the withdrawal.
+
 ### 4.5 Analytics queries
 
 The current web dashboard counts analytics events by store and event type. A Flutter implementation can use count aggregation where supported:
@@ -1426,6 +1448,21 @@ On success, the server sets the order to SHIPPED, sets deliveryStatus to
 IN_TRANSIT, records handover metadata, updates the shipment record, and creates
 a buyer notification. The buyer should then see In transit and later confirm
 delivery, which calls POST /api/orders/complete.
+
+The complete action is role-sensitive:
+
+- Seller: may complete service, booking, or utility work when it is ready for
+  buyer review.
+- Seller: must not complete a physical order or release its escrow.
+- Buyer: confirms receipt of a physical self-arranged order after it is
+  `SHIPPED`/`IN_TRANSIT`.
+- Buyer: confirms a courier order only after the courier reports delivery (or
+  the order is otherwise in a server-approved delivered state).
+
+On successful completion, the server changes the order to `COMPLETED`, releases
+escrow, and credits the seller's net `sellerPayout` to
+`stores/{sellerUid}.availableBalance`. It does not send the seller's money to
+the bank automatically. The seller must submit a separate withdrawal.
 
 This endpoint records the seller handover and tracking details. It does not yet
 create a courier waybill through POST /api/shipping/dispatch. Add that provider

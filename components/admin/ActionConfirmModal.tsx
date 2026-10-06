@@ -71,6 +71,24 @@ export function ActionConfirmModal({
       color: "red",
       requiresReason: true
     },
+    reset_escrow_balance: {
+      title: "Reset Escrow Balance",
+      description: "This sets the store escrow ledger to ₦0. Confirm that the escrow has already been reconciled before continuing.",
+      color: "red",
+      requiresReason: true
+    },
+    reset_total_sales: {
+      title: "Reset Total Sales",
+      description: "This sets the store total sales counter to ₦0. Existing orders are not deleted.",
+      color: "amber",
+      requiresReason: true
+    },
+    reset_add_to_cart_clicks: {
+      title: "Reset Add-to-cart Clicks",
+      description: "This sets the store add-to-cart analytics counter to 0. Products and orders are not changed.",
+      color: "blue",
+      requiresReason: true
+    },
   };
 
   const { title, description, color, requiresReason } = config[action] || config.ban;

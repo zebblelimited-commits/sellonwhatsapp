@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, limit, onSnapshot, query } from "firebase/firestore";
 import Image from "next/image";
-import { CheckCircle2, Clock, Eye, Loader2, ShieldCheck, Sparkles, Store as StoreIcon, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Eye, Loader2, ShieldCheck, Sparkles, Store as StoreIcon, Trash2, XCircle, RotateCcw } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { ActionConfirmModal } from "@/components/admin/ActionConfirmModal";
 import { StatusBadge } from "@/components/admin/StatusBadge";
@@ -28,6 +28,9 @@ type AdminStore = {
   address?: string;
   createdAt?: unknown;
   updatedAt?: unknown;
+  escrowBalance?: number;
+  totalSales?: number;
+  add_to_cart_clicks?: number;
   rejectionReason?: string;
   suspensionReason?: string;
   [key: string]: unknown;
@@ -46,7 +49,7 @@ function displayDate(value: unknown) {
   return timestamp ? new Date(timestamp).toLocaleDateString("en-NG", { month: "short", day: "numeric", year: "numeric" }) : "—";
 }
 
-function StoreDetail({ store, onClose }: { store: AdminStore; onClose: () => void }) {
+function StoreDetail({ store, onClose, onReset }: { store: AdminStore; onClose: () => void; onReset: (action: string) => void }) {
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[28px] bg-white p-6 shadow-2xl">
@@ -65,6 +68,26 @@ function StoreDetail({ store, onClose }: { store: AdminStore; onClose: () => voi
           ))}
         </div>
         {(store.rejectionReason || store.suspensionReason) && <div className="mt-4 rounded-2xl bg-red-50 p-4 text-sm text-red-700"><b>Admin note:</b> {store.rejectionReason || store.suspensionReason}</div>}
+        <div className="mt-6 rounded-2xl border border-amber-100 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <RotateCcw className="mt-0.5 shrink-0 text-amber-700" size={17} />
+            <div>
+              <p className="text-sm font-black text-amber-900">Administrative reset controls</p>
+              <p className="mt-1 text-xs leading-5 text-amber-800">These actions reset counters to zero. They do not delete orders or products and require a reason.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <button type="button" onClick={() => onReset("reset_escrow_balance")} className="rounded-xl border border-red-200 bg-white px-3 py-2 text-left text-[11px] font-bold text-red-700 hover:bg-red-50">
+              Reset escrow<br /><span className="font-black">₦{Number(store.escrowBalance || 0).toLocaleString("en-NG")}</span>
+            </button>
+            <button type="button" onClick={() => onReset("reset_total_sales")} className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-left text-[11px] font-bold text-amber-700 hover:bg-amber-50">
+              Reset total sales<br /><span className="font-black">₦{Number(store.totalSales || 0).toLocaleString("en-NG")}</span>
+            </button>
+            <button type="button" onClick={() => onReset("reset_add_to_cart_clicks")} className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-left text-[11px] font-bold text-blue-700 hover:bg-blue-50">
+              Reset add-to-cart<br /><span className="font-black">{Number(store.add_to_cart_clicks || 0).toLocaleString("en-NG")} clicks</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -98,7 +121,11 @@ export default function AdminStoresManagement() {
     if (!actionModal) return;
     setActionLoading(true); setActionError("");
     try {
-      await adminMutation(`/api/admin/stores/${actionModal.store.id}`, { action: actionModal.type, reason });
+      const result = await adminMutation<{ field?: string; value?: number }>(`/api/admin/stores/${actionModal.store.id}`, { action: actionModal.type, reason });
+      if (result.field) {
+        setStores((current) => current.map((item) => item.id === actionModal.store.id ? { ...item, [result.field as string]: result.value ?? 0 } : item));
+        setSelectedStore((current) => current && current.id === actionModal.store.id ? { ...current, [result.field as string]: result.value ?? 0 } : current);
+      }
       setActionModal(null);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Store action failed");
@@ -113,6 +140,11 @@ export default function AdminStoresManagement() {
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Store sponsorship could not be updated");
     } finally { setSponsoringId(null); }
+  };
+
+  const openResetAction = (action: string) => {
+    if (!selectedStore) return;
+    setActionModal({ type: action, store: selectedStore });
   };
 
   const orderedStores = useMemo(() => stores, [stores]);
@@ -146,7 +178,7 @@ export default function AdminStoresManagement() {
         })}
       </div>
       {orderedStores.length === 0 && <div className="rounded-2xl bg-white p-10 text-center text-sm text-gray-400">No stores found.</div>}
-      {selectedStore && <StoreDetail store={selectedStore} onClose={() => setSelectedStore(null)} />}
+      {selectedStore && <StoreDetail store={selectedStore} onClose={() => setSelectedStore(null)} onReset={openResetAction} />}
       {actionModal && <ActionConfirmModal action={actionModal.type} target={actionModal.store.storeName || actionModal.store.id} onConfirm={handleAction} onCancel={() => setActionModal(null)} loading={actionLoading} />}
     </div>
   );

@@ -235,6 +235,7 @@ Every endpoint in this table requires `Authorization: Bearer <Firebase ID token>
 | `GET` | `/api/vendor/payout-settings?storeId={uid}` | Reads seller payout settings. `storeId` must be the authenticated seller's UID. |
 | `POST` | `/api/vendor/payout-settings` | Saves seller payout details. Body: `storeId`, `bankCode`, `accountNumber`, optional `bankName`. |
 | `POST` | `/api/withdraw` | Withdraws seller available balance through Nomba. Body: `{ "amount": number, "idempotencyKey": "unique-key" }`; also send `Idempotency-Key`. |
+| `POST` | `/api/withdraw/status` | Reconciles one seller withdrawal with Nomba. Body: `{ "payoutId": "PAYOUT_..." }`. It completes confirmed transfers or restores the reserved balance only for an explicit provider failure. |
 | `POST` | `/api/vendor/analytics/orders` | Returns customer analytics for seller-owned order IDs. Body: `{ "orderIds": ["..."] }`. |
 | `POST` | `/api/notifications/welcome` | Triggers the authenticated user's welcome notification workflow. |
 | `POST` | `/api/notifications/channels/telegram` | Starts Telegram notification-channel linking. |
@@ -301,6 +302,29 @@ The response contains `checkoutLink`, `reference`, and `orderIds`. Open `checkou
 
 #### Seller withdrawal
 
+The withdraw card must read the seller ledger from the authenticated seller's
+`stores/{sellerUid}` document. The public `GET /api/stores/{storeId}` response
+is a storefront response and must not be used as the seller wallet source.
+
+```dart
+Stream<DocumentSnapshot<Map<String, dynamic>>> watchSellerLedger(String sellerUid) {
+  return FirebaseFirestore.instance
+      .collection('stores')
+      .doc(sellerUid)
+      .snapshots();
+}
+
+double moneyValue(Object? value) => value is num ? value.toDouble() : 0;
+
+// Card values:
+final availableBalance = moneyValue(store['availableBalance']);
+final escrowBalance = moneyValue(store['escrowBalance']);
+```
+
+Do not calculate `availableBalance` by summing order totals. The server credits
+`availableBalance` only when an eligible order is completed and reserves it
+immediately when a withdrawal is submitted.
+
 ```dart
 final idempotencyKey = 'withdraw_${DateTime.now().microsecondsSinceEpoch}';
 final result = await api.request(
@@ -315,6 +339,26 @@ final result = await api.request(
 ```
 
 Persist the idempotency key until the request resolves. If the network times out, query the seller's payout history/admin support rather than automatically submitting a second withdrawal. The API reserves the balance before contacting Nomba and reconciles ambiguous provider failures.
+
+Each payout record contains a status such as `pending`, `processing`,
+`completed`, `failed`, or `refunded`. While a payout is `processing`, its amount
+is intentionally unavailable for another withdrawal. Add a Check status action
+for processing rows:
+
+```dart
+final status = await api.request(
+  'POST',
+  '/api/withdraw/status',
+  body: {'payoutId': payoutId},
+);
+```
+
+After this call, refresh both the `payouts` history and the `stores/{uid}`
+ledger. A confirmed transfer becomes `completed`; a provider-reported failure
+becomes `failed` and returns the reserved amount to `availableBalance`; an
+unresolved provider response remains `processing`. Never mark a pending payout
+failed from Flutter and never submit a second transfer with a new idempotency
+key.
 
 ## 5. Referral integration flow
 

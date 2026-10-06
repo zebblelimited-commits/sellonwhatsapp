@@ -4,8 +4,17 @@ import { adminDb } from "@/lib/firebase-admin";
 import { requireAdmin } from "@/lib/admin-auth";
 import { deleteStoreData } from "@/lib/admin-delete-seller-data";
 
-const STORE_ACTIONS = ["approve", "reject", "suspend", "verify", "restore", "delete", "sponsorship"] as const;
+const STORE_ACTIONS = [
+  "approve", "reject", "suspend", "verify", "restore", "delete", "sponsorship",
+  "reset_escrow_balance", "reset_total_sales", "reset_add_to_cart_clicks",
+] as const;
 type StoreAction = (typeof STORE_ACTIONS)[number];
+
+const RESET_FIELDS = {
+  reset_escrow_balance: "escrowBalance",
+  reset_total_sales: "totalSales",
+  reset_add_to_cart_clicks: "add_to_cart_clicks",
+} as const;
 
 function isSuperAdminRole(role: unknown) {
   return ["super_admin", "superadmin"].includes(String(role || "").trim().toLowerCase().replace(/[\s-]+/g, "_"));
@@ -38,8 +47,51 @@ export async function PATCH(
     const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
 
     if (!STORE_ACTIONS.includes(action)) return NextResponse.json({ error: "Invalid store action" }, { status: 400 });
-    if (["reject", "suspend"].includes(action) && !reason) {
+    if ((["reject", "suspend", "delete", ...Object.keys(RESET_FIELDS)] as string[]).includes(action) && !reason) {
       return NextResponse.json({ error: "A reason is required for this action" }, { status: 400 });
+    }
+
+    const resetField = RESET_FIELDS[action as keyof typeof RESET_FIELDS];
+    if (resetField) {
+      const role = String(access.admin.role || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+      const hasStoreWritePermission = access.admin.permissions?.stores?.write === true;
+      if (!hasStoreWritePermission && !["super_admin", "superadmin", "finance"].includes(role)) {
+        return NextResponse.json({ error: "Only an authorized finance or store administrator can reset store metrics" }, { status: 403 });
+      }
+
+      const storeRef = adminDb.collection("stores").doc(id);
+      const result = await adminDb.runTransaction(async (transaction) => {
+        const storeSnap = await transaction.get(storeRef);
+        if (!storeSnap.exists) throw new Error("Store not found");
+        const currentValue = Number(storeSnap.data()?.[resetField] ?? 0);
+        if (!Number.isFinite(currentValue) || currentValue < 0) throw new Error(`Store field ${resetField} contains an invalid value`);
+
+        const now = FieldValue.serverTimestamp();
+        transaction.update(storeRef, {
+          [resetField]: 0,
+          updatedAt: now,
+          updatedBy: access.admin.uid,
+        });
+        transaction.set(adminDb.collection("auditLogs").doc(), {
+          action: `store_${action}`,
+          targetType: "store",
+          targetId: id,
+          performedBy: access.admin.uid,
+          performedByEmail: access.admin.email || "",
+          details: { field: resetField, previousValue: currentValue, nextValue: 0, reason },
+          timestamp: now,
+        });
+        return { previousValue: currentValue };
+      });
+
+      return NextResponse.json({
+        success: true,
+        action,
+        storeId: id,
+        field: resetField,
+        value: 0,
+        previousValue: result.previousValue,
+      });
     }
 
     const storeRef = adminDb.collection("stores").doc(id);
