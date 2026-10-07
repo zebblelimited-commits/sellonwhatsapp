@@ -66,7 +66,7 @@ The Utility form should support these fields:
 | Unit label | Yes | Example: `Beat`, `License`, `Hour`, or `GB` |
 | Delivery/access instructions | No | Text shown after purchase |
 | Cover images | No | One or more image URLs |
-| Audio preview | No | Short audio sample URL |
+| Audio preview | No | Audio sample URL of any duration |
 | Features | No | String array |
 | Variants | No | Array of attribute/value objects |
 
@@ -188,7 +188,7 @@ Recommended accepted formats:
 mp3, wav, m4a, aac, ogg, flac
 ```
 
-Recommended product rule: limit the public preview to approximately 30 seconds and enforce a reasonable upload-size limit. The current mobile client does not calculate or enforce the duration, so the API or web upload layer should enforce this if it is a business requirement.
+The seller may upload an audio preview of any duration. The web form records the actual `previewDurationSeconds` for the player, while the upload layer keeps a reasonable file-size limit. The full purchased file must remain private and must not be exposed through the public preview URL.
 
 Never put a Cloudinary API secret in browser code. Use the unsigned preset for this public-media upload flow, or proxy/sign the upload from a trusted server if the preset must be private.
 

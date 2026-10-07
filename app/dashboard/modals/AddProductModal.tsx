@@ -75,7 +75,6 @@ const TAB_CATEGORY_MAP: Record<ProductType, string[]> = {
 const BRAND_GREEN = "#00A63E";
 const CLOUDINARY_UPLOAD_PRESET = "sellonwhatsapp_preset";
 const CLOUDINARY_CLOUD_NAME = "dmjzgqigl";
-const MAX_AUDIO_PREVIEW_SECONDS = 30;
 const MAX_AUDIO_PREVIEW_BYTES = 25 * 1024 * 1024;
 const AUDIO_TYPES = ["audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/aac", "audio/ogg", "audio/flac", "application/octet-stream"];
 
@@ -265,7 +264,6 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
     try {
       if (file.size > MAX_AUDIO_PREVIEW_BYTES) throw new Error("Audio preview must be 25 MB or smaller.");
       const duration = await readAudioDuration(file);
-      if (duration > MAX_AUDIO_PREVIEW_SECONDS + 0.25) throw new Error("Audio preview must be 30 seconds or shorter.");
       setAudioPreviewFile(file);
       setAudioPreviewUrl(URL.createObjectURL(file));
       setAudioPreviewDurationSeconds(Math.ceil(duration));
@@ -506,7 +504,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                     <div className="space-y-3 rounded-2xl border border-orange-100 bg-orange-50/40 p-4">
                       <div className="flex items-center justify-between gap-2">
                         <label className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-orange-700"><Music2 size={12} /> Audio Preview</label>
-                        <span className="text-[9px] font-medium text-orange-600">Optional · max 30 sec</span>
+                        <span className="text-[9px] font-medium text-orange-600">Optional · any length</span>
                       </div>
                       <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-orange-200 bg-white px-3 py-3 text-[10px] font-bold text-orange-700 transition-colors hover:bg-orange-50">
                         <Upload size={14} /> {audioPreviewUrl ? 'Replace preview' : 'Choose audio sample'}
@@ -521,7 +519,7 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                           </div>
                         </div>
                       )}
-                      <p className="text-[9px] leading-4 text-orange-800/70">Only the short preview is public. Keep the full purchased file private.</p>
+                      <p className="text-[9px] leading-4 text-orange-800/70">The uploaded preview is public. Keep the full purchased file private.</p>
                     </div>
                   )}
                   <div className="space-y-4">

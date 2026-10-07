@@ -40,7 +40,7 @@ function validateUtilityPayload(productPayload: Record<string, unknown>) {
         } catch {
             return "Audio preview URL is invalid.";
         }
-        if (previewDuration !== null && (!Number.isFinite(previewDuration) || previewDuration <= 0 || previewDuration > 30.25)) return "Audio preview must be 30 seconds or shorter.";
+        if (previewDuration !== null && (!Number.isFinite(previewDuration) || previewDuration <= 0)) return "Audio preview duration must be a positive number.";
     }
     return null;
 }
