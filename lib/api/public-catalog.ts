@@ -23,14 +23,16 @@ const PUBLIC_STORE_FIELDS = [
 const PUBLIC_PRODUCT_FIELDS = [
   "name", "description", "price", "originalPrice", "discountPrice", "currency",
   "images", "image", "imageUrl", "productType", "mainCategory", "subCategory",
-  "category", "features", "variants", "stockCount", "stock", "availability",
+  "type", "category", "features", "variants", "stockCount", "stock", "availability",
   "status", "storeId", "vendorName", "storeName", "username", "storeUsername",
   "popularityScore", "salesCount", "orderCount", "views", "clicks",
   "add_to_cart_clicks", "addToCartClicks", "isSponsored", "sponsored", "sponsorshipStatus",
   "sponsoredAt", "sponsoredUntil", "priority", "placement", "source",
   "createdAt", "updatedAt", "shipping", "deliveryType", "fulfillmentMethod",
   "turnaroundTime", "duration", "locationType", "maxDaily", "metricType",
-  "unitLabel", "weightKg", "dimensions", "bookingDate", "bookingSlot",
+  "unitLabel", "utilityType", "billingCycle", "deliveryInstructions",
+  "previewAudioUrl", "previewDurationSeconds", "audioPreviewUrl", "previewUrl",
+  "audioUrl", "audioDurationSeconds", "weightKg", "dimensions", "bookingDate", "bookingSlot",
 ] as const;
 
 export function jsonValue(value: unknown): unknown {

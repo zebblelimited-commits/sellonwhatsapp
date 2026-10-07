@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   X, Upload, Plus, Trash2, Package,
-  Globe, Zap, Calendar, Truck, Box, Clock, CheckCircle, MapPin, Layers, Info, Loader2, ArrowUpRight, Ruler, Weight
+  Globe, Zap, Calendar, Truck, Box, Clock, CheckCircle, MapPin, Layers, Info, Loader2, ArrowUpRight, Ruler, Weight, Music2
 } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, increment, query, where, getCountFromServer, getDoc } from 'firebase/firestore';
@@ -20,6 +20,12 @@ type ProductRecord = {
   images?: string[];
   features?: string[];
   variants?: ProductVariant[];
+  previewAudioUrl?: string;
+  audioPreviewUrl?: string;
+  previewUrl?: string;
+  audioUrl?: string;
+  previewDurationSeconds?: number;
+  audioDurationSeconds?: number;
   shipping?: {
     weightKg?: number;
     lengthCm?: number;
@@ -39,8 +45,11 @@ type ProductFormData = {
   stockCount: string;
   deliveryType: string;
   duration: string;
+  utilityType: string;
+  billingCycle: string;
   metricType: string;
   unitLabel: string;
+  deliveryInstructions: string;
   locationType: string;
   shipping: {
     weightKg: string;
@@ -66,6 +75,9 @@ const TAB_CATEGORY_MAP: Record<ProductType, string[]> = {
 const BRAND_GREEN = "#00A63E";
 const CLOUDINARY_UPLOAD_PRESET = "sellonwhatsapp_preset";
 const CLOUDINARY_CLOUD_NAME = "dmjzgqigl";
+const MAX_AUDIO_PREVIEW_SECONDS = 30;
+const MAX_AUDIO_PREVIEW_BYTES = 25 * 1024 * 1024;
+const AUDIO_TYPES = ["audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/aac", "audio/ogg", "audio/flac", "application/octet-stream"];
 
 const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModalProps) => {
   const router = useRouter();
@@ -74,6 +86,9 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
   const [images, setImages] = useState<ProductImage[]>([]);
   const [features, setFeatures] = useState([""]);
   const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [audioPreviewFile, setAudioPreviewFile] = useState<File | null>(null);
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
+  const [audioPreviewDurationSeconds, setAudioPreviewDurationSeconds] = useState<number | null>(null);
   const [savedProductId, setSavedProductId] = useState<string | null>(null);
 
   const [currentCount, setCurrentCount] = useState(0);
@@ -90,8 +105,11 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
     stockCount: '1',
     deliveryType: 'state',
     duration: '1 Hour',
+    utilityType: 'file',
+    billingCycle: 'one_time',
     metricType: 'flat',
     unitLabel: 'Service',
+    deliveryInstructions: '',
     locationType: 'remote',
     shipping: {
       weightKg: '',
@@ -114,21 +132,30 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
   useEffect(() => {
     if (initialData && isOpen) {
       setProductType(initialData.productType || 'physical');
-      setImages(initialData.images?.map((url: string) => ({ preview: url, isExisting: true })) || []);
+      const existingImages = initialData.images?.length ? initialData.images : (initialData.imageUrl ? [initialData.imageUrl] : []);
+      setImages(existingImages?.map((url: string) => ({ preview: url, isExisting: true })) || []);
       setFeatures(initialData.features || [""]);
       setVariants(initialData.variants || []);
+      const existingAudioUrl = initialData.previewAudioUrl || initialData.audioPreviewUrl || initialData.previewUrl || initialData.audioUrl || '';
+      const existingAudioDuration = Number(initialData.previewDurationSeconds ?? initialData.audioDurationSeconds ?? 0);
+      setAudioPreviewFile(null);
+      setAudioPreviewUrl(existingAudioUrl);
+      setAudioPreviewDurationSeconds(existingAudioDuration > 0 ? existingAudioDuration : null);
       setFormData({
         name: initialData.name || '',
         description: initialData.description || '',
         price: initialData.price || '',
         discountPrice: initialData.discountPrice || '',
-        mainCategory: initialData.mainCategory || '',
+        mainCategory: initialData.mainCategory || (initialData.productType === 'utility' ? 'digital-products' : ''),
         subCategory: initialData.subCategory || '',
         stockCount: String(initialData.stockCount ?? initialData.stock ?? '1'),
         deliveryType: initialData.deliveryType || 'state',
         duration: initialData.duration || '1 Hour',
+        utilityType: initialData.utilityType || 'file',
+        billingCycle: initialData.billingCycle || 'one_time',
         metricType: initialData.metricType || 'flat',
-        unitLabel: initialData.unitLabel || 'Service',
+        unitLabel: initialData.unitLabel || (initialData.productType === 'utility' ? 'Beat' : 'Service'),
+        deliveryInstructions: initialData.deliveryInstructions || '',
         locationType: initialData.locationType || 'remote',
         shipping: {
           weightKg: String(initialData.shipping?.weightKg || ''),
@@ -142,11 +169,14 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
       setImages([]);
       setFeatures([""]);
       setVariants([]);
+      setAudioPreviewFile(null);
+      setAudioPreviewUrl('');
+      setAudioPreviewDurationSeconds(null);
       setSavedProductId(null);
       setFormData({
         name: '', description: '', price: '', discountPrice: '',
         mainCategory: '', subCategory: '', stockCount: '1', deliveryType: 'state',
-        duration: '1 Hour', metricType: 'flat', unitLabel: 'Service', locationType: 'remote',
+        duration: '1 Hour', utilityType: 'file', billingCycle: 'one_time', metricType: 'flat', unitLabel: 'Service', deliveryInstructions: '', locationType: 'remote',
         shipping: { weightKg: '', lengthCm: '', widthCm: '', heightCm: '' }
       });
     }
@@ -197,6 +227,60 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
     }
   };
 
+  const uploadAudioPreviewToCloudinary = async (file: File) => {
+    if (!file) return null;
+    if (file.size > MAX_AUDIO_PREVIEW_BYTES) throw new Error("Audio preview must be 25 MB or smaller.");
+    if (file.type && !AUDIO_TYPES.includes(file.type)) throw new Error("Use an MP3, WAV, M4A, AAC, OGG, or FLAC audio file.");
+
+    const data = new FormData();
+    data.append("file", file);
+    data.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, { method: "POST", body: data });
+    const fileData = await res.json();
+    if (!res.ok) throw new Error(fileData.error?.message || "Audio preview upload failed");
+    return String(fileData.secure_url || "");
+  };
+
+  const readAudioDuration = (file: File) => new Promise<number>((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const audio = document.createElement("audio");
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => {
+      const duration = Number(audio.duration);
+      URL.revokeObjectURL(objectUrl);
+      if (!Number.isFinite(duration) || duration <= 0) reject(new Error("The audio preview duration could not be read."));
+      else resolve(duration);
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("This audio file could not be read. Try another supported format."));
+    };
+    audio.src = objectUrl;
+  });
+
+  const handleAudioPreviewUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.currentTarget.files?.[0];
+    e.currentTarget.value = "";
+    if (!file) return;
+    try {
+      if (file.size > MAX_AUDIO_PREVIEW_BYTES) throw new Error("Audio preview must be 25 MB or smaller.");
+      const duration = await readAudioDuration(file);
+      if (duration > MAX_AUDIO_PREVIEW_SECONDS + 0.25) throw new Error("Audio preview must be 30 seconds or shorter.");
+      setAudioPreviewFile(file);
+      setAudioPreviewUrl(URL.createObjectURL(file));
+      setAudioPreviewDurationSeconds(Math.ceil(duration));
+    } catch (error) {
+      showToast("error", error instanceof Error ? error.message : "Audio preview could not be selected.");
+    }
+  };
+
+  const removeAudioPreview = () => {
+    if (audioPreviewFile && audioPreviewUrl.startsWith("blob:")) URL.revokeObjectURL(audioPreviewUrl);
+    setAudioPreviewFile(null);
+    setAudioPreviewUrl("");
+    setAudioPreviewDurationSeconds(null);
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.currentTarget.files || []);
     if (files.length === 0) return;
@@ -230,6 +314,21 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
       }
     }
 
+    const basePrice = Number(formData.price);
+    const discountPrice = formData.discountPrice ? Number(formData.discountPrice) : null;
+    if (!Number.isFinite(basePrice) || basePrice <= 0) {
+      showToast("error", "Please enter a valid positive base price.");
+      return;
+    }
+    if (discountPrice !== null && (!Number.isFinite(discountPrice) || discountPrice <= 0 || discountPrice > basePrice)) {
+      showToast("error", "Discount price must be positive and not greater than the base price.");
+      return;
+    }
+    if (productType === 'utility' && (!formData.mainCategory || formData.mainCategory !== 'digital-products' || !formData.subCategory)) {
+      showToast("error", "Select a digital product subcategory before publishing.");
+      return;
+    }
+
     setLoading(true);
     const user = auth.currentUser;
     if (!user) {
@@ -246,16 +345,22 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         })
       );
 
+      let uploadedAudioUrl = audioPreviewUrl;
+      if (productType === 'utility' && audioPreviewFile) {
+        uploadedAudioUrl = await uploadAudioPreviewToCloudinary(audioPreviewFile) || "";
+      }
+
       const availableStock = Math.max(0, parseInt(formData.stockCount, 10) || 0);
       const payload = {
         name: formData.name,
         description: formData.description,
-        price: parseFloat(formData.price),
-        discountPrice: formData.discountPrice ? parseFloat(formData.discountPrice) : null,
+        price: basePrice,
+        discountPrice,
         mainCategory: formData.mainCategory,
         subCategory: formData.subCategory,
         category: formData.subCategory,
         productType,
+        type: productType,
         trackInventory: productType === 'physical',
         images: imageUrls.filter((url): url is string => url !== null),
         features: features.filter(f => f.trim() !== ""),
@@ -263,7 +368,20 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
         storeId: user.uid,
         updatedAt: serverTimestamp(),
         stockCount: availableStock,
-        ...(productType === 'utility' && { metricType: formData.metricType, unitLabel: formData.unitLabel }),
+        ...(productType === 'utility' && {
+          mainCategory: 'digital-products',
+          utilityType: formData.utilityType,
+          billingCycle: formData.billingCycle,
+          metricType: formData.metricType,
+          unitLabel: formData.unitLabel.trim(),
+          deliveryInstructions: formData.deliveryInstructions.trim(),
+          trackInventory: false,
+          stockCount: 1,
+          availability: 'in_stock',
+          imageUrl: imageUrls.find((url): url is string => Boolean(url)) || null,
+          previewAudioUrl: uploadedAudioUrl || null,
+          previewDurationSeconds: uploadedAudioUrl ? audioPreviewDurationSeconds : null,
+        }),
         ...(productType === 'physical' && {
           deliveryType: formData.deliveryType,
           stockCount: availableStock,
@@ -341,7 +459,12 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                   disabled={!!initialData}
                   onClick={() => {
                     setProductType(type);
-                    setFormData(prev => ({ ...prev, mainCategory: '', subCategory: '' }));
+                    setFormData(prev => ({
+                      ...prev,
+                      mainCategory: type === 'utility' ? 'digital-products' : '',
+                      subCategory: '',
+                      unitLabel: type === 'utility' && prev.unitLabel === 'Service' ? 'Beat' : prev.unitLabel,
+                    }));
                   }}
                   className={`flex-1 flex items-center justify-center gap-2 py-2 text-[10px] font-bold uppercase tracking-tight rounded-lg transition-all ${productType === type
                     ? 'bg-white shadow-sm'
@@ -379,6 +502,28 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                       ))}
                     </div>
                   </div>
+                  {productType === 'utility' && (
+                    <div className="space-y-3 rounded-2xl border border-orange-100 bg-orange-50/40 p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-orange-700"><Music2 size={12} /> Audio Preview</label>
+                        <span className="text-[9px] font-medium text-orange-600">Optional · max 30 sec</span>
+                      </div>
+                      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-orange-200 bg-white px-3 py-3 text-[10px] font-bold text-orange-700 transition-colors hover:bg-orange-50">
+                        <Upload size={14} /> {audioPreviewUrl ? 'Replace preview' : 'Choose audio sample'}
+                        <input type="file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/m4a,audio/x-m4a,audio/aac,audio/ogg,audio/flac,.mp3,.wav,.m4a,.aac,.ogg,.flac" onChange={handleAudioPreviewUpload} className="hidden" />
+                      </label>
+                      {audioPreviewUrl && (
+                        <div className="space-y-2 rounded-xl bg-white p-2 shadow-sm">
+                          <audio controls preload="metadata" src={audioPreviewUrl} className="h-8 w-full" />
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-[9px] font-medium text-gray-500">{audioPreviewFile?.name || 'Existing audio preview'} · {audioPreviewDurationSeconds || 0}s</span>
+                            <button type="button" onClick={removeAudioPreview} className="shrink-0 rounded-lg p-1.5 text-red-500 hover:bg-red-50" title="Remove audio preview"><Trash2 size={13} /></button>
+                          </div>
+                        </div>
+                      )}
+                      <p className="text-[9px] leading-4 text-orange-800/70">Only the short preview is public. Keep the full purchased file private.</p>
+                    </div>
+                  )}
                   <div className="space-y-4">
                     <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
                       <label className="text-[9px] font-bold text-gray-400 uppercase block mb-1">Base Price (₦)</label>
@@ -510,13 +655,30 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
 
                   {productType === 'utility' && (
                     <div className="animate-in slide-in-from-right-4 p-4 bg-orange-50/30 rounded-2xl border border-orange-100 space-y-3">
-                      <label className="text-[9px] font-bold text-orange-600 uppercase flex items-center gap-1"><Zap size={12} /> Billing Type</label>
+                      <label className="text-[9px] font-bold text-orange-600 uppercase flex items-center gap-1"><Zap size={12} /> Digital Product Setup</label>
+                      <label className="text-[9px] font-bold text-orange-600 uppercase block">Utility Type</label>
+                      <select className="w-full bg-white border border-orange-100 rounded-lg p-2 text-xs outline-none" value={formData.utilityType} onChange={e => setFormData({ ...formData, utilityType: e.target.value })}>
+                        <option value="file">File / Download</option>
+                        <option value="key">License Key</option>
+                        <option value="ticket">Ticket</option>
+                        <option value="sub">Subscription</option>
+                      </select>
+                      <label className="text-[9px] font-bold text-orange-600 uppercase block">Billing Cycle</label>
+                      <select className="w-full bg-white border border-orange-100 rounded-lg p-2 text-xs outline-none" value={formData.billingCycle} onChange={e => setFormData({ ...formData, billingCycle: e.target.value })}>
+                        <option value="one_time">One-time payment</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                      </select>
+                      <label className="text-[9px] font-bold text-orange-600 uppercase flex items-center gap-1"><Layers size={12} /> Metric Type</label>
                       <select className="w-full bg-white border border-orange-100 rounded-lg p-2 text-xs outline-none" value={formData.metricType} onChange={e => setFormData({ ...formData, metricType: e.target.value })}>
                         <option value="flat">Flat Fee</option>
                         <option value="hourly">Hourly</option>
                         <option value="usage">Per Unit</option>
                       </select>
-                      <input className="w-full bg-white border border-orange-100 rounded-lg p-2 text-xs" placeholder="Unit (e.g. KM, Hour)" value={formData.unitLabel} onChange={e => setFormData({ ...formData, unitLabel: e.target.value })} />
+                      <input required className="w-full bg-white border border-orange-100 rounded-lg p-2 text-xs" placeholder="Unit (e.g. Beat, License, Hour, GB)" value={formData.unitLabel} onChange={e => setFormData({ ...formData, unitLabel: e.target.value })} />
+                      <label className="text-[9px] font-bold text-orange-600 uppercase block">Delivery / Access Instructions</label>
+                      <textarea className="w-full h-20 resize-none bg-white border border-orange-100 rounded-lg p-2 text-xs outline-none" placeholder="Tell the buyer how access will be delivered after payment..." value={formData.deliveryInstructions} onChange={e => setFormData({ ...formData, deliveryInstructions: e.target.value })} />
+                      <p className="text-[9px] leading-4 text-orange-800/70">Utility listings use digital-products, stay in stock, and do not require courier inventory.</p>
                     </div>
                   )}
 

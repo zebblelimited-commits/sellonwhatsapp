@@ -4,6 +4,47 @@ import { syncReferralMilestones } from "@/lib/referrals";
 import { getPublicStore, getPublicStoreMap, isPublicProduct, jsonValue, publicProductView, timestampValue } from "@/lib/api/public-catalog";
 import { sponsorshipIsActive } from "@/lib/sponsorship";
 
+const UTILITY_SUBCATEGORIES = new Set([
+    "Beats & Instrumentals", "Sound Packs & Samples", "Music Loops", "E-books & Guides",
+    "Online Courses", "Design Templates", "Website Templates", "Mobile App Templates",
+    "UI/UX Kits", "Icons & Graphics", "Fonts & Typography", "Lightroom Presets",
+    "Video LUTs", "AI Prompts", "Stock Photos", "Stock Videos", "Digital Wallpapers",
+    "Digital Planners",
+]);
+
+function validateUtilityPayload(productPayload: Record<string, unknown>) {
+    const productType = String(productPayload.productType || "").trim().toLowerCase();
+    if (productType !== "utility") return null;
+    if (String(productPayload.mainCategory || "").trim() !== "digital-products") return "Utility products must use the digital-products main category.";
+    if (!UTILITY_SUBCATEGORIES.has(String(productPayload.subCategory || "").trim())) return "Select a valid digital product subcategory.";
+
+    const utilityType = String(productPayload.utilityType || "").trim();
+    if (!["file", "key", "ticket", "sub"].includes(utilityType)) return "Utility type must be file, key, ticket, or sub.";
+    const billingCycle = String(productPayload.billingCycle || "").trim();
+    if (!["one_time", "monthly", "yearly"].includes(billingCycle)) return "Billing cycle must be one_time, monthly, or yearly.";
+    const metricType = String(productPayload.metricType || "").trim();
+    if (!["flat", "hourly", "usage"].includes(metricType)) return "Metric type must be flat, hourly, or usage.";
+    if (!String(productPayload.unitLabel || "").trim()) return "Unit label is required for utility products.";
+
+    const price = Number(productPayload.price);
+    const discountPrice = productPayload.discountPrice == null ? null : Number(productPayload.discountPrice);
+    if (!Number.isFinite(price) || price <= 0) return "Utility product price must be a positive number.";
+    if (discountPrice !== null && (!Number.isFinite(discountPrice) || discountPrice <= 0 || discountPrice > price)) return "Discount price must not exceed the base price.";
+
+    const previewUrl = String(productPayload.previewAudioUrl || "").trim();
+    const previewDuration = productPayload.previewDurationSeconds == null ? null : Number(productPayload.previewDurationSeconds);
+    if (previewUrl) {
+        try {
+            const parsed = new URL(previewUrl);
+            if (parsed.hostname !== "res.cloudinary.com" || !parsed.pathname.includes(`/${process.env.CLOUDINARY_CLOUD_NAME || "dmjzgqigl"}/`)) return "Audio preview must be hosted on the configured Cloudinary account.";
+        } catch {
+            return "Audio preview URL is invalid.";
+        }
+        if (previewDuration !== null && (!Number.isFinite(previewDuration) || previewDuration <= 0 || previewDuration > 30.25)) return "Audio preview must be 30 seconds or shorter.";
+    }
+    return null;
+}
+
 function numberParam(value: string | null, fallback: number, maximum: number) {
     const parsed = Number(value);
     return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, maximum) : fallback;
@@ -84,6 +125,27 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
         }
 
+        if (!productPayload || typeof productPayload !== "object" || Array.isArray(productPayload)) {
+            return NextResponse.json({ error: "Product payload is required" }, { status: 400 });
+        }
+        const payloadStoreId = String((productPayload as Record<string, unknown>).storeId || "").trim();
+        if (payloadStoreId && payloadStoreId !== decoded.uid) return NextResponse.json({ error: "Product store does not belong to the authenticated seller" }, { status: 403 });
+        const utilityValidationError = validateUtilityPayload(productPayload as Record<string, unknown>);
+        if (utilityValidationError) return NextResponse.json({ error: utilityValidationError }, { status: 400 });
+        const isUtility = String((productPayload as Record<string, unknown>).productType || "").trim().toLowerCase() === "utility";
+        const payloadToWrite = {
+            ...(productPayload as Record<string, unknown>),
+            storeId: payloadStoreId || decoded.uid,
+            ...(isUtility ? {
+                type: "utility",
+                mainCategory: "digital-products",
+                category: (productPayload as Record<string, unknown>).subCategory,
+                trackInventory: false,
+                stockCount: 1,
+                availability: "in_stock",
+            } : {}),
+        };
+
         // 1. Get tier limits from user profile doc
         const userSnap = await adminDb.collection("users").doc(userId).get();
         const userData = userSnap.exists ? userSnap.data() : null;
@@ -109,7 +171,7 @@ export async function POST(request: NextRequest) {
 
         // 4. Otherwise, continue and write the item record securely...
         const docRef = await adminDb.collection("products").add({
-            ...productPayload,
+            ...payloadToWrite,
             userId,
             createdAt: new Date().toISOString()
         });
