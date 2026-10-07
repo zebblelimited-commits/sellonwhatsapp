@@ -97,7 +97,7 @@ body {
 
 @media (max-width: 768px) {
   .site-scale {
-    --site-scale: 0.9;
+    --site-scale: 0.8;
     zoom: var(--site-scale);
   }
 }
