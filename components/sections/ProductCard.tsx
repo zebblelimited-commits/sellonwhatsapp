@@ -10,6 +10,9 @@ import { useCart } from "@/contexts/CartContext";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { productCheckoutAttributes } from "@/lib/product-checkout-attributes";
+import { getReadyAuthUser } from "@/lib/client-auth";
+import { isBookingProduct, isServiceProduct, productPreviewAudioUrl, requiresProductShipping } from "@/lib/product-presentation";
+import AudioPreviewButton from "@/components/sections/AudioPreviewButton";
 
 type ProductCardProps = {
   product: any;
@@ -24,9 +27,9 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
   const productId = product.id;
   const productPath = product.username ? `/${product.username}/${productId}` : `/products/${productId}`;
 
-  const isBooking = product.productType === "booking";
-  const isService = product.productType === "service" || product.productType === "utility";
-  const requiresShipping = !isBooking && !isService;
+  const isBooking = isBookingProduct(product);
+  const isService = isServiceProduct(product);
+  const requiresShipping = requiresProductShipping(product);
 
   const stock = Number(product.stockCount ?? product.stock ?? 0);
   const isOutOfStock = isService ? product.availability === "out_of_stock" : stock <= 0 || product.availability === "out_of_stock";
@@ -47,6 +50,7 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
       if (user && user.email) {
         setCustomerEmail(user.email);
         if (user.displayName) setCustomerName(user.displayName);
+        if (user.phoneNumber) setCustomerPhone(user.phoneNumber);
       }
     });
     return () => unsubscribe();
@@ -92,8 +96,12 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
       setModalError("Please provide a valid contact email address.");
       return;
     }
+    if (!customerPhone.trim()) {
+      setModalError("Please provide a valid phone number for payment.");
+      return;
+    }
 
-    const buyer = auth.currentUser;
+    const buyer = await getReadyAuthUser();
     if (!buyer) {
       setModalError("Please log in to complete this purchase.");
       return;
@@ -135,6 +143,10 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
               items: [
                 {
                   productId,
+                  productType: product.productType || product.type,
+                  type: product.type,
+                  mainCategory: product.mainCategory,
+                  subCategory: product.subCategory,
                   name: product.name || "Service Item",
                   price: productPrice,
                   quantity: 1,
@@ -190,6 +202,7 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
             <p className="mt-0.5 truncate text-xs font-medium text-gray-400">
               {product.vendorName || "Marketplace seller"}
             </p>
+            {productPreviewAudioUrl(product) && <AudioPreviewButton url={productPreviewAudioUrl(product)} />}
             <div className="mt-2 flex items-center justify-between gap-2">
               <span className="text-base font-extrabold text-gray-900">
                 ₦{productPrice.toLocaleString()}

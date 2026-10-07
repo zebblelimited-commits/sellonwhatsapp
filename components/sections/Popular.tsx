@@ -14,6 +14,9 @@ import { onAuthStateChanged } from "firebase/auth";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
 import { useCart } from "@/contexts/CartContext";
 import { productCheckoutAttributes } from "@/lib/product-checkout-attributes";
+import { getReadyAuthUser } from "@/lib/client-auth";
+import { isBookingProduct, isServiceProduct, productPreviewAudioUrl, requiresProductShipping } from "@/lib/product-presentation";
+import AudioPreviewButton from "@/components/sections/AudioPreviewButton";
 
 const font = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -29,6 +32,9 @@ type Product = {
   imageUrl?: string;
   images?: string[];
   productType?: string;
+  type?: string;
+  mainCategory?: string;
+  subCategory?: string;
   stockCount?: number;
   stock?: number;
   availability?: string;
@@ -47,6 +53,10 @@ type Product = {
   views?: number;
   clicks?: number;
   createdAt?: unknown;
+  previewAudioUrl?: string;
+  audioPreviewUrl?: string;
+  previewUrl?: string;
+  audioUrl?: string;
 };
 
 type PopularProps = {
@@ -66,8 +76,8 @@ function productIsVisible(product: Product) {
 }
 
 function productAction(product: Product) {
-  const isBooking = product.productType === "booking";
-  const isService = product.productType === "service" || product.productType === "utility";
+  const isBooking = isBookingProduct(product);
+  const isService = isServiceProduct(product);
   return {
     isBooking,
     isService,
@@ -76,8 +86,8 @@ function productAction(product: Product) {
 }
 
 function productIsUnavailable(product: Product) {
-  const isBooking = product.productType === "booking";
-  const isService = product.productType === "service" || product.productType === "utility";
+  const isBooking = isBookingProduct(product);
+  const isService = isServiceProduct(product);
   const stock = Number(product.stockCount ?? product.stock ?? 0);
 
   if (isService) {
@@ -157,6 +167,7 @@ export default function Popular({ fullPage = false }: PopularProps) {
       if (user && user.email) {
         setCustomerEmail(user.email);
         if (user.displayName) setCustomerName(user.displayName);
+        if (user.phoneNumber) setCustomerPhone(user.phoneNumber);
       }
     });
 
@@ -172,9 +183,9 @@ export default function Popular({ fullPage = false }: PopularProps) {
 
     void trackMetric(product.storeId, "buy_now_click", { productId: product.id });
 
-    const isBooking = product.productType === "booking";
-    const isService = product.productType === "service" || product.productType === "utility";
-    const requiresShipping = !isBooking && !isService;
+    const isBooking = isBookingProduct(product);
+    const isService = isServiceProduct(product);
+    const requiresShipping = requiresProductShipping(product);
 
     const productPrice = Number(product.price || 0);
 
@@ -210,8 +221,12 @@ export default function Popular({ fullPage = false }: PopularProps) {
       setModalError("Please provide a valid contact email address.");
       return;
     }
+    if (!customerPhone.trim()) {
+      setModalError("Please provide a valid phone number for payment.");
+      return;
+    }
 
-    const buyer = auth.currentUser;
+    const buyer = await getReadyAuthUser();
     if (!buyer) {
       setModalError("Please log in to complete this purchase.");
       return;
@@ -253,6 +268,10 @@ export default function Popular({ fullPage = false }: PopularProps) {
               items: [
                 {
                   productId: selectedProduct.id,
+                  productType: selectedProduct.productType || selectedProduct.type,
+                  type: selectedProduct.type,
+                  mainCategory: selectedProduct.mainCategory,
+                  subCategory: selectedProduct.subCategory,
                   name: selectedProduct.name || "Service Item",
                   price: price,
                   quantity: 1,
@@ -328,6 +347,7 @@ export default function Popular({ fullPage = false }: PopularProps) {
                   <div>
                     <h3 className="line-clamp-1 text-sm font-bold text-gray-900 transition-colors group-hover:text-[#00a63e]">{product.name}</h3>
                     <p className="mt-0.5 truncate text-xs font-medium text-gray-400">{product.vendorName}</p>
+                    {productPreviewAudioUrl(product) && <AudioPreviewButton url={productPreviewAudioUrl(product)} />}
                     <div className="mt-2 flex items-center justify-between gap-2">
                       <span className="text-base font-extrabold text-gray-900">₦{Number(product.price || 0).toLocaleString()}</span>
                       <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-tight ${unavailable ? "bg-red-50 text-red-500" : action.isBooking ? "bg-purple-50 text-purple-600" : action.isService ? "bg-emerald-50 text-emerald-600" : "text-gray-500"}`}>

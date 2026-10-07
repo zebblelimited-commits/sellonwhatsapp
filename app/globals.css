@@ -83,7 +83,7 @@ body {
 }
 
 .site-scale {
-  --site-scale: 0.7;
+  --site-scale: 0.8;
   zoom: var(--site-scale);
 }
 
@@ -97,7 +97,7 @@ body {
 
 @media (max-width: 768px) {
   .site-scale {
-    --site-scale: 1;
+    --site-scale: 0.9;
     zoom: var(--site-scale);
   }
 }

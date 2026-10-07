@@ -294,6 +294,10 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
     setVariants([...variants, { type: 'Size', value: '' }]);
   };
 
+  const addFeature = () => {
+    setFeatures(prev => [...prev, '']);
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>) => {
     if (e) e.preventDefault();
     if (currentCount >= productLimit && !initialData) {
@@ -538,6 +542,30 @@ const AddProductModal = ({ isOpen, onClose, initialData = null }: AddProductModa
                 <div className="space-y-6">
                   <input required placeholder="Product Title" className="text-xl font-bold w-full outline-none border-b border-gray-100 pb-2" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                   <textarea placeholder="Description..." className="w-full h-32 text-sm text-gray-600 outline-none bg-gray-50/50 p-3 rounded-xl border border-transparent focus:border-gray-100" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+                  {(productType === 'physical' || productType === 'utility') && (
+                    <div className={`space-y-3 rounded-2xl border p-4 ${productType === 'utility' ? 'border-orange-100 bg-orange-50/30' : 'border-gray-100 bg-gray-50/50'}`}>
+                      <div>
+                        <label className={`text-[9px] font-bold uppercase flex items-center gap-1 ${productType === 'utility' ? 'text-orange-700' : 'text-gray-500'}`}>
+                          <Info size={12} /> {productType === 'utility' ? 'Digital Product Features' : 'Product Features'}
+                        </label>
+                        {productType === 'utility' && <p className="mt-1 text-[9px] leading-4 text-orange-800/70">Add searchable details such as genre, key, BPM, preview type, or license terms.</p>}
+                      </div>
+                      {features.map((feature, i) => (
+                        <div key={i} className="flex gap-2">
+                          <input
+                            className="flex-1 rounded-lg border border-gray-100 bg-white p-2 text-xs outline-none focus:border-orange-200"
+                            placeholder={productType === 'utility' ? 'e.g. Afrobeats instrumental, C minor key, 105 BPM' : 'e.g. Handmade, waterproof, rechargeable'}
+                            value={feature}
+                            onChange={(e) => setFeatures(prev => prev.map((item, index) => index === i ? e.target.value : item))}
+                          />
+                          <button type="button" onClick={() => setFeatures(prev => prev.filter((_, index) => index !== i))} className="rounded-lg p-2" aria-label="Remove feature">
+                            <Trash2 size={14} className="text-gray-300 hover:text-red-500" />
+                          </button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={addFeature} className="text-[10px] font-bold flex items-center gap-1 opacity-70 hover:opacity-100" style={{ color: BRAND_GREEN }}><Plus size={12} /> Add Feature</button>
+                    </div>
+                  )}
                   <div className="space-y-3">
                     <label className="text-[9px] font-bold text-gray-400 uppercase flex items-center gap-1"><Layers size={12} /> Variations (Attributes)</label>
                     {variants.map((v, i) => (

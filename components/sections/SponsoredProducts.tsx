@@ -12,6 +12,9 @@ import { onAuthStateChanged } from "firebase/auth";
 import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
 import { useCart } from "@/contexts/CartContext";
 import { productCheckoutAttributes } from "@/lib/product-checkout-attributes";
+import { getReadyAuthUser } from "@/lib/client-auth";
+import { isBookingProduct, isServiceProduct, productPreviewAudioUrl, requiresProductShipping } from "@/lib/product-presentation";
+import AudioPreviewButton from "@/components/sections/AudioPreviewButton";
 
 const font = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -26,6 +29,9 @@ type SponsoredProduct = {
   imageUrl?: string;
   images?: string[];
   productType?: string;
+  type?: string;
+  mainCategory?: string;
+  subCategory?: string;
   stockCount?: number;
   stock?: number;
   availability?: string;
@@ -41,6 +47,10 @@ type SponsoredProduct = {
   sponsoredAt?: unknown;
   sponsoredUntil?: unknown;
   sponsorshipStatus?: string;
+  previewAudioUrl?: string;
+  audioPreviewUrl?: string;
+  previewUrl?: string;
+  audioUrl?: string;
 };
 
 type SponsoredProductsProps = {
@@ -71,8 +81,8 @@ function productImage(product: SponsoredProduct) {
 }
 
 function productAction(product: SponsoredProduct) {
-  const isBooking = product.productType === "booking";
-  const isService = product.productType === "service" || product.productType === "utility";
+  const isBooking = isBookingProduct(product);
+  const isService = isServiceProduct(product);
   return {
     label: isBooking ? "Book Now" : isService ? "Hire Service" : "Buy Now",
     icon: isBooking ? <Calendar size={11} /> : isService ? <CheckCircle2 size={11} /> : <Package size={11} />,
@@ -82,8 +92,8 @@ function productAction(product: SponsoredProduct) {
 }
 
 function productIsUnavailable(product: SponsoredProduct) {
-  const isService = product.productType === "service" || product.productType === "utility";
-  const isBooking = product.productType === "booking";
+  const isService = isServiceProduct(product);
+  const isBooking = isBookingProduct(product);
   if (isService) return product.availability === "out_of_stock";
   if (isBooking) return Number(product.stockCount ?? product.stock ?? 0) <= 0;
   return Number(product.stockCount ?? product.stock ?? 0) <= 0 || product.availability === "out_of_stock";
@@ -115,6 +125,7 @@ function SponsoredCard({
         <div>
           <h3 className="line-clamp-1 text-xs font-bold text-gray-900 transition-colors group-hover:text-[#00a63e] sm:text-sm">{product.name || "Untitled product"}</h3>
           <p className="mt-0.5 truncate text-[10px] font-medium text-gray-400">{product.vendorName || "Marketplace seller"}</p>
+          {productPreviewAudioUrl(product) && <AudioPreviewButton url={productPreviewAudioUrl(product)} />}
           <div className="mt-2 flex items-center justify-between gap-2">
             <span className="text-sm font-extrabold text-gray-900 sm:text-base">₦{Number(product.price || 0).toLocaleString()}</span>
             <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-tight ${unavailable ? "bg-red-50 text-red-500" : action.isBooking ? "bg-purple-50 text-purple-600" : action.isService ? "bg-emerald-50 text-emerald-600" : "text-gray-500"}`}>
@@ -198,6 +209,7 @@ export default function SponsoredProducts({ fullPage = false }: SponsoredProduct
       if (user && user.email) {
         setCustomerEmail(user.email);
         if (user.displayName) setCustomerName(user.displayName);
+        if (user.phoneNumber) setCustomerPhone(user.phoneNumber);
       }
     });
 
@@ -261,9 +273,9 @@ export default function SponsoredProducts({ fullPage = false }: SponsoredProduct
 
     void trackMetric(storeId, "buy_now_click", { productId: product.id });
 
-    const isBooking = product.productType === "booking";
-    const isService = product.productType === "service" || product.productType === "utility";
-    const requiresShipping = !isBooking && !isService;
+    const isBooking = isBookingProduct(product);
+    const isService = isServiceProduct(product);
+    const requiresShipping = requiresProductShipping(product);
 
     const productPrice = Number(product.price || 0);
 
@@ -301,8 +313,12 @@ export default function SponsoredProducts({ fullPage = false }: SponsoredProduct
       setModalError("Please provide a valid contact email address.");
       return;
     }
+    if (!customerPhone.trim()) {
+      setModalError("Please provide a valid phone number for payment.");
+      return;
+    }
 
-    const buyer = auth.currentUser;
+    const buyer = await getReadyAuthUser();
     if (!buyer) {
       setModalError("Please log in to complete this purchase.");
       return;
@@ -344,6 +360,10 @@ export default function SponsoredProducts({ fullPage = false }: SponsoredProduct
               items: [
                 {
                   productId: selectedProduct.id,
+                  productType: selectedProduct.productType || selectedProduct.type,
+                  type: selectedProduct.type,
+                  mainCategory: selectedProduct.mainCategory,
+                  subCategory: selectedProduct.subCategory,
                   name: selectedProduct.name || "Service Item",
                   price: price,
                   quantity: 1,

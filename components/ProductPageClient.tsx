@@ -14,6 +14,8 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { useRouter } from "next/navigation";
 import { productCheckoutAttributes } from "@/lib/product-checkout-attributes";
+import { getReadyAuthUser } from "@/lib/client-auth";
+import { isBookingProduct, isDigitalUtilityProduct, isServiceProduct, requiresProductShipping } from "@/lib/product-presentation";
 
 declare global {
   interface Window {
@@ -51,6 +53,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
       if (user && user.email) {
         setCustomerEmail(user.email);
         if (user.displayName) setCustomerName(user.displayName);
+        if (user.phoneNumber) setCustomerPhone(user.phoneNumber);
       }
     });
     return () => unsubscribe();
@@ -63,13 +66,14 @@ export default function ProductPageClient({ product, store }: { product: any; st
   }, [product?.id, product?.uid, store?.id, store?.uid]);
 
   // PRODUCT TYPE LOGIC
-  const isBooking = product?.productType === 'booking';
-  const isServiceOrUtility = product?.productType === 'service' || product?.productType === 'utility';
-  const requiresShipping = !isBooking && !isServiceOrUtility;
+  const isBooking = isBookingProduct(product);
+  const isDigitalUtility = isDigitalUtilityProduct(product);
+  const isService = isServiceProduct(product);
+  const requiresShipping = requiresProductShipping(product);
 
-  const hideQuantity = isBooking || isServiceOrUtility;
+  const hideQuantity = isBooking || isService || isDigitalUtility;
   const stockCount = Number(product?.stockCount ?? product?.stock ?? 0);
-  const isOutOfStock = isServiceOrUtility
+  const isOutOfStock = isService || isDigitalUtility
     ? product?.availability === "out_of_stock"
     : !Number.isFinite(stockCount) || stockCount <= 0 || product?.availability === "out_of_stock";
 
@@ -128,7 +132,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
       return;
     }
 
-    const buyer = auth.currentUser;
+    const buyer = await getReadyAuthUser();
     if (!buyer) {
       setModalError("Please log in to complete this purchase.");
       return;
@@ -173,6 +177,10 @@ export default function ProductPageClient({ product, store }: { product: any; st
               items: [
                 {
                   productId,
+                  productType: product?.productType || product?.type,
+                  type: product?.type,
+                  mainCategory: product?.mainCategory,
+                  subCategory: product?.subCategory,
                   name: product?.name || "Service Item",
                   price: productPrice,
                   quantity: activeQuantity,
@@ -265,9 +273,9 @@ export default function ProductPageClient({ product, store }: { product: any; st
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                 <p className="text-[11px] font-black text-[#00a63e] uppercase tracking-widest">{store?.storeName} Official Store</p>
-                <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-extrabold uppercase tracking-tight ${isOutOfStock ? "bg-red-50 border-red-100 text-red-600" : isBooking ? "bg-purple-50 border-purple-100 text-purple-600" : isServiceOrUtility ? "bg-emerald-50 border-emerald-100 text-emerald-600" : "bg-orange-50 border-orange-100 text-orange-600"}`}>
+                <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-extrabold uppercase tracking-tight ${isOutOfStock ? "bg-red-50 border-red-100 text-red-600" : isBooking ? "bg-purple-50 border-purple-100 text-purple-600" : isService ? "bg-emerald-50 border-emerald-100 text-emerald-600" : isDigitalUtility ? "bg-orange-50 border-orange-100 text-orange-600" : "bg-orange-50 border-orange-100 text-orange-600"}`}>
                   <Box size={10} />
-                  <span>{isOutOfStock ? (isBooking ? "No Slots" : isServiceOrUtility ? "Fully Committed" : "Sold Out") : isBooking ? `${stockCount || 0} Slots` : isServiceOrUtility ? "Available" : `${stockCount || 0} In Stock`}</span>
+                  <span>{isOutOfStock ? (isBooking ? "No Slots" : isService ? "Fully Committed" : "Sold Out") : isBooking ? `${stockCount || 0} Slots` : isService ? "Available" : isDigitalUtility ? "Available" : `${stockCount || 0} In Stock`}</span>
                 </div>
               </div>
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-gray-900 mb-3 capitalize">{product?.name}</h1>
@@ -352,7 +360,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
                   onClick={handleBuyNow}
                   className={`flex-1 w-full py-3.5 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all active:scale-98 shadow-sm ${isOutOfStock || (isBooking && (!selectedDate || !selectedSlot)) ? "pointer-events-none cursor-not-allowed bg-gray-100 text-gray-400" : "bg-black text-white hover:bg-[#00a63e]"}`}
                 >
-                  {isOutOfStock ? "Unavailable" : isBooking ? "Confirm Booking" : isServiceOrUtility ? "Hire Now" : "Buy It Now"}
+                  {isOutOfStock ? "Unavailable" : isBooking ? "Confirm Booking" : isService ? "Hire Now" : "Buy It Now"}
                 </button>
               </div>
 
@@ -363,7 +371,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-gray-100">
               <TrustCard Icon={ShieldCheck} title="Secure Gateway" desc="Verified Nomba Escrow Merchant" />
-              <TrustCard Icon={isBooking ? Calendar : isServiceOrUtility ? CheckCircle2 : Truck} title={isBooking ? "Confirmed" : isServiceOrUtility ? "Reliable" : "Nationwide Delivery"} desc={isBooking ? "Instant Appointment Slot" : isServiceOrUtility ? "Service Guarantee Layer" : "Fast Tracking Shipments"} />
+              <TrustCard Icon={isBooking ? Calendar : isService ? CheckCircle2 : isDigitalUtility ? CheckCircle2 : Truck} title={isBooking ? "Confirmed" : isService ? "Reliable" : isDigitalUtility ? "Digital Access" : "Nationwide Delivery"} desc={isBooking ? "Instant Appointment Slot" : isService ? "Service Guarantee Layer" : isDigitalUtility ? "Delivered after payment" : "Fast Tracking Shipments"} />
             </div>
           </div>
         </div>

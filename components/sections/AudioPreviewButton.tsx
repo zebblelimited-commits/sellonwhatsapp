@@ -1,0 +1,106 @@
+"use client";
+
+import { type MouseEvent, useEffect, useRef, useState } from "react";
+import { Loader2, Music2, Pause, Play } from "lucide-react";
+
+let activeAudio: HTMLAudioElement | null = null;
+let stopActiveAudio: (() => void) | null = null;
+
+function formatTime(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  const minutes = Math.floor(value / 60);
+  const seconds = Math.floor(value % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
+export default function AudioPreviewButton({ url }: { url: string }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      const audio = audioRef.current;
+      if (audio) audio.pause();
+      if (activeAudio === audio) {
+        activeAudio = null;
+        stopActiveAudio = null;
+      }
+    };
+  }, []);
+
+  const stop = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    setPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const toggle = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    setError(false);
+    if (playing) {
+      stop();
+      return;
+    }
+
+    stopActiveAudio?.();
+    activeAudio = audio;
+    stopActiveAudio = stop;
+    setLoading(true);
+    try {
+      await audio.play();
+    } catch {
+      setError(true);
+      if (activeAudio === audio) {
+        activeAudio = null;
+        stopActiveAudio = null;
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-bold text-orange-700 transition-colors hover:bg-orange-100"
+      aria-label={playing ? "Pause audio preview" : "Play audio preview"}
+      title={error ? "This audio preview could not be loaded" : undefined}
+    >
+      <audio
+        ref={audioRef}
+        src={url}
+        preload="metadata"
+        className="sr-only"
+        onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
+        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => {
+          stop();
+          if (activeAudio === audioRef.current) {
+            activeAudio = null;
+            stopActiveAudio = null;
+          }
+        }}
+        onError={() => setError(true)}
+      />
+      {loading ? <Loader2 size={12} className="animate-spin" /> : playing ? <Pause size={12} /> : <Play size={12} />}
+      <Music2 size={12} />
+      <span>{error ? "Preview unavailable" : loading ? "Loading preview" : playing ? "Pause preview" : "Play preview"}</span>
+      {!error && (duration > 0 || currentTime > 0) && <span className="font-medium text-orange-500">{formatTime(currentTime)} / {formatTime(duration)}</span>}
+    </button>
+  );
+}

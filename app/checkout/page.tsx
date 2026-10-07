@@ -16,6 +16,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import ShippingSelector, { ShippingOption } from "@/components/checkout/ShippingSelector";
 import { hasSavedCoordinates } from "@/components/location/CoordinatesRequiredModal";
+import { requiresProductShipping } from "@/lib/product-presentation";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
@@ -219,21 +220,27 @@ export default function CheckoutPage() {
   const activeCheckoutItems = sessionOrderItems;
 
   // 3. Group Cart Items by Seller & Calculate Total Store Weight (kg)
-  const groupedCartItems = activeCheckoutItems.reduce((acc: Record<string, { storeName: string; items: any[]; subtotal: number; totalWeightKg: number }>, item: any) => {
+  const groupedCartItems = activeCheckoutItems.reduce((acc: Record<string, { storeName: string; items: any[]; shippingItems: any[]; subtotal: number; totalWeightKg: number }>, item: any) => {
     const storeId = item.storeId || item.vendorId || 'unknown';
     if (!acc[storeId]) {
-      acc[storeId] = { storeName: item.storeName || item.vendorName || 'Unknown Store', items: [], subtotal: 0, totalWeightKg: 0 };
+      acc[storeId] = { storeName: item.storeName || item.vendorName || 'Unknown Store', items: [], shippingItems: [], subtotal: 0, totalWeightKg: 0 };
     }
     acc[storeId].items.push(item);
     acc[storeId].subtotal += item.price * item.quantity;
 
-    const itemWeight = Number(item.weightKg ?? item.weight) || 1;
-    acc[storeId].totalWeightKg += itemWeight * item.quantity;
+    if (requiresProductShipping(item)) {
+      acc[storeId].shippingItems.push(item);
+      const itemWeight = Number(item.weightKg ?? item.weight) || 1;
+      acc[storeId].totalWeightKg += itemWeight * item.quantity;
+    }
 
     return acc;
   }, {});
 
-  const sellerIds = Object.keys(groupedCartItems).filter((storeId) => storeId !== "unknown");
+  const sellerIds = Object.entries(groupedCartItems)
+    .filter(([, group]) => group.shippingItems.length > 0)
+    .map(([storeId]) => storeId)
+    .filter((storeId) => storeId !== "unknown");
   const sellerIdsKey = sellerIds.join("|");
 
   // Store profiles are public because they are used by the storefront. Read
@@ -303,6 +310,7 @@ export default function CheckoutPage() {
   }, [sellerIdsKey]);
 
   const selectedBuyerAddress = addresses.find((a: any) => a.id === selectedAddressId);
+  const hasPhysicalItems = activeCheckoutItems.some((item) => requiresProductShipping(item));
 
   // Sync selected address state to global selected state whenever choice toggles
   useEffect(() => {
@@ -320,7 +328,7 @@ export default function CheckoutPage() {
   let totalHandlingFee = 0;
 
   Object.entries(groupedCartItems).forEach(([storeId, group]: [string, any]) => {
-    const selectedCourier = sellerShipping[storeId];
+    const selectedCourier = group.shippingItems.length > 0 ? sellerShipping[storeId] : null;
     const shippingCost = selectedCourier?.shippingFee || 0;
     const handlingFee = shippingCost > 0 ? 200 : 0;
 
@@ -433,15 +441,15 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!selectedBuyerAddress) {
+    if (hasPhysicalItems && !selectedBuyerAddress) {
       alert("Please select a valid delivery address.");
       return;
     }
-    if (!selectedBuyerAddress.phone?.trim()) {
+    if (hasPhysicalItems && !selectedBuyerAddress?.phone?.trim()) {
       alert("Please add a valid phone number to your delivery address before checking out.");
       return;
     }
-    if (!hasSavedCoordinates(selectedBuyerAddress)) {
+    if (hasPhysicalItems && !hasSavedCoordinates(selectedBuyerAddress)) {
       alert("Please save your delivery latitude and longitude before checking out.");
       return;
     }
@@ -449,7 +457,7 @@ export default function CheckoutPage() {
       const location = sellerLocations.find((sellerLocation) => sellerLocation.id === storeId);
       return !hasSavedCoordinates(location);
     });
-    if (sellerWithoutCoordinates) {
+    if (hasPhysicalItems && sellerWithoutCoordinates) {
       alert("This seller has not saved store coordinates yet. Please ask the seller to update their store location before checking out.");
       return;
     }
@@ -460,8 +468,8 @@ export default function CheckoutPage() {
       return;
     }
 
-    const missingShipping = Object.keys(groupedCartItems).some(
-      (storeId) => !sellerShipping[storeId]
+    const missingShipping = Object.entries(groupedCartItems).some(
+      ([storeId, group]) => group.shippingItems.length > 0 && !sellerShipping[storeId]
     );
 
     if (missingShipping) {
@@ -475,18 +483,18 @@ export default function CheckoutPage() {
         buyerId: user.uid,
         customerEmail,
         address: {
-          name: selectedBuyerAddress.name,
-          phone: selectedBuyerAddress.phone,
-          address: selectedBuyerAddress.address,
-          city: selectedBuyerAddress.city || selectedBuyerAddress.lga || selectedState,
-          state: selectedBuyerAddress.state || selectedState,
-          lga: selectedBuyerAddress.lga || "",
-          postalCode: selectedBuyerAddress.postalCode || "100232",
-          latitude: selectedBuyerAddress.latitude,
-          longitude: selectedBuyerAddress.longitude,
+          name: selectedBuyerAddress?.name || buyerData?.displayName || "Digital customer",
+          phone: selectedBuyerAddress?.phone || buyerData?.phone || "N/A",
+          address: selectedBuyerAddress?.address || "Digital delivery",
+          city: selectedBuyerAddress?.city || selectedBuyerAddress?.lga || selectedState || "N/A",
+          state: selectedBuyerAddress?.state || selectedState || "N/A",
+          lga: selectedBuyerAddress?.lga || "N/A",
+          postalCode: selectedBuyerAddress?.postalCode || "100232",
+          latitude: selectedBuyerAddress?.latitude,
+          longitude: selectedBuyerAddress?.longitude,
         },
         sellerOrders: Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => {
-          const courier = sellerShipping[storeId];
+          const courier = group.shippingItems.length > 0 ? sellerShipping[storeId] : null;
           return {
             storeId,
             storeName: group.storeName,
@@ -495,7 +503,7 @@ export default function CheckoutPage() {
             // Persist the stable courier ID. The aggregation layer uses this
             // value to route the shipment; the display name is resolved from
             // courierName on the order/shipment record.
-            shippingMethod: courier?.id,
+            shippingMethod: courier?.id || "self_arranged",
             courierName: courier?.name,
             shippingCost: courier?.shippingFee || 0,
             estimatedDays: courier?.estimatedDays,
@@ -582,8 +590,8 @@ export default function CheckoutPage() {
             {/* LEFT COLUMN */}
             <div className="lg:col-span-2 space-y-6">
 
-              {/* 1. Delivery & Pickup Locations */}
-              <section className="bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm">
+              {/* 1. Delivery & Pickup Locations (physical products only) */}
+              {hasPhysicalItems && <section className="bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
                   <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                     <MapPin size={20} className="text-[#00a63e]" /> Delivery & Pickup Locations
@@ -706,15 +714,15 @@ export default function CheckoutPage() {
                     )}
                   </div>
                 </div>
-              </section>
+              </section>}
 
-              {/* 2. Available Shipping Options */}
-              <section className="bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm">
+              {/* 2. Available Shipping Options (physical products only) */}
+              {hasPhysicalItems && <section className="bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
                   <Truck size={20} className="text-[#00a63e]" /> Available Shipping Options ({selectedState})
                 </h2>
                 <div className="space-y-6">
-                  {Object.entries(groupedCartItems).map(([storeId, group]: [string, any]) => (
+                  {Object.entries(groupedCartItems).filter(([, group]: [string, any]) => group.shippingItems.length > 0).map(([storeId, group]: [string, any]) => (
                     <div key={storeId} className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-4">
                       <div className="flex items-center gap-3">
                         <Store size={16} className="text-gray-500 shrink-0" />
@@ -724,7 +732,7 @@ export default function CheckoutPage() {
                         </div>
 
                         <div className="flex items-center ml-auto">
-                          {group.items.slice(0, 3).map((item: any, idx: number) => (
+                          {group.shippingItems.slice(0, 3).map((item: any, idx: number) => (
                             <div
                               key={item.id || idx}
                               className={`relative w-7 h-7 rounded-full border-2 border-white overflow-hidden bg-gray-100 ${idx > 0 ? '-ml-2' : ''}`}
@@ -738,9 +746,9 @@ export default function CheckoutPage() {
                               )}
                             </div>
                           ))}
-                          {group.items.length > 3 && (
+                          {group.shippingItems.length > 3 && (
                             <div className="relative w-7 h-7 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center -ml-2">
-                              <span className="text-[8px] font-bold text-gray-600">+{group.items.length - 3}</span>
+                              <span className="text-[8px] font-bold text-gray-600">+{group.shippingItems.length - 3}</span>
                             </div>
                           )}
                         </div>
@@ -749,7 +757,7 @@ export default function CheckoutPage() {
                       <ShippingSelector
                         selectedState={selectedState}
                         totalWeightKg={group.totalWeightKg}
-                        items={group.items}
+                        items={group.shippingItems}
                         pickupAddress={sellerLocations.find((location) => location.id === storeId)}
                         destinationAddress={selectedBuyerAddress}
                         estimatedOrderAmount={group.subtotal}
@@ -761,7 +769,7 @@ export default function CheckoutPage() {
                     </div>
                   ))}
                 </div>
-              </section>
+              </section>}
 
               {/* 3. Escrow Protection Banner */}
               <section className="bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm">

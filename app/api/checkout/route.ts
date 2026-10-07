@@ -8,6 +8,7 @@ import { gigConfigured, type GigQuote } from "@/lib/gig";
 import { calculateEscrowBreakdown, hasSellerCommissionWaiver } from "@/lib/escrow/calculator";
 import { createEscrowRecord } from "@/src/infrastructure/db/escrowService";
 import { createNombaCheckoutOrder, nombaBaseUrl } from "@/lib/payments/nomba/client";
+import { requiresProductShipping } from "@/lib/product-presentation";
 
 interface CheckoutRequestBody {
     buyerId: string;
@@ -154,6 +155,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             return NextResponse.json({ error: "Your checkout session expired. Please refresh and try again." }, { status: 403 });
         }
 
+        const requestHasPhysicalItems = sellerOrders.some((sellerOrder) =>
+            Array.isArray(sellerOrder.items) && sellerOrder.items.some((item: any) =>
+                requiresProductShipping({
+                    productType: item?.productType || item?.orderType,
+                    type: item?.type,
+                    mainCategory: item?.mainCategory,
+                    subCategory: item?.subCategory,
+                }),
+            ),
+        );
+
         const customerPhone = normalizeCustomerPhone(address.phone);
         if (!customerPhone) {
             return NextResponse.json(
@@ -170,7 +182,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             );
         }
 
-        if (!hasValidCoordinates(address)) {
+        if (requestHasPhysicalItems && !hasValidCoordinates(address)) {
             return NextResponse.json(
                 { error: "A valid buyer delivery latitude and longitude are required before checkout." },
                 { status: 400 },
@@ -223,13 +235,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             // checkout. The webhook performs the same check atomically when
             // payment is confirmed, but this gives the buyer an immediate
             // and clear response when a seller has reduced stock meanwhile.
+            let hasPhysicalItems = false;
             for (const item of items) {
                 const productId = String(item?.productId || "").trim();
                 if (!productId) continue;
                 const productSnap = await adminDb.collection("products").doc(productId).get();
                 if (!productSnap.exists) return NextResponse.json({ error: "One or more products are no longer available." }, { status: 409 });
                 const product = productSnap.data() || {};
-                const productType = String(product.productType || "physical").trim().toLowerCase();
+                const productType = String(product.productType || product.type || item.productType || item.orderType || "physical").trim().toLowerCase();
+                if (requiresProductShipping({
+                    productType,
+                    type: product.type || item.type,
+                    mainCategory: product.mainCategory || item.mainCategory,
+                    subCategory: product.subCategory || item.subCategory,
+                })) {
+                    hasPhysicalItems = true;
+                }
                 const tracksInventory = product.trackInventory !== false && !["service", "utility", "booking"].includes(productType);
                 if (!tracksInventory) continue;
                 const availableStock = Number(product.stockCount ?? product.stock ?? 0);
@@ -260,7 +281,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
             const storeData = storeSnap.data() || {};
 
-            if (!hasValidCoordinates(storeData)) {
+            if (hasPhysicalItems && !hasValidCoordinates(storeData)) {
                 return NextResponse.json(
                     { error: `${storeName || "This seller"} must save valid store coordinates before accepting delivery orders.` },
                     { status: 400 },
@@ -277,6 +298,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             const courierName = requestedCourierName || shippingMethod;
             const isSelfArranged = courierId === "self_arranged" || shippingMethod === "self_arranged";
             const shippingCost = isSelfArranged ? 0 : rawShippingCost;
+
+            if (!hasPhysicalItems && !isSelfArranged) {
+                return NextResponse.json(
+                    { error: "Digital products and services cannot use courier delivery. Choose Self-Arranged." },
+                    { status: 400 },
+                );
+            }
 
             const selectedCourierSnapshot = await adminDb.collection("couriers").doc(courierId).get();
             if (selectedCourierSnapshot.exists && selectedCourierSnapshot.data()?.isActive === false) {
@@ -336,12 +364,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                     );
                 }
             }
-
-            const hasPhysicalItems = !items.length || items.some((item: any) =>
-                !["service", "booking", "utility"].includes(String(item.productType || item.orderType || "").toLowerCase())
-                && !item.bookingDate
-                && !item.bookingSlot,
-            );
 
             const isSellerCommissionWaived = hasSellerCommissionWaiver(storeData);
 
