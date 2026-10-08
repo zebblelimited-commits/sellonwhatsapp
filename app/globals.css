@@ -92,12 +92,16 @@ body {
 }
 
 .dashboard-sidebar {
-  height: calc(100vh / var(--site-scale));
+  --sidebar-scale: 0.9;
+  height: calc(100vh / var(--site-scale) / var(--sidebar-scale));
+  zoom: var(--sidebar-scale);
 }
 
 .mobile-dashboard-sidebar {
-  height: calc(100dvh / var(--site-scale) - 1rem);
+  --sidebar-scale: 0.9;
+  height: calc(100dvh / var(--site-scale) / var(--sidebar-scale) - 1rem);
   max-height: none;
+  zoom: var(--sidebar-scale);
 }
 
 @media (max-width: 768px) {

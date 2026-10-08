@@ -847,6 +847,21 @@ export default function CheckoutPage() {
                                 <p className="text-sm font-bold text-gray-900 leading-snug break-words">
                                   {item.name || item.productName}
                                 </p>
+                                {(item.description || item.productDescription) && (
+                                  <p className="mt-1 line-clamp-3 text-[10px] leading-relaxed text-gray-500">
+                                    {item.description || item.productDescription}
+                                  </p>
+                                )}
+                                {Array.isArray(item.features) && item.features.length > 0 && (
+                                  <div className="mt-2">
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-emerald-700">Features</p>
+                                    <ul className="mt-0.5 space-y-0.5 text-[10px] leading-relaxed text-gray-500">
+                                      {item.features.slice(0, 5).map((feature: string, featureIndex: number) => (
+                                        <li key={`${item.id || idx}-feature-${featureIndex}`} className="truncate">• {feature}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
                                 <div className="flex items-center justify-between mt-1.5">
                                   <span className="text-[10px] text-gray-400">Qty: {item.quantity}</span>
                                   <span className="text-sm font-bold text-gray-900 shrink-0">
