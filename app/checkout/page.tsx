@@ -747,6 +747,42 @@ export default function CheckoutPage() {
                       autoComplete="tel"
                     />
                   </label>
+                  <div className="mt-5 border-t border-emerald-100 pt-4">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700">Product details</p>
+                    <div className="mt-3 space-y-4">
+                      {activeCheckoutItems.filter((item) => !requiresProductShipping(item)).map((item: any, index: number) => (
+                        <div key={item.id || item.productId || index} className="rounded-xl border border-white bg-white p-3 shadow-sm">
+                          <p className="text-sm font-bold text-gray-900">{item.name || item.productName}</p>
+                          {(item.description || item.productDescription) && (
+                            <div className="mt-2">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Description</p>
+                              <p className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-gray-600">
+                                {item.description || item.productDescription}
+                              </p>
+                            </div>
+                          )}
+                          {Array.isArray(item.features) && item.features.length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Features</p>
+                              <ul className="mt-0.5 space-y-0.5 text-xs leading-relaxed text-gray-600">
+                                {item.features.map((feature: string, featureIndex: number) => (
+                                  <li key={`${item.id || item.productId || index}-feature-${featureIndex}`}>• {feature}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {(item.deliveryInstructions || item.accessInstructions) && (
+                            <div className="mt-3 rounded border border-blue-100 bg-blue-50/60 p-2.5">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-blue-700">Delivery / Access Instructions</p>
+                              <p className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-blue-900">
+                                {item.deliveryInstructions || item.accessInstructions}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </section>
               )}
 
@@ -847,29 +883,6 @@ export default function CheckoutPage() {
                                 <p className="text-sm font-bold text-gray-900 leading-snug break-words">
                                   {item.name || item.productName}
                                 </p>
-                                {(item.description || item.productDescription) && (
-                                  <p className="mt-1 line-clamp-3 text-[10px] leading-relaxed text-gray-500">
-                                    {item.description || item.productDescription}
-                                  </p>
-                                )}
-                                {Array.isArray(item.features) && item.features.length > 0 && (
-                                  <div className="mt-2">
-                                    <p className="text-[9px] font-black uppercase tracking-wider text-emerald-700">Features</p>
-                                    <ul className="mt-0.5 space-y-0.5 text-[10px] leading-relaxed text-gray-500">
-                                      {item.features.slice(0, 5).map((feature: string, featureIndex: number) => (
-                                        <li key={`${item.id || idx}-feature-${featureIndex}`} className="truncate">• {feature}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                                {!requiresProductShipping(item) && (item.deliveryInstructions || item.accessInstructions) && (
-                                  <div className="mt-2 rounded border border-blue-100 bg-blue-50/60 p-2">
-                                    <p className="text-[9px] font-black uppercase tracking-wider text-blue-700">Delivery / Access Instructions</p>
-                                    <p className="mt-0.5 whitespace-pre-line text-[10px] leading-relaxed text-blue-900">
-                                      {item.deliveryInstructions || item.accessInstructions}
-                                    </p>
-                                  </div>
-                                )}
                                 <div className="flex items-center justify-between mt-1.5">
                                   <span className="text-[10px] text-gray-400">Qty: {item.quantity}</span>
                                   <span className="text-sm font-bold text-gray-900 shrink-0">
