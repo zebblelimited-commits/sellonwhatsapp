@@ -5,7 +5,8 @@ import { chowdeckConfigured } from "@/lib/chowdeck";
 import { sendboxConfigured } from "@/lib/sendbox";
 import { topshipConfigured, type TopshipQuote } from "@/lib/topship";
 import { gigConfigured, type GigQuote } from "@/lib/gig";
-import { calculateEscrowBreakdown, hasSellerCommissionWaiver } from "@/lib/escrow/calculator";
+import { calculateEscrowBreakdown } from "@/lib/escrow/calculator";
+import { getSellerEntitlements } from "@/lib/subscriptions/entitlements";
 import { createEscrowRecord } from "@/src/infrastructure/db/escrowService";
 import { createNombaCheckoutOrder, nombaBaseUrl } from "@/lib/payments/nomba/client";
 import { requiresProductShipping } from "@/lib/product-presentation";
@@ -365,7 +366,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 }
             }
 
-            const isSellerCommissionWaived = hasSellerCommissionWaiver(storeData);
+            // Subscription fields on stores are denormalized display data and
+            // may outlive a deleted/expired subscription. Resolve the waiver
+            // from the active subscription ledger for every paid checkout.
+            const sellerEntitlements = await getSellerEntitlements(storeId, storeData);
+            const isSellerCommissionWaived = sellerEntitlements.hasCommissionWaiver;
 
             // Handling fee is waived for self-arranged shipping
             const handlingFee = !isSelfArranged && shippingCost > 0 ? 200 : 0;

@@ -758,6 +758,7 @@ function Dashboard() {
           )}
           {activeTab === "withdraw" && (
             <WithdrawTab
+              storeId={currentUser?.uid || ""}
               stats={stats}
               bankDetails={storeData?.payoutSettings || storeData?.bankAccount} // 🌟 ADD THIS LINE
               payoutHistory={payoutHistory}

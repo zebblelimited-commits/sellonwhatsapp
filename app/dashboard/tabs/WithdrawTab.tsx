@@ -8,7 +8,7 @@ import {
   Wallet, Lock, CreditCard, Building2, AlertCircle, RefreshCw
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { hasSellerCommissionWaiver } from "@/lib/escrow/calculator";
+import { onAuthStateChanged } from "firebase/auth";
 
 interface BankDetails {
   bankCode?: string;
@@ -32,6 +32,7 @@ interface PayoutRecord {
 }
 
 interface WithdrawTabProps {
+  storeId?: string;
   stats: {
     availableBalance?: number;
     escrowBalance?: number;
@@ -52,13 +53,46 @@ export default function WithdrawTab({ stats, bankDetails, payoutHistory = [] }: 
   const [reconcilingId, setReconcilingId] = useState<string | null>(null);
   const withdrawalControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
+  const [hasActiveCommissionWaiver, setHasActiveCommissionWaiver] = useState(false);
 
   useEffect(() => () => {
     mountedRef.current = false;
     withdrawalControllerRef.current?.abort();
   }, []);
 
-  const hasCommissionWaiver = hasSellerCommissionWaiver(stats || {});
+  useEffect(() => {
+    let cancelled = false;
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        if (!cancelled) setHasActiveCommissionWaiver(false);
+        return;
+      }
+
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch("/api/seller/entitlements", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Unable to load entitlements");
+        if (!cancelled) setHasActiveCommissionWaiver(data.hasCommissionWaiver === true);
+      } catch (error) {
+        // Fail closed: stale store fields must not make the widget advertise
+        // a 0% commission rate when the entitlement cannot be verified.
+        console.error("Failed to load seller commission entitlement:", error);
+        if (!cancelled) setHasActiveCommissionWaiver(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  const hasCommissionWaiver = hasActiveCommissionWaiver;
   const COMMISSION_DISPLAY = '1.5%';
   
   const rawAvailableValue = Number(stats?.availableBalance ?? 0);

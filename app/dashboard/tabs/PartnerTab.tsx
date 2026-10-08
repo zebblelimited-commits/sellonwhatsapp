@@ -2,19 +2,30 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
 import { doc, onSnapshot, collection, query, where, getDocs } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   Crown, CheckCircle2, TrendingUp, Loader2, Sparkles,
   Calendar, Wallet, Percent, ArrowRight, AlertCircle,
   MessageSquare, Eye
 } from "lucide-react";
 import { showToast } from "@/lib/toast";
-import { hasSellerCommissionWaiver } from "@/lib/escrow/calculator";
+
+interface SellerEntitlementState {
+  hasCommissionWaiver: boolean;
+  isMarketplacePartner: boolean;
+  expiryDate: string | null;
+}
 
 export default function PartnerTab({ storeId }: { storeId: string }) {
   const [storeData, setStoreData] = useState<any>(null);
   const [monthlySales, setMonthlySales] = useState(0);
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState(false);
+  const [entitlement, setEntitlement] = useState<SellerEntitlementState>({
+    hasCommissionWaiver: false,
+    isMarketplacePartner: false,
+    expiryDate: null,
+  });
 
   // Fetch Store Data & Monthly Sales
   useEffect(() => {
@@ -48,15 +59,50 @@ export default function PartnerTab({ storeId }: { storeId: string }) {
     return () => unsubStore();
   }, [storeId]);
 
-  // ✅ FIX: Robust Partner Check matching the Checkout API logic
-  const isPartner =
-    storeData?.isPartner === true ||
-    storeData?.subscriptionPlan === "pro_max" ||
-    String(storeData?.subscriptionPlan || "").toLowerCase().includes("max");
-  const hasCommissionWaiver = hasSellerCommissionWaiver(storeData || {});
+  useEffect(() => {
+    let cancelled = false;
 
-  // Fallback to subscriptionExpiry if partnerExpiry isn't set yet
-  const partnerExpiry = storeData?.partnerExpiry ? new Date(storeData.partnerExpiry) : (storeData?.subscriptionExpiry ? new Date(storeData.subscriptionExpiry) : null);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        if (!cancelled) {
+          setEntitlement({ hasCommissionWaiver: false, isMarketplacePartner: false, expiryDate: null });
+        }
+        return;
+      }
+
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch("/api/seller/entitlements", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Unable to load entitlements");
+        if (!cancelled) {
+          setEntitlement({
+            hasCommissionWaiver: data.hasCommissionWaiver === true,
+            isMarketplacePartner: data.isMarketplacePartner === true,
+            expiryDate: typeof data.expiryDate === "string" ? data.expiryDate : null,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load seller partner entitlement:", error);
+        if (!cancelled) {
+          setEntitlement({ hasCommissionWaiver: false, isMarketplacePartner: false, expiryDate: null });
+        }
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  const isPartner = entitlement.isMarketplacePartner;
+  const hasCommissionWaiver = entitlement.hasCommissionWaiver;
+
+  const partnerExpiry = entitlement.expiryDate ? new Date(entitlement.expiryDate) : null;
 
   // Calculate Savings
   const standardFees = monthlySales * 0.03; // 3% total (1.5% platform + 1.5% seller)
