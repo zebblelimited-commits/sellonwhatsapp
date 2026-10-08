@@ -862,6 +862,14 @@ export default function CheckoutPage() {
                                     </ul>
                                   </div>
                                 )}
+                                {!requiresProductShipping(item) && (item.deliveryInstructions || item.accessInstructions) && (
+                                  <div className="mt-2 rounded border border-blue-100 bg-blue-50/60 p-2">
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-blue-700">Delivery / Access Instructions</p>
+                                    <p className="mt-0.5 whitespace-pre-line text-[10px] leading-relaxed text-blue-900">
+                                      {item.deliveryInstructions || item.accessInstructions}
+                                    </p>
+                                  </div>
+                                )}
                                 <div className="flex items-center justify-between mt-1.5">
                                   <span className="text-[10px] text-gray-400">Qty: {item.quantity}</span>
                                   <span className="text-sm font-bold text-gray-900 shrink-0">

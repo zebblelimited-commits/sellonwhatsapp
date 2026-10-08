@@ -85,6 +85,31 @@ function storeCategoryValues(store: StoreCategoryRecord) {
     .filter(Boolean);
 }
 
+const EXPLORE_CATEGORY_ALIASES: Record<string, string[]> = {
+  Fashion: ["fashion", "fashion & clothing", "shoes & footwear", "bags & luggage", "jewelry & watches"],
+  Electronics: ["electronics", "electronics & gadgets", "phones & tablets", "computers & accessories", "gaming & consoles"],
+  Food: ["food", "food & drinks", "groceries & food items", "drinks & beverages", "catering services", "private chef"],
+  Beauty: ["beauty", "beauty & personal care", "makeup artist", "hair salon", "nail technician", "spa services"],
+  Home: ["home", "home decor", "home & kitchen", "furniture", "home appliances", "home repairs", "interior design"],
+  Tech: ["tech", "technology", "electronics", "electronics & gadgets", "software", "web development"],
+  Health: ["health", "health & wellness", "fitness & personal training", "medical services"],
+  Auto: ["auto", "automotive", "cars & vehicles", "car repairs", "car hire"],
+  Logistics: ["logistics", "delivery & logistics", "courier services"],
+  "Digital Products": ["digital-products", "digital products", "digital"],
+  "Beats & Instrumentals": ["beats & instrumentals", "beats", "instrumentals", "music & audio", "music-audio"],
+  "Sound Packs & Samples": ["sound packs & samples", "sound packs", "samples", "music loops"],
+  "E-books & Guides": ["e-books & guides", "ebooks", "e-books", "guides"],
+  "Online Courses": ["online courses", "courses", "online-courses"],
+  "Design Templates": ["design templates", "website templates", "mobile app templates", "ui/ux kits", "templates"],
+  "Stock Media": ["stock media", "stock photos", "stock videos", "digital art"],
+};
+
+export function matchesExploreCategory(store: StoreCategoryRecord, category: string) {
+  if (!category || category === "All") return true;
+  const aliases = EXPLORE_CATEGORY_ALIASES[category] || [category];
+  return matchesAlias(storeCategoryValues(store), aliases);
+}
+
 export function matchesHomeCategory(store: StoreCategoryRecord, categoryId: string) {
   const values = storeCategoryValues(store);
   const mainCategory = values[0];

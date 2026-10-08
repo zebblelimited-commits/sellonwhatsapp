@@ -11,6 +11,7 @@ export interface ProductCheckoutAttributes {
   stockCount?: number;
   stock?: number;
   features?: string[];
+  deliveryInstructions?: string;
 }
 
 function positiveNumber(value: unknown): number | undefined {
@@ -34,6 +35,7 @@ export function productCheckoutAttributes(product: unknown): ProductCheckoutAttr
   const category = text(record.category ?? record.subCategory ?? record.mainCategory);
   const stockCount = Number(record.stockCount ?? record.stock);
   const rawFeatures = record.features ?? record.productFeatures;
+  const deliveryInstructions = text(record.deliveryInstructions ?? record.accessInstructions ?? record.deliveryAccessInstructions);
   const features = Array.isArray(rawFeatures)
     ? rawFeatures.map((feature) => text(feature)).filter((feature): feature is string => Boolean(feature))
     : typeof rawFeatures === "string"
@@ -46,6 +48,7 @@ export function productCheckoutAttributes(product: unknown): ProductCheckoutAttr
     ...(text(record.productType) ? { productType: text(record.productType) } : {}),
     ...(Number.isFinite(stockCount) && stockCount >= 0 ? { stockCount, stock: stockCount } : {}),
     ...(features.length > 0 ? { features } : {}),
+    ...(deliveryInstructions ? { deliveryInstructions } : {}),
     ...(positiveNumber(shipping.weightKg)
       ? { weightKg: positiveNumber(shipping.weightKg), weight: positiveNumber(shipping.weightKg) }
       : {}),

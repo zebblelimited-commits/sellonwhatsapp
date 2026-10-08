@@ -6,14 +6,14 @@ import Link from "next/link";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { 
   Search, LayoutGrid, Smartphone, Shirt, Utensils, Sparkles, Bike, X,
-  Home, Cpu, HeartPulse, Car, SlidersHorizontal, Star, MapPin
+  Home, Cpu, HeartPulse, Car, SlidersHorizontal, Star, MapPin, Download, Music2, BookOpen, Palette, Video, GraduationCap
 } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, limit, where } from "firebase/firestore";
+import { collection, getDocs, query, limit } from "firebase/firestore";
 import StoreCardExplore from "@/components/sections/StoreCardExplore";
 import ProductSection from "@/components/sections/ProductSection";
 import { trackMetric } from "@/lib/analytics";
-import { isPublicStore } from "@/lib/categoryCatalog";
+import { isPublicStore, matchesExploreCategory } from "@/lib/categoryCatalog";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
@@ -73,6 +73,13 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
     { name: "Health", icon: <HeartPulse size={16} /> },
     { name: "Auto", icon: <Car size={16} /> },
     { name: "Logistics", icon: <Bike size={16} /> },
+    { name: "Digital Products", icon: <Download size={16} /> },
+    { name: "Beats & Instrumentals", icon: <Music2 size={16} /> },
+    { name: "Sound Packs & Samples", icon: <Music2 size={16} /> },
+    { name: "E-books & Guides", icon: <BookOpen size={16} /> },
+    { name: "Online Courses", icon: <GraduationCap size={16} /> },
+    { name: "Design Templates", icon: <Palette size={16} /> },
+    { name: "Stock Media", icon: <Video size={16} /> },
   ];
 
   const nigerianStates = ["Lagos", "Abuja", "Rivers", "Plateau", "Kano", "Oyo", "Enugu", "Delta", "Kaduna"];
@@ -99,10 +106,7 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
       setLoading(true);
       setRecommendedLoading(true);
       try {
-        let q = query(collection(db, "stores"), limit(100));
-        if (selectedCategory !== "All") {
-          q = query(collection(db, "stores"), where("category", "==", selectedCategory), limit(100));
-        }
+        const q = query(collection(db, "stores"), limit(100));
 
         const [querySnapshot, recommendedSnapshot] = await Promise.all([
           getDocs(q),
@@ -111,7 +115,8 @@ export function ExploreTab({ isFilterOpen, setIsFilterOpen }: ExploreTabProps) {
         
         const storesData = querySnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter(isPublicStore);
+          .filter(isPublicStore)
+          .filter((store) => matchesExploreCategory(store, selectedCategory));
         const recommendedData = recommendedSnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
           .filter(isPublicStore)
