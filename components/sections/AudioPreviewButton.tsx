@@ -13,7 +13,14 @@ function formatTime(value: number) {
   return `${minutes}:${seconds}`;
 }
 
-export default function AudioPreviewButton({ url }: { url: string }) {
+type AudioPreviewButtonProps = {
+  url: string;
+  imageUrl?: string;
+  title?: string;
+  artist?: string;
+};
+
+export default function AudioPreviewButton({ url, imageUrl, title = "Audio Preview", artist = "SellOnWhatsApp" }: AudioPreviewButtonProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -26,6 +33,15 @@ export default function AudioPreviewButton({ url }: { url: string }) {
       const audio = audioRef.current;
       if (audio) audio.pause();
       if (activeAudio === audio) {
+        if (typeof navigator !== "undefined" && "mediaSession" in navigator) {
+          navigator.mediaSession.metadata = null;
+          try {
+            navigator.mediaSession.setActionHandler("play", null);
+            navigator.mediaSession.setActionHandler("pause", null);
+          } catch {
+            // Some browsers do not allow clearing unsupported media actions.
+          }
+        }
         activeAudio = null;
         stopActiveAudio = null;
       }
@@ -57,12 +73,27 @@ export default function AudioPreviewButton({ url }: { url: string }) {
     stopActiveAudio?.();
     activeAudio = audio;
     stopActiveAudio = stop;
+    if (typeof navigator !== "undefined" && "mediaSession" in navigator && typeof MediaMetadata !== "undefined") {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title,
+        artist,
+        album: "SellOnWhatsApp Audio Preview",
+        artwork: imageUrl?.trim() ? [{ src: imageUrl.trim(), sizes: "512x512" }] : [],
+      });
+      try {
+        navigator.mediaSession.setActionHandler("play", () => { void audio.play(); });
+        navigator.mediaSession.setActionHandler("pause", () => audio.pause());
+      } catch {
+        // Media controls are optional and unsupported actions are ignored.
+      }
+    }
     setLoading(true);
     try {
       await audio.play();
     } catch {
       setError(true);
       if (activeAudio === audio) {
+        if (typeof navigator !== "undefined" && "mediaSession" in navigator) navigator.mediaSession.metadata = null;
         activeAudio = null;
         stopActiveAudio = null;
       }
@@ -91,6 +122,7 @@ export default function AudioPreviewButton({ url }: { url: string }) {
         onEnded={() => {
           stop();
           if (activeAudio === audioRef.current) {
+            if (typeof navigator !== "undefined" && "mediaSession" in navigator) navigator.mediaSession.metadata = null;
             activeAudio = null;
             stopActiveAudio = null;
           }

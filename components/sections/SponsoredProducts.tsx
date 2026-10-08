@@ -126,7 +126,7 @@ function SponsoredCard({
         <div>
           <h3 className="line-clamp-1 text-xs font-bold text-gray-900 transition-colors group-hover:text-[#00a63e] sm:text-sm">{product.name || "Untitled product"}</h3>
           <p className="mt-0.5 truncate text-[10px] font-medium text-gray-400">{product.vendorName || "Marketplace seller"}</p>
-          {productPreviewAudioUrl(product) && <AudioPreviewButton url={productPreviewAudioUrl(product)} />}
+          {productPreviewAudioUrl(product) && <AudioPreviewButton url={productPreviewAudioUrl(product)} imageUrl={productImage(product)} title={product.name || "Audio Preview"} />}
           <div className="mt-2 flex items-center justify-between gap-2">
             <span className="text-sm font-extrabold text-gray-900 sm:text-base">₦{Number(product.price || 0).toLocaleString()}</span>
             <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-tight ${unavailable ? "bg-red-50 text-red-500" : action.isBooking ? "bg-purple-50 text-purple-600" : action.isService ? "bg-emerald-50 text-emerald-600" : "text-gray-500"}`}>

@@ -196,7 +196,7 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
             <p className="mt-0.5 truncate text-xs font-medium text-gray-400">
               {product.vendorName || "Marketplace seller"}
             </p>
-            {productPreviewAudioUrl(product) && <AudioPreviewButton url={productPreviewAudioUrl(product)} />}
+            {productPreviewAudioUrl(product) && <AudioPreviewButton url={productPreviewAudioUrl(product)} imageUrl={image} title={product.name || "Audio Preview"} />}
             <div className="mt-2 flex items-center justify-between gap-2">
               <span className="text-base font-extrabold text-gray-900">
                 ₦{productPrice.toLocaleString()}

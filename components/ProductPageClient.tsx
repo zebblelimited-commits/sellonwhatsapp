@@ -284,7 +284,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
               <div className="rounded border border-emerald-100 bg-emerald-50/50 p-4">
                 <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-emerald-700">Audio Preview</p>
                 <p className="mb-1 text-xs text-emerald-800">Listen before you buy.</p>
-                <AudioPreviewButton url={previewAudioUrl} />
+                <AudioPreviewButton url={previewAudioUrl} imageUrl={images[0]} title={product?.name || "Audio Preview"} />
               </div>
             )}
 
