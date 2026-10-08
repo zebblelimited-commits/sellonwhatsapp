@@ -15,7 +15,8 @@ import Footer from "@/components/layout/Footer";
 import { useRouter } from "next/navigation";
 import { productCheckoutAttributes } from "@/lib/product-checkout-attributes";
 import { getReadyAuthUser } from "@/lib/client-auth";
-import { isBookingProduct, isDigitalUtilityProduct, isServiceProduct, requiresProductShipping } from "@/lib/product-presentation";
+import AudioPreviewButton from "@/components/sections/AudioPreviewButton";
+import { isBookingProduct, isDigitalUtilityProduct, isServiceProduct, productPreviewAudioUrl, requiresProductShipping } from "@/lib/product-presentation";
 
 declare global {
   interface Window {
@@ -78,6 +79,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
     : !Number.isFinite(stockCount) || stockCount <= 0 || product?.availability === "out_of_stock";
 
   const images = product?.images || [product?.image || "/placeholder.png"];
+  const previewAudioUrl = productPreviewAudioUrl(product);
   const activeQuantity = hideQuantity ? 1 : quantity;
   const productPrice = Number(product?.price || 0);
 
@@ -95,26 +97,22 @@ export default function ProductPageClient({ product, store }: { product: any; st
       void trackMetric(storeId, "buy_now_click", { productId });
     }
 
-    if (requiresShipping) {
-      // Physical Product -> Redirect to Checkout Page
-      const orderDetails = {
-        productId,
-        productName: product?.name,
-        price: productPrice,
-        quantity: activeQuantity,
-        storeId,
-        storeName: store?.storeName,
-        storeUsername: store?.username,
-        vendorNombaAccountId: store?.nombaAccountId,
-        image: images[0],
-        ...productCheckoutAttributes(product),
-      };
-      sessionStorage.setItem("checkout_order", JSON.stringify(orderDetails));
-      router.push("/checkout");
-    } else {
-      // Digital/Service/Booking -> Open Seamless Modal
-      setCheckoutModalOpen(true);
-    }
+    const orderDetails = {
+      productId,
+      productName: product?.name,
+      price: productPrice,
+      quantity: activeQuantity,
+      storeId,
+      storeName: store?.storeName,
+      storeUsername: store?.username,
+      vendorNombaAccountId: store?.nombaAccountId,
+      image: images[0],
+      bookingDate: isBooking ? selectedDate : null,
+      bookingSlot: isBooking ? selectedSlot : null,
+      ...productCheckoutAttributes(product),
+    };
+    sessionStorage.setItem("checkout_order", JSON.stringify(orderDetails));
+    router.push("/checkout");
   };
 
   // ✅ FIXED MODAL PAYMENT HANDLER
@@ -282,6 +280,14 @@ export default function ProductPageClient({ product, store }: { product: any; st
               <p className="text-2xl font-black text-[#00a63e]">₦{productPrice.toLocaleString()}</p>
             </div>
 
+            {previewAudioUrl && (
+              <div className="rounded border border-emerald-100 bg-emerald-50/50 p-4">
+                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-emerald-700">Audio Preview</p>
+                <p className="mb-1 text-xs text-emerald-800">Listen before you buy.</p>
+                <AudioPreviewButton url={previewAudioUrl} />
+              </div>
+            )}
+
             <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4 w-full">
               <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Description</h3>
               <p className="text-gray-600 text-sm leading-relaxed font-medium whitespace-pre-line">{product?.description || "High quality product available for purchase."}</p>
@@ -378,7 +384,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
       </main>
 
       {/* ✅ SEAMLESS MODAL CHECKOUT */}
-      {!requiresShipping && checkoutModalOpen && (
+      {false && !requiresShipping && checkoutModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isModalLoading && setCheckoutModalOpen(false)} />
 
@@ -419,7 +425,7 @@ export default function ProductPageClient({ product, store }: { product: any; st
                   <Calendar size={16} className="text-purple-600 shrink-0" />
                   <div>
                     <p className="text-[10px] font-black uppercase text-purple-400 tracking-wider">Scheduled For</p>
-                    <p className="text-xs font-bold text-gray-900">{new Date(selectedDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} at {selectedSlot}</p>
+                    <p className="text-xs font-bold text-gray-900">{new Date(selectedDate || "").toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} at {selectedSlot}</p>
                   </div>
                 </div>
               )}

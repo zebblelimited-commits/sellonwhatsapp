@@ -75,7 +75,7 @@ export default function AudioPreviewButton({ url }: { url: string }) {
     <button
       type="button"
       onClick={toggle}
-      className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-bold text-orange-700 transition-colors hover:bg-orange-100"
+      className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
       aria-label={playing ? "Pause audio preview" : "Play audio preview"}
       title={error ? "This audio preview could not be loaded" : undefined}
     >
@@ -100,7 +100,7 @@ export default function AudioPreviewButton({ url }: { url: string }) {
       {loading ? <Loader2 size={12} className="animate-spin" /> : playing ? <Pause size={12} /> : <Play size={12} />}
       <Music2 size={12} />
       <span>{error ? "Preview unavailable" : loading ? "Loading preview" : playing ? "Pause preview" : "Play preview"}</span>
-      {!error && (duration > 0 || currentTime > 0) && <span className="font-medium text-orange-500">{formatTime(currentTime)} / {formatTime(duration)}</span>}
+      {!error && (duration > 0 || currentTime > 0) && <span className="font-medium text-emerald-600">{formatTime(currentTime)} / {formatTime(duration)}</span>}
     </button>
   );
 }

@@ -56,6 +56,12 @@ export default function OffCanvasCart() {
             ) : (
               <div className="space-y-4">
                 {items.map((item) => (
+                  (() => {
+                    const productType = String(item.productType || "physical").toLowerCase();
+                    const tracksInventory = !["service", "utility", "booking"].includes(productType);
+                    const stockCount = Number(item.stockCount ?? item.stock);
+                    const atStockLimit = tracksInventory && Number.isFinite(stockCount) && item.quantity >= stockCount;
+                    return (
                   <div key={item.productId} className="flex gap-4 rounded-2xl border border-gray-100 bg-gray-50/50 p-3">
                     <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-white">
                       <Image src={item.image} alt={item.name} fill className="object-cover" />
@@ -72,13 +78,15 @@ export default function OffCanvasCart() {
                             {item.quantity === 1 ? <Trash2 size={14} /> : <Minus size={14} />}
                           </button>
                           <span className="w-6 text-center text-xs font-bold">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.productId, item.quantity + 1)} className="p-1.5 text-gray-500 hover:text-green-600 transition-colors">
+                          <button onClick={() => updateQuantity(item.productId, item.quantity + 1)} disabled={atStockLimit} aria-label={atStockLimit ? "Maximum available quantity reached" : "Increase quantity"} className="p-1.5 text-gray-500 hover:text-green-600 transition-colors disabled:cursor-not-allowed disabled:opacity-40">
                             <Plus size={14} />
                           </button>
                         </div>
                       </div>
                     </div>
                   </div>
+                    );
+                  })()
                 ))}
               </div>
             )}

@@ -17,6 +17,7 @@ import Image from "next/image";
 import OrderTimeline from "@/components/buyer/OrderTimeline";
 import { useAuth } from "@/contexts/AuthContext";
 import { showToast } from "@/lib/toast";
+import { requiresProductShipping } from "@/lib/product-presentation";
 
 export default function OrderDetailsPage() {
     const { id } = useParams();
@@ -140,11 +141,11 @@ export default function OrderDetailsPage() {
     const status = order.status?.toLowerCase();
 
     // Check if order does NOT require physical shipping
-    const isServiceOrBooking =
-        order.productType === 'service' ||
-        order.productType === 'booking' ||
-        order.productType === 'utility' ||
-        (order.items && order.items.some((i: any) => i.bookingDate || i.bookingSlot));
+    const orderItems = Array.isArray(order.items) ? order.items : [];
+    const requiresShipping = orderItems.length > 0
+        ? orderItems.some((item: any) => requiresProductShipping(item))
+        : requiresProductShipping(order);
+    const isServiceOrBooking = !requiresShipping;
 
     const isShippedOrWorkDone = status === "shipped" || status === "out_for_delivery" || status === "delivered" || status === "work_done" || status === "completed_pending_buyer";
     const deliveryStatus = String(order.deliveryStatus || "").toLowerCase();
@@ -218,6 +219,7 @@ export default function OrderDetailsPage() {
                 </div>
                 <OrderTimeline
                     status={order.status}
+                    requiresShipping={requiresShipping}
                     createdAt={order.createdAt}
                     shippedAt={order.shippedAt}
                     completedAt={order.completedAt}

@@ -595,7 +595,7 @@ function Dashboard() {
     <div className={`${font.className} flex min-h-screen w-full min-w-0 items-start overflow-x-hidden bg-gray-50/50 text-gray-900`}>
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-black/30 p-2 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
-          <aside className="flex h-auto min-h-0 max-h-[calc(100dvh-1rem)] w-[min(18rem,calc(100vw-1rem))] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <aside className="mobile-dashboard-sidebar flex w-[min(18rem,calc(100vw-1rem))] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
               <div className="flex items-center gap-2"><Link href="/" aria-label="Go to homepage" className="inline-flex"><img src="/icons/sowa.png" alt="Sowa Logo" className="h-10 w-auto object-contain" /></Link><span className="text-xs font-black text-gray-900">Seller Dashboard</span></div>
               <button type="button" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>

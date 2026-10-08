@@ -8,6 +8,8 @@ export interface ProductCheckoutAttributes {
   lengthCm?: number;
   widthCm?: number;
   heightCm?: number;
+  stockCount?: number;
+  stock?: number;
 }
 
 function positiveNumber(value: unknown): number | undefined {
@@ -29,11 +31,13 @@ export function productCheckoutAttributes(product: unknown): ProductCheckoutAttr
     ? record.shipping as Record<string, unknown>
     : {};
   const category = text(record.category ?? record.subCategory ?? record.mainCategory);
+  const stockCount = Number(record.stockCount ?? record.stock);
 
   return {
     ...(text(record.description) ? { description: text(record.description) } : {}),
     ...(category ? { category } : {}),
     ...(text(record.productType) ? { productType: text(record.productType) } : {}),
+    ...(Number.isFinite(stockCount) && stockCount >= 0 ? { stockCount, stock: stockCount } : {}),
     ...(positiveNumber(shipping.weightKg)
       ? { weightKg: positiveNumber(shipping.weightKg), weight: positiveNumber(shipping.weightKg) }
       : {}),

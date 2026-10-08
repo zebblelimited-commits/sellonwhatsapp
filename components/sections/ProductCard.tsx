@@ -11,7 +11,7 @@ import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { productCheckoutAttributes } from "@/lib/product-checkout-attributes";
 import { getReadyAuthUser } from "@/lib/client-auth";
-import { isBookingProduct, isServiceProduct, productPreviewAudioUrl, requiresProductShipping } from "@/lib/product-presentation";
+import { isBookingProduct, isDigitalUtilityProduct, isServiceProduct, productPreviewAudioUrl, requiresProductShipping } from "@/lib/product-presentation";
 import AudioPreviewButton from "@/components/sections/AudioPreviewButton";
 
 type ProductCardProps = {
@@ -28,11 +28,12 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
   const productPath = product.username ? `/${product.username}/${productId}` : `/products/${productId}`;
 
   const isBooking = isBookingProduct(product);
+  const isDigitalUtility = isDigitalUtilityProduct(product);
   const isService = isServiceProduct(product);
   const requiresShipping = requiresProductShipping(product);
 
   const stock = Number(product.stockCount ?? product.stock ?? 0);
-  const isOutOfStock = isService ? product.availability === "out_of_stock" : stock <= 0 || product.availability === "out_of_stock";
+  const isOutOfStock = isService || isDigitalUtility ? product.availability === "out_of_stock" : stock <= 0 || product.availability === "out_of_stock";
 
   const image = product.images?.[0] || product.imageUrl || product.image || "/images/placeholder-cover.svg";
   const actionLabel = isBooking ? "Book Now" : isService ? "Hire Service" : "Buy Now";
@@ -67,27 +68,20 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
 
     void trackMetric(storeId, "buy_now_click", { productId });
 
-    if (requiresShipping) {
-      // Physical Product -> Direct to Checkout Page
-      const orderDetails = {
-        productId,
-        productName: product.name,
-        price: productPrice,
-        quantity: 1,
-        storeId,
-        storeName: product.vendorName || "Marketplace seller",
-        storeUsername: product.username,
-        vendorNombaAccountId: product.nombaAccountId,
-        image,
-        ...productCheckoutAttributes(product),
-      };
-      sessionStorage.setItem("checkout_order", JSON.stringify(orderDetails));
-      router.push("/checkout");
-    } else {
-      // Digital / Service / Booking -> Open Modal
-      setModalError(null);
-      setCheckoutModalOpen(true);
-    }
+    const orderDetails = {
+      productId,
+      productName: product.name,
+      price: productPrice,
+      quantity: 1,
+      storeId,
+      storeName: product.vendorName || "Marketplace seller",
+      storeUsername: product.username,
+      vendorNombaAccountId: product.nombaAccountId,
+      image,
+      ...productCheckoutAttributes(product),
+    };
+    sessionStorage.setItem("checkout_order", JSON.stringify(orderDetails));
+    router.push("/checkout");
   };
 
   // Direct Payment API Handler
@@ -212,7 +206,7 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
                     isService ? "bg-emerald-50 text-emerald-600" : "text-gray-500"
                 }`}>
                 {isBooking ? <Calendar size={10} /> : isService ? <CheckCircle2 size={10} /> : <Package size={10} />}
-                {isOutOfStock ? "Unavailable" : isBooking ? `${stock} Slots` : isService ? "Available" : `${stock} left`}
+                {isOutOfStock ? "Unavailable" : isBooking ? `${stock} Slots` : isService || isDigitalUtility ? "Available" : `${stock} left`}
               </span>
             </div>
           </div>
@@ -266,7 +260,7 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
       </article>
 
       {/* DIRECT CHECKOUT MODAL FOR SERVICES/BOOKINGS */}
-      {checkoutModalOpen && (
+      {false && checkoutModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isModalLoading && setCheckoutModalOpen(false)} />
 

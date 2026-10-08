@@ -3,12 +3,17 @@ import { CheckCircle2, Clock, Truck, Package, AlertTriangle } from "lucide-react
 
 interface OrderTimelineProps {
     status: string;
+    requiresShipping?: boolean;
     createdAt?: Date;
     shippedAt?: Date;
     completedAt?: Date;
 }
 
-export default function OrderTimeline({ status, createdAt, shippedAt, completedAt }: OrderTimelineProps) {
+export default function OrderTimeline({ status, requiresShipping = true, createdAt, shippedAt, completedAt }: OrderTimelineProps) {
+    const normalizedStatus = String(status || "").trim().toUpperCase();
+    const paymentSecured = ["PAID_HELD", "SHIPPED", "WORK_DONE", "COMPLETED_PENDING_BUYER", "COMPLETED", "DISPUTED", "UNDER_REVIEW"].includes(normalizedStatus);
+    const hasShipped = ["SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED", "WORK_DONE", "COMPLETED_PENDING_BUYER", "COMPLETED", "DISPUTED", "UNDER_REVIEW"].includes(normalizedStatus);
+    const isCompleted = ["COMPLETED", "COMPLETED_PENDING_BUYER", "WORK_DONE"].includes(normalizedStatus);
     const steps = [
         { 
             key: "ordered", 
@@ -22,24 +27,24 @@ export default function OrderTimeline({ status, createdAt, shippedAt, completedA
             label: "Payment Secured", 
             icon: Clock, 
             date: createdAt,
-            active: ["PAID_HELD", "SHIPPED", "COMPLETED", "DISPUTED"].includes(status)
+            active: paymentSecured
         },
         { 
             key: "shipped", 
             label: "Shipped", 
             icon: Truck, 
             date: shippedAt,
-            active: ["SHIPPED", "COMPLETED", "DISPUTED"].includes(status)
+            active: hasShipped
         },
         { 
             key: "completed", 
-            label: status === "DISPUTED" ? "Under Review" : "Completed", 
-            icon: status === "DISPUTED" ? AlertTriangle : CheckCircle2,
+            label: normalizedStatus === "DISPUTED" || normalizedStatus === "UNDER_REVIEW" ? "Under Review" : "Completed",
+            icon: normalizedStatus === "DISPUTED" || normalizedStatus === "UNDER_REVIEW" ? AlertTriangle : CheckCircle2,
             date: completedAt,
-            active: status === "COMPLETED" || status === "DISPUTED",
-            highlight: status === "DISPUTED"
+            active: isCompleted || normalizedStatus === "DISPUTED" || normalizedStatus === "UNDER_REVIEW",
+            highlight: normalizedStatus === "DISPUTED" || normalizedStatus === "UNDER_REVIEW"
         }
-    ];
+    ].filter((step) => requiresShipping || step.key !== "shipped");
 
     return (
         <div className="relative">

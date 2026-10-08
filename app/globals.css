@@ -95,6 +95,11 @@ body {
   height: calc(100vh / var(--site-scale));
 }
 
+.mobile-dashboard-sidebar {
+  height: calc(100dvh / var(--site-scale) - 1rem);
+  max-height: none;
+}
+
 @media (max-width: 768px) {
   .site-scale {
     --site-scale: 0.8;

@@ -15,7 +15,7 @@ import { trackMetric, trackAddToCartClick } from "@/lib/analytics";
 import { useCart } from "@/contexts/CartContext";
 import { productCheckoutAttributes } from "@/lib/product-checkout-attributes";
 import { getReadyAuthUser } from "@/lib/client-auth";
-import { isBookingProduct, isServiceProduct, productPreviewAudioUrl, requiresProductShipping } from "@/lib/product-presentation";
+import { isBookingProduct, isDigitalUtilityProduct, isServiceProduct, productPreviewAudioUrl, requiresProductShipping } from "@/lib/product-presentation";
 import AudioPreviewButton from "@/components/sections/AudioPreviewButton";
 
 const font = Plus_Jakarta_Sans({
@@ -86,11 +86,12 @@ function productAction(product: Product) {
 }
 
 function productIsUnavailable(product: Product) {
+  const isDigitalUtility = isDigitalUtilityProduct(product);
   const isBooking = isBookingProduct(product);
   const isService = isServiceProduct(product);
   const stock = Number(product.stockCount ?? product.stock ?? 0);
 
-  if (isService) {
+  if (isService || isDigitalUtility) {
     return product.availability === "out_of_stock";
   }
   return stock <= 0 || product.availability === "out_of_stock";
@@ -189,28 +190,20 @@ export default function Popular({ fullPage = false }: PopularProps) {
 
     const productPrice = Number(product.price || 0);
 
-    if (requiresShipping) {
-      // Physical Item -> Redirect directly to Checkout page
-      const orderDetails = {
-        productId: product.id,
-        productName: product.name,
-        price: productPrice,
-        quantity: 1,
-        storeId: product.storeId,
-        storeName: product.vendorName,
-        storeUsername: product.username,
-        vendorNombaAccountId: product.nombaAccountId,
-        image: productImage(product),
-        ...productCheckoutAttributes(product),
-      };
-      sessionStorage.setItem("checkout_order", JSON.stringify(orderDetails));
-      router.push("/checkout");
-    } else {
-      // Digital/Service/Booking -> Open Modal directly
-      setSelectedProduct(product);
-      setModalError(null);
-      setCheckoutModalOpen(true);
-    }
+    const orderDetails = {
+      productId: product.id,
+      productName: product.name,
+      price: productPrice,
+      quantity: 1,
+      storeId: product.storeId,
+      storeName: product.vendorName,
+      storeUsername: product.username,
+      vendorNombaAccountId: product.nombaAccountId,
+      image: productImage(product),
+      ...productCheckoutAttributes(product),
+    };
+    sessionStorage.setItem("checkout_order", JSON.stringify(orderDetails));
+    router.push("/checkout");
   };
 
   // Handler for Modal Payment Submissions
@@ -409,7 +402,7 @@ export default function Popular({ fullPage = false }: PopularProps) {
       )}
 
       {/* DIRECT CHECKOUT MODAL FOR SERVICES/BOOKINGS/DIGITAL */}
-      {checkoutModalOpen && selectedProduct && (
+      {false && checkoutModalOpen && selectedProduct && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isModalLoading && setCheckoutModalOpen(false)} />
 
@@ -420,7 +413,7 @@ export default function Popular({ fullPage = false }: PopularProps) {
 
             <div className="mb-6 border-b border-gray-100 pb-4">
               <p className="text-[10px] font-black uppercase text-[#00a63e] tracking-widest mb-1">Direct Checkout</p>
-              <h2 className="text-xl font-extrabold text-gray-900">{selectedProduct.productType === "booking" ? "Complete Booking" : "Complete Purchase"}</h2>
+              <h2 className="text-xl font-extrabold text-gray-900">{selectedProduct?.productType === "booking" ? "Complete Booking" : "Complete Purchase"}</h2>
             </div>
 
             {modalError && (
@@ -446,7 +439,7 @@ export default function Popular({ fullPage = false }: PopularProps) {
               {/* Order Breakdown Summary */}
               <div className="bg-gray-50/80 p-4 rounded-xl border border-gray-100 space-y-2">
                 <div className="flex justify-between text-xs text-gray-600 font-medium">
-                  <span className="truncate pr-2">{selectedProduct.name} (x1)</span>
+                  <span className="truncate pr-2">{selectedProduct?.name} (x1)</span>
                   <span className="font-bold text-gray-900">₦{modalSubtotal.toLocaleString()}</span>
                 </div>
 

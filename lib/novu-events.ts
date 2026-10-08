@@ -30,6 +30,20 @@ function productName(order: Data): string {
   return firstString(firstItem.name, firstItem.productName, firstItem.title) || "Marketplace order";
 }
 
+function productImage(order: Data): string {
+  const items = Array.isArray(order.items) ? order.items : [];
+  const firstItem = items[0] && typeof items[0] === "object" ? items[0] as Data : {};
+  return firstString(
+    order.productImage,
+    order.imageUrl,
+    order.image,
+    firstItem.image,
+    firstItem.imageUrl,
+    firstItem.thumbnail,
+    Array.isArray(order.images) ? order.images[0] : "",
+  );
+}
+
 async function storeForOrder(order: Data, store?: Data): Promise<Data> {
   if (store) return store;
   const storeId = firstString(order.storeId, order.vendorId);
@@ -57,6 +71,8 @@ function baseOrderPayload(order: Data, store: Data, eventType: string, transacti
     orderId,
     orderNumber: firstString(order.orderNumber, order.orderId, order.id, order.checkoutReference) || orderId,
     productName: productName(order),
+    productImage: productImage(order),
+    avatar: productImage(order) || undefined,
     actionUrl: `${appUrl()}/buyer/orders/${encodeURIComponent(orderId)}`,
     storeName: firstString(order.storeName, store.storeName, store.name) || "the store",
     buyerName: firstString(order.customerName, order.buyerName) || "Buyer",

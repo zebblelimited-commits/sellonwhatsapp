@@ -24,6 +24,7 @@ interface Notification {
   actionable: boolean;
   actionLabel?: string;
   actionUrl?: string;
+  productImage?: string;
   metadata?: any;
 }
 
@@ -65,6 +66,7 @@ export default function NotificationsTab({ vendorId, onNotificationAction }: Not
           actionable: data.actionable || false,
           actionLabel: data.actionLabel,
           actionUrl: data.actionUrl,
+          productImage: data.productImage || data.imageUrl || data.metadata?.productImage || data.metadata?.imageUrl,
           metadata: data.metadata || {}
         };
       });
@@ -254,9 +256,13 @@ export default function NotificationsTab({ vendorId, onNotificationAction }: Not
                 key={n.id} 
                 className={`bg-white p-4 sm:p-5 rounded-2xl border ${n.read ? 'border-gray-100' : `${border} ring-1 ring-inset ${border.replace('border', 'ring')}`} flex gap-3 sm:gap-4 items-start transition-all hover:shadow-md ${!n.read ? 'bg-gradient-to-r from-white to-gray-50/50' : ''}`}
               >
-                <div className={`p-2.5 sm:p-3 rounded-xl ${bg} ${text} shrink-0`}>
-                  <Icon size={18} className="sm:w-5 sm:h-5" />
-                </div>
+                {n.productImage ? (
+                  <img src={n.productImage} alt="" className="h-11 w-11 shrink-0 rounded object-cover border border-gray-100" />
+                ) : (
+                  <div className={`p-2.5 sm:p-3 rounded-xl ${bg} ${text} shrink-0`}>
+                    <Icon size={18} className="sm:w-5 sm:h-5" />
+                  </div>
+                )}
                 
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-start justify-between gap-2">

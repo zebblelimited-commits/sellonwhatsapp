@@ -14,7 +14,7 @@ import {
   Settings, Loader2, User, CreditCard,
   ShieldCheck, Bell, ClipboardList, SlidersHorizontal,
   ShieldAlert, ArrowRight, Clock, Truck,
-  CheckCircle2, AlertTriangle, TrendingUp, Star, MessageCircle, Store as StoreIcon, IdCard, Menu, X
+  CheckCircle2, AlertTriangle, XCircle, TrendingUp, Star, MessageCircle, Store as StoreIcon, IdCard, Menu, X
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -335,7 +335,7 @@ export default function BuyerDashboard() {
     <div className={`${font.className} flex min-h-screen items-start bg-gray-50/50 text-gray-900`}>
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-black/30 p-2 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
-          <aside className="flex h-auto min-h-0 max-h-[calc(100dvh-1rem)] w-[min(18rem,calc(100vw-1rem))] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <aside className="mobile-dashboard-sidebar flex w-[min(18rem,calc(100vw-1rem))] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
               <Link href="/" aria-label="Go to homepage" className="inline-flex"><img src="/icons/sowa.png" alt="Sowa Logo" className="h-10 w-auto object-contain" /></Link>
               <button type="button" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>
@@ -696,13 +696,31 @@ function BuyerHome({ userData, stats, buyerDisputeStats, onExploreClick, onViewO
   const formatDate = (date: Date) => date.toLocaleDateString('en-NG', { month: 'short', day: 'numeric' });
 
   const getStatusConfig = (status: string) => {
+    const normalized = String(status || "").trim().toUpperCase();
     const configs: any = {
-      PAID_HELD: { label: "Secured", icon: Clock, color: "bg-orange-100 text-orange-700" },
+      PENDING: { label: "Pending Payment", icon: Clock, color: "bg-yellow-100 text-yellow-700" },
+      PENDING_PAYMENT: { label: "Pending Payment", icon: Clock, color: "bg-yellow-100 text-yellow-700" },
+      AWAITING_PAYMENT: { label: "Pending Payment", icon: Clock, color: "bg-yellow-100 text-yellow-700" },
+      PAID: { label: "Payment Confirmed", icon: CheckCircle2, color: "bg-blue-100 text-blue-700" },
+      PAID_HELD: { label: "Secured", icon: ShieldCheck, color: "bg-orange-100 text-orange-700" },
+      PROCESSING: { label: "Processing", icon: Clock, color: "bg-purple-100 text-purple-700" },
+      IN_PROGRESS: { label: "In Progress", icon: Clock, color: "bg-purple-100 text-purple-700" },
       SHIPPED: { label: "Shipped", icon: Truck, color: "bg-blue-100 text-blue-700" },
+      OUT_FOR_DELIVERY: { label: "Out for Delivery", icon: Truck, color: "bg-blue-100 text-blue-700" },
+      WORK_DONE: { label: "Awaiting Confirmation", icon: CheckCircle2, color: "bg-purple-100 text-purple-700" },
+      COMPLETED_PENDING_BUYER: { label: "Awaiting Confirmation", icon: CheckCircle2, color: "bg-purple-100 text-purple-700" },
       COMPLETED: { label: "Completed", icon: CheckCircle2, color: "bg-green-100 text-green-700" },
-      DISPUTED: { label: "Disputed", icon: AlertTriangle, color: "bg-red-100 text-red-700" }
+      DISPUTED: { label: "Disputed", icon: AlertTriangle, color: "bg-red-100 text-red-700" },
+      UNDER_REVIEW: { label: "Under Review", icon: AlertTriangle, color: "bg-red-100 text-red-700" },
+      CANCELLED: { label: "Cancelled", icon: XCircle, color: "bg-gray-100 text-gray-600" },
+      CANCELED: { label: "Cancelled", icon: XCircle, color: "bg-gray-100 text-gray-600" },
+      REFUNDED: { label: "Refunded", icon: CreditCard, color: "bg-gray-100 text-gray-600" },
     };
-    return configs[status] || configs.PAID_HELD;
+    if (configs[normalized]) return configs[normalized];
+    const fallbackLabel = normalized
+      ? normalized.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+      : "Pending Payment";
+    return { label: fallbackLabel, icon: Clock, color: "bg-yellow-100 text-yellow-700" };
   };
 
   return (

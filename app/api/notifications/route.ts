@@ -14,17 +14,20 @@ function numberParam(value: string | null, fallback: number, maximum: number) {
 }
 
 function notificationView(id: string, data: Record<string, unknown>) {
+  const metadata = data.metadata && typeof data.metadata === "object" ? data.metadata as Record<string, unknown> : {};
   return {
     id,
     type: typeof data.type === "string" ? data.type : "system",
     priority: typeof data.priority === "string" ? data.priority : "low",
     title: typeof data.title === "string" ? data.title : "Notification",
-    body: typeof data.body === "string" ? data.body : "",
+    body: typeof data.body === "string" ? data.body : typeof data.message === "string" ? data.message : "",
     read: data.read === true,
     actionable: data.actionable === true,
     actionLabel: typeof data.actionLabel === "string" ? data.actionLabel : undefined,
     actionUrl: typeof data.actionUrl === "string" ? data.actionUrl : undefined,
-    metadata: data.metadata && typeof data.metadata === "object" ? data.metadata : {},
+    productImage: typeof data.productImage === "string" ? data.productImage : typeof data.imageUrl === "string" ? data.imageUrl : typeof metadata.productImage === "string" ? metadata.productImage : typeof metadata.imageUrl === "string" ? metadata.imageUrl : undefined,
+    imageUrl: typeof data.imageUrl === "string" ? data.imageUrl : undefined,
+    metadata,
     orderId: typeof data.orderId === "string" ? data.orderId : undefined,
     disputeId: typeof data.disputeId === "string" ? data.disputeId : undefined,
     storeId: typeof data.storeId === "string" ? data.storeId : undefined,

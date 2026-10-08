@@ -65,6 +65,7 @@ export default function CheckoutPage() {
   const [addresses, setAddresses] = useState<CheckoutAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("default_addr");
   const [selectedState, setSelectedState] = useState<string>("");
+  const [checkoutPhone, setCheckoutPhone] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("transfer");
   const [cardSettlementAcknowledged, setCardSettlementAcknowledged] = useState(false);
   const [showCardSettlementNotice, setShowCardSettlementNotice] = useState(false);
@@ -183,6 +184,8 @@ export default function CheckoutPage() {
           latitude: Number(profileLatitude) || undefined,
           longitude: Number(profileLongitude) || undefined,
         };
+
+        setCheckoutPhone(data.phone || data.phoneNumber || data.contactPhone || user.phoneNumber || shippingAddress.phone || savedLocation.phone || "");
 
         setAddresses(hasAddress ? [defaultAddress] : []);
         setSelectedAddressId(hasAddress ? "default_addr" : "");
@@ -467,6 +470,17 @@ export default function CheckoutPage() {
       alert("Please sign in with a valid buyer account before checking out.");
       return;
     }
+    const contactPhone = selectedBuyerAddress?.phone?.trim()
+      || checkoutPhone.trim()
+      || buyerData?.phone
+      || buyerData?.phoneNumber
+      || buyerData?.contactPhone
+      || user.phoneNumber
+      || "";
+    if (!contactPhone) {
+      alert("Please provide a valid phone number before checking out.");
+      return;
+    }
 
     const missingShipping = Object.entries(groupedCartItems).some(
       ([storeId, group]) => group.shippingItems.length > 0 && !sellerShipping[storeId]
@@ -484,7 +498,7 @@ export default function CheckoutPage() {
         customerEmail,
         address: {
           name: selectedBuyerAddress?.name || buyerData?.displayName || "Digital customer",
-          phone: selectedBuyerAddress?.phone || buyerData?.phone || "N/A",
+          phone: contactPhone,
           address: selectedBuyerAddress?.address || "Digital delivery",
           city: selectedBuyerAddress?.city || selectedBuyerAddress?.lga || selectedState || "N/A",
           state: selectedBuyerAddress?.state || selectedState || "N/A",
@@ -715,6 +729,26 @@ export default function CheckoutPage() {
                   </div>
                 </div>
               </section>}
+
+              {!hasPhysicalItems && (
+                <section className="rounded-[24px] border border-emerald-100 bg-emerald-50/50 p-6 shadow-sm">
+                  <h2 className="text-lg font-bold text-gray-900">Payment contact</h2>
+                  <p className="mt-1 text-xs leading-relaxed text-emerald-800">
+                    Digital products, services, and utilities do not require delivery. Enter a phone number for payment confirmation and order updates.
+                  </p>
+                  <label className="mt-4 block text-[10px] font-black uppercase tracking-wider text-gray-500">
+                    Phone number
+                    <input
+                      type="tel"
+                      value={checkoutPhone}
+                      onChange={(event) => setCheckoutPhone(event.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-emerald-100 bg-white p-3 text-sm font-semibold text-gray-900 outline-none focus:border-[#00a63e]"
+                      placeholder="08012345678"
+                      autoComplete="tel"
+                    />
+                  </label>
+                </section>
+              )}
 
               {/* 2. Available Shipping Options (physical products only) */}
               {hasPhysicalItems && <section className="bg-white rounded-[24px] border border-gray-100 p-6 shadow-sm">

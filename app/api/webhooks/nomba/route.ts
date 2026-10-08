@@ -18,7 +18,14 @@ const novuWorkflowId = process.env.NOVU_WORKFLOW_ID?.trim();
 
 export const runtime = 'nodejs';
 
-async function triggerNovuNotification(userId: string, title: string, body: string, actionUrl: string, actionLabel: string, priority: string) {
+function orderNotificationImage(order: FirebaseFirestore.DocumentData): string | null {
+  const firstItem = Array.isArray(order.items) && order.items[0] && typeof order.items[0] === "object" ? order.items[0] : {};
+  const image = [order.productImage, order.imageUrl, order.image, firstItem.image, firstItem.imageUrl, firstItem.thumbnail]
+    .find((value) => typeof value === "string" && value.trim());
+  return typeof image === "string" ? image.trim() : null;
+}
+
+async function triggerNovuNotification(userId: string, title: string, body: string, actionUrl: string, actionLabel: string, priority: string, extraPayload: Record<string, unknown> = {}) {
   if (!novu || !novuWorkflowId) {
     console.warn("⚠️ [NOVU] Skipped: configure NOVU_WORKFLOW_ID with an existing Novu workflow trigger");
     return;
@@ -27,7 +34,7 @@ async function triggerNovuNotification(userId: string, title: string, body: stri
     await Promise.race([
       novu.trigger(novuWorkflowId, {
         to: { subscriberId: userId },
-        payload: { title, body, actionUrl, actionLabel, priority }
+        payload: { title, body, actionUrl, actionLabel, priority, ...extraPayload }
       }),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("notification provider timeout")), 5_000)),
     ]);
@@ -708,8 +715,9 @@ export async function POST(request: NextRequest) {
               notifConfig = { type: "product", priority: "medium", title: "Product Boost Active! 🚀", body: `Your product boost is now live and will run for ${activeDuration} ${durationUnit}.`, actionUrl: "/dashboard?tab=products", actionLabel: "View Products" };
             }
 
-            await adminDb.collection("notifications").add({ vendorId: targetUserId, ...notifConfig, actionable: true, read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() });
-            await triggerNovuNotification(targetUserId, notifConfig.title, notifConfig.body, notifConfig.actionUrl, notifConfig.actionLabel, notifConfig.priority);
+            const productImage = collectionName === "orders" ? orderNotificationImage(localData) : null;
+            await adminDb.collection("notifications").add({ vendorId: targetUserId, ...notifConfig, productImage, actionable: true, read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+            await triggerNovuNotification(targetUserId, notifConfig.title, notifConfig.body, notifConfig.actionUrl, notifConfig.actionLabel, notifConfig.priority, productImage ? { productImage, avatar: productImage } : {});
           }
         }
       }

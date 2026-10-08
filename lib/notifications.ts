@@ -31,6 +31,7 @@ export async function createNotification(params: CreateNotificationParams) {
       actionable: params.actionable || false,
       actionLabel: params.actionLabel || null,
       actionUrl: params.actionUrl || null,
+      productImage: params.metadata?.productImage || params.metadata?.imageUrl || null,
       metadata: params.metadata || {},
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -60,6 +61,7 @@ export async function createNotification(params: CreateNotificationParams) {
           actionLabel: params.actionLabel,
           // ⚠️ CRITICAL: ZebbleNotificationCenter.tsx explicitly reads payload.actionUrl to execute routers
           actionUrl: params.actionUrl || "/dashboard?tab=overview", 
+          avatar: params.metadata?.productImage || params.metadata?.imageUrl,
           ...params.metadata
         }
       });

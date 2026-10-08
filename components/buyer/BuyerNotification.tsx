@@ -233,9 +233,13 @@ export function BuyerNotification() {
               >
                 <div className="flex items-start gap-4">
                   {/* Icon */}
-                  <div className={`p-3 rounded-2xl shrink-0 ${color}`}>
-                    <NotifIcon size={20} />
-                  </div>
+                  {notif.productImage || notif.imageUrl ? (
+                    <img src={notif.productImage || notif.imageUrl} alt="" className="h-12 w-12 shrink-0 rounded object-cover border border-gray-100" />
+                  ) : (
+                    <div className={`p-3 rounded-2xl shrink-0 ${color}`}>
+                      <NotifIcon size={20} />
+                    </div>
+                  )}
                   
                   {/* Content */}
                   <div className="flex-1 min-w-0">

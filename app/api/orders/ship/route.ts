@@ -13,6 +13,23 @@ class ShipOrderError extends Error {
   }
 }
 
+function orderProductImage(order: Record<string, any>): string | undefined {
+  const firstItem = Array.isArray(order.items) && order.items[0] && typeof order.items[0] === "object"
+    ? order.items[0]
+    : {};
+  const candidates = [
+    order.productImage,
+    order.imageUrl,
+    order.image,
+    firstItem.image,
+    firstItem.imageUrl,
+    firstItem.thumbnail,
+    Array.isArray(order.images) ? order.images[0] : undefined,
+  ];
+  const image = candidates.find((value) => typeof value === "string" && value.trim());
+  return typeof image === "string" ? image.trim() : undefined;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const authorization = request.headers.get("authorization");
@@ -102,7 +119,9 @@ export async function POST(request: NextRequest) {
         transaction.create(adminDb.collection("notifications").doc(), {
           buyerId: order.buyerId,
           type: isServiceOrBooking ? "service_completed" : (isSelfArranged ? "order_handover" : "order_shipped"),
+          title: isServiceOrBooking ? "Service completed" : "Order update",
           orderId,
+          productImage: orderProductImage(order) || null,
           message: isServiceOrBooking
             ? `Work for your order from ${order.storeName || "the provider"} has been completed. Please review and release funds.`
             : isSelfArranged
