@@ -254,6 +254,14 @@ export default function ProductPageClient({ product, store }: { product: any; st
                   </button>
                 </>
               )}
+              {previewAudioUrl && (
+                <AudioPreviewButton
+                  url={previewAudioUrl}
+                  imageUrl={images[0]}
+                  title={product?.name || "Audio Preview"}
+                  className="absolute bottom-4 left-4 z-20 inline-flex items-center gap-1.5 rounded-md bg-black/70 px-3 py-2 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-lg backdrop-blur-sm transition hover:bg-black/85 active:scale-95"
+                />
+              )}
             </div>
             {images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -279,14 +287,6 @@ export default function ProductPageClient({ product, store }: { product: any; st
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-gray-900 mb-3 capitalize">{product?.name}</h1>
               <p className="text-2xl font-black text-[#00a63e]">₦{productPrice.toLocaleString()}</p>
             </div>
-
-            {previewAudioUrl && (
-              <div className="rounded border border-emerald-100 bg-emerald-50/50 p-4">
-                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-emerald-700">Audio Preview</p>
-                <p className="mb-1 text-xs text-emerald-800">Listen before you buy.</p>
-                <AudioPreviewButton url={previewAudioUrl} imageUrl={images[0]} title={product?.name || "Audio Preview"} />
-              </div>
-            )}
 
             <div className="bg-gray-50/50 border border-gray-100 rounded-2xl p-4 w-full">
               <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Description</h3>

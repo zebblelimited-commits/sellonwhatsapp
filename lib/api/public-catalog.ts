@@ -65,6 +65,20 @@ function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function httpsUrl(...values: unknown[]) {
+  for (const value of values) {
+    const candidate = text(value);
+    if (!candidate) continue;
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.protocol === "https:") return parsed.toString();
+    } catch {
+      // Ignore malformed or non-HTTPS media URLs in the public contract.
+    }
+  }
+  return "";
+}
+
 /**
  * Returns true only for an explicitly sponsored store with an active window.
  * Store approval status is intentionally not used here because it describes
@@ -101,12 +115,21 @@ export function publicStoreView(id: string, data: RecordValue): RecordValue & { 
 export function publicProductView(id: string, data: RecordValue, store?: RecordValue | null): RecordValue & { id: string } {
   const storeId = text(data.storeId) || text(data.vendorId) || text(data.ownerId);
   const output = copyFields(PUBLIC_PRODUCT_FIELDS, data);
+  const images = Array.isArray(data.images) ? data.images : [];
+  const productImage = httpsUrl(data.imageUrl, data.image, images[0]);
+  const previewAudio = httpsUrl(data.previewAudioUrl, data.audioPreviewUrl, data.previewUrl, data.audioUrl);
+  const previewDuration = Number(data.previewDurationSeconds ?? data.audioDurationSeconds ?? 0);
 
   // These normalized fields keep the mobile contract consistent with the
   // existing web cards, including older product records.
   output.storeId = storeId;
   output.vendorName = text(data.vendorName) || text(data.storeName) || text(store?.storeName) || text(store?.name) || "Marketplace seller";
+  output.storeName = text(data.storeName) || text(data.vendorName) || text(store?.storeName) || text(store?.name) || "Marketplace seller";
   output.username = text(data.username) || text(data.storeUsername) || text(store?.username);
+  output.title = text(data.title) || text(data.name);
+  output.imageUrl = productImage;
+  output.previewAudioUrl = previewAudio;
+  output.previewDurationSeconds = Number.isFinite(previewDuration) && previewDuration > 0 ? previewDuration : null;
 
   if (output.stockCount === undefined && data.stock !== undefined) output.stockCount = jsonValue(data.stock);
   if (output.images === undefined) output.images = [];

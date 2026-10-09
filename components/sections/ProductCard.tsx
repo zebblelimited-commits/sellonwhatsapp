@@ -174,19 +174,29 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
   return (
     <>
       <article className={`group flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${compact ? "h-full" : ""}`}>
-        <Link
-          href={productPath}
-          onClick={() => storeId && void trackMetric(storeId, "click", { productId })}
-          className="relative aspect-[4/3] w-full overflow-hidden bg-[#f6f5f3]"
-        >
-          <Image
-            src={image}
-            alt={product.name || "Product"}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-            className="object-cover object-center transition-transform duration-300 group-hover:scale-105"
-          />
-        </Link>
+        <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#f6f5f3]">
+          <Link
+            href={productPath}
+            onClick={() => storeId && void trackMetric(storeId, "click", { productId })}
+            className="absolute inset-0"
+          >
+            <Image
+              src={image}
+              alt={product.name || "Product"}
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+              className="object-cover object-center transition-transform duration-300 group-hover:scale-105"
+            />
+          </Link>
+          {productPreviewAudioUrl(product) && (
+            <AudioPreviewButton
+              url={productPreviewAudioUrl(product)}
+              imageUrl={image}
+              title={product.name || "Audio Preview"}
+              className="absolute bottom-3 left-3 z-20 inline-flex items-center gap-1.5 rounded-md bg-black/70 px-2.5 py-1.5 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-lg backdrop-blur-sm transition hover:bg-black/85 active:scale-95"
+            />
+          )}
+        </div>
 
         <div className="flex flex-1 flex-col justify-between p-4">
           <div>
@@ -196,7 +206,6 @@ export default function ProductCard({ product, compact = false }: ProductCardPro
             <p className="mt-0.5 truncate text-xs font-medium text-gray-400">
               {product.vendorName || "Marketplace seller"}
             </p>
-            {productPreviewAudioUrl(product) && <AudioPreviewButton url={productPreviewAudioUrl(product)} imageUrl={image} title={product.name || "Audio Preview"} />}
             <div className="mt-2 flex items-center justify-between gap-2">
               <span className="text-base font-extrabold text-gray-900">
                 ₦{productPrice.toLocaleString()}

@@ -117,16 +117,25 @@ function SponsoredCard({
 
   return (
     <article className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white transition-all duration-200 hover:-translate-y-1 hover:shadow-lg">
-      <Link href={productPath} onClick={() => storeId && void trackMetric(storeId, "click", { productId: product.id })} className="relative aspect-[4/3] w-full overflow-hidden bg-[#f6f5f3]">
-        <span className="absolute left-2 top-2 z-10 rounded-md bg-black/55 px-2 py-1 text-[9px] font-bold text-white backdrop-blur-md">Sponsored</span>
-        <Image src={productImage(product)} alt={product.name || "Sponsored product"} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 17vw" className="object-cover object-center transition-transform duration-300 group-hover:scale-105" />
-      </Link>
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#f6f5f3]">
+        <Link href={productPath} onClick={() => storeId && void trackMetric(storeId, "click", { productId: product.id })} className="absolute inset-0">
+          <span className="absolute left-2 top-2 z-10 rounded-md bg-black/55 px-2 py-1 text-[9px] font-bold text-white backdrop-blur-md">Sponsored</span>
+          <Image src={productImage(product)} alt={product.name || "Sponsored product"} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 17vw" className="object-cover object-center transition-transform duration-300 group-hover:scale-105" />
+        </Link>
+        {productPreviewAudioUrl(product) && (
+          <AudioPreviewButton
+            url={productPreviewAudioUrl(product)}
+            imageUrl={productImage(product)}
+            title={product.name || "Audio Preview"}
+            className="absolute bottom-3 left-3 z-20 inline-flex items-center gap-1.5 rounded-md bg-black/70 px-2.5 py-1.5 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-lg backdrop-blur-sm transition hover:bg-black/85 active:scale-95"
+          />
+        )}
+      </div>
 
       <div className="flex flex-1 flex-col justify-between p-3">
         <div>
           <h3 className="line-clamp-1 text-xs font-bold text-gray-900 transition-colors group-hover:text-[#00a63e] sm:text-sm">{product.name || "Untitled product"}</h3>
           <p className="mt-0.5 truncate text-[10px] font-medium text-gray-400">{product.vendorName || "Marketplace seller"}</p>
-          {productPreviewAudioUrl(product) && <AudioPreviewButton url={productPreviewAudioUrl(product)} imageUrl={productImage(product)} title={product.name || "Audio Preview"} />}
           <div className="mt-2 flex items-center justify-between gap-2">
             <span className="text-sm font-extrabold text-gray-900 sm:text-base">₦{Number(product.price || 0).toLocaleString()}</span>
             <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-tight ${unavailable ? "bg-red-50 text-red-500" : action.isBooking ? "bg-purple-50 text-purple-600" : action.isService ? "bg-emerald-50 text-emerald-600" : "text-gray-500"}`}>

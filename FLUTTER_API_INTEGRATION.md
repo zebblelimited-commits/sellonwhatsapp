@@ -446,6 +446,40 @@ PATCH /api/notifications/{id}/read     (Firebase bearer token required)
 
 Catalog list responses use `stores` or `products` resource arrays and include `page`, `limit`, `total`, and `hasMore`. Store and product timestamps are returned as Unix milliseconds. Public DTOs intentionally exclude seller balances, payout settings, Nomba account identifiers, owner credentials, and other server-only fields.
 
+### Audio preview media contract
+
+Every public product response uses the same normalized media fields, including
+home, search, explore/category queries, store products, and product details:
+
+```json
+{
+  "id": "PRODUCT_ID",
+  "title": "Product title",
+  "previewAudioUrl": "https://cdn.example.com/preview.mp3",
+  "previewDurationSeconds": 32,
+  "imageUrl": "https://cdn.example.com/product-image.jpg",
+  "storeName": "Seller/store name"
+}
+```
+
+The API normalizes older records that use `name`, `images[0]`, `audioPreviewUrl`,
+`previewUrl`, or `audioUrl` into this contract. Products without an audio
+preview return an empty `previewAudioUrl` and a `null`
+`previewDurationSeconds`.
+
+Audio previews uploaded through the web seller flow are stored with the
+configured Cloudinary account and published as HTTPS `secure_url` values. The
+Flutter client should still validate that the URL is HTTPS, handle non-audio
+or expired URLs as playback errors, and not assume a preview exists for every
+utility product. Cloudinary audio delivery supports normal browser byte-range
+playback; the app should use a streaming-capable audio source and show
+buffering, completion, and error states.
+
+No server notification payload is required for the media tray. Flutter should
+create the local media notification from this product metadata while the
+preview is active, using `just_audio_background` or `audio_service` for
+Android notification and lock-screen controls.
+
 The current website may continue using its existing Firestore listeners; these APIs are additive and do not replace the web implementation. Flutter should use the APIs above for browse/search/store/product screens. The notification list is authenticated and merges notifications addressed to the current buyer, vendor, user, or admin ID. It is not a public endpoint.
 
 Chat and some dashboard activity still rely on Firestore listeners in the web experience. For the first mobile release, use Firestore listeners only where rules allow it, or add authenticated API/listener contracts for chat lists and messages. Firebase Cloud Messaging should be used for background notifications; the notification routes provide the inbox read path but do not replace FCM delivery.
