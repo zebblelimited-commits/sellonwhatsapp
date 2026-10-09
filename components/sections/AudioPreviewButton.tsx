@@ -1,6 +1,7 @@
 "use client";
 
 import { type ChangeEvent, type MouseEvent, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { FastForward, Loader2, Music2, Pause, Play, Rewind, X } from "lucide-react";
 
 let activePreviewAudio: HTMLAudioElement | null = null;
@@ -194,7 +195,7 @@ export default function AudioPreviewButton({
         <span>{error ? "Preview unavailable" : playing ? "Pause preview" : "Preview"}</span>
       </button>
 
-      {isOpen && (
+      {isOpen && typeof document !== "undefined" && createPortal(
         <>
           <button
             type="button"
@@ -255,7 +256,8 @@ export default function AudioPreviewButton({
               </button>
             </div>
           </section>
-        </>
+        </>,
+        document.body,
       )}
     </>
   );
