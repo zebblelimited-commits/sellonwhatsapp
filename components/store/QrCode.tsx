@@ -138,7 +138,7 @@ export default function QrCodeModal({
                     type: "dot",
                     color: "#000000",
                 },
-                image: "/icons/sowaicon.png",
+                image: "/icons/sowa.png",
             });
         } else {
             qrCodeInstance.current.update({ data: targetUrl });
