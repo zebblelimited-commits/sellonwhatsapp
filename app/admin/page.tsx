@@ -1721,7 +1721,7 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-black/30 p-2 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
           <aside className="flex h-auto min-h-0 max-h-[calc(100dvh-1rem)] w-[min(18rem,calc(100vw-1rem))] flex-col overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
-              <div className="flex items-center gap-2"><Image src="/icons/sowa.png" alt="SellOnWhatsapp" width={78} height={32} className="h-8 w-auto object-contain" /><span className="text-sm font-black text-gray-900">SellOnWhatsapp Admin</span></div>
+              <div className="flex items-center gap-2"><Image src="/icons/sowa.png" alt="SellOnWhatsapp" width={698} height={288} quality={100} unoptimized className="h-8 w-auto object-contain" /><span className="text-sm font-black text-gray-900">SellOnWhatsapp Admin</span></div>
               <button type="button" aria-label="Close navigation menu" onClick={() => setIsMobileMenuOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"><X size={20} /></button>
             </div>
             <nav className="space-y-1 overflow-y-auto no-scrollbar">
@@ -1753,7 +1753,7 @@ export default function AdminDashboard() {
       <aside className="dashboard-sidebar sticky top-0 hidden w-64 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-white p-6 md:flex">
         <div className="flex items-center px-2 py-2 mb-6">
           <div className="flex items-center gap-2">
-            <Image src="/icons/sowa.png" alt="SellOnWhatsapp" width={78} height={32} className="h-8 w-auto object-contain" />
+            <Image src="/icons/sowa.png" alt="SellOnWhatsapp" width={698} height={288} quality={100} unoptimized className="h-8 w-auto object-contain" />
             <span className="font-black text-sm text-gray-900">SellOnWhatsapp Admin</span>
           </div>
         </div>

@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "@/lib/fonts";
 import { MapPin, Phone, Mail, X, CheckCircle2 } from "lucide-react";
+import PlatformLogo from "@/components/layout/PlatformLogo";
 
 const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 const headingFont = font;
@@ -49,11 +50,7 @@ export default function Footer() {
               href="/"
               className="inline-flex items-center justify-center p-2 rounded-xl w-fit transition-colors"
             >
-              <img
-                src="/icons/sowa.png"
-                alt="Sowa Logo"
-                className="h-8 md:h-9 w-auto object-contain"
-              />
+              <PlatformLogo className="h-8 w-auto object-contain md:h-9" />
             </Link>
             <p className="leading-relaxed">
               Empowering small businesses to sell smarter and faster by turning WhatsApp into a professional storefront.

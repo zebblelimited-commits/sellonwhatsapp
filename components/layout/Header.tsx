@@ -14,6 +14,7 @@ import { useCart } from "@/contexts/CartContext";
 import dynamic from "next/dynamic";
 import { isPublicStore } from "@/lib/categoryCatalog";
 import { resolvePortalRole } from "@/lib/portal-role";
+import PlatformLogo from "@/components/layout/PlatformLogo";
 
 // Dynamic import to prevent SSR issues with canvas/camera libraries
 const QrCodeModal = dynamic(() => import("@/components/store/QrCode"), {
@@ -233,11 +234,7 @@ export default function Header({ isStorePage = false, storeName = "" }) {
             </button>
             <Link href="/" onClick={() => setIsMobileMenuOpen(false)}>
               <div className="flex items-center px-1">
-                <img
-                  src="/icons/sowa.png"
-                  alt="Sowa Logo"
-                  className="h-8 lg:h-11 w-auto object-contain"
-                />
+                <PlatformLogo priority className="h-8 w-auto object-contain lg:h-11" />
               </div>
             </Link>
           </div>
